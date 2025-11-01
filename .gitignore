@@ -1,0 +1,15 @@
+node_modules
+.env
+.env.local
+.env.*.local
+.next
+dist
+coverage
+frontend/.next
+frontend/out
+frontend/playwright-report
+frontend/test-results
+backend/node_modules
+frontend/node_modules
+backend/dist
+*.log
