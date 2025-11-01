@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  operator
+  viewer
+}
+
+enum Severity {
+  low
+  medium
+  high
+  critical
+}
+
+enum IncidentStatus {
+  open
+  investigating
+  monitoring
+  resolved
+}
+
+enum StatusState {
+  operational
+  partial_outage
+  major_outage
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  role         Role      @default(viewer)
+  passwordHash String
+  teamRoles    String[]  @default([])
+  isActive     Boolean   @default(true)
+  incidents    Incident[] @relation("IncidentCreator")
+  updates      IncidentUpdate[]
+  assignments  Incident[] @relation("IncidentAssignee")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Incident {
+  id              String           @id @default(uuid())
+  title           String
+  severity        Severity         @default(medium)
+  status          IncidentStatus   @default(open)
+  description     String
+  createdById     String
+  createdBy       User             @relation("IncidentCreator", fields: [createdById], references: [id])
+  assignedToId    String?
+  assignedTo      User?            @relation("IncidentAssignee", fields: [assignedToId], references: [id])
+  firstResponseAt DateTime?
+  resolvedAt      DateTime?
+  updates         IncidentUpdate[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  categories      String[]         @default([])
+  impactScope     String?          @db.Text
+
+  @@index([status])
+  @@index([severity])
+  @@index([createdAt])
+  @@index([assignedToId])
+}
+
+model IncidentUpdate {
+  id         String   @id @default(uuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  message    String
+  createdAt  DateTime @default(now())
+
+  @@index([incidentId])
+}
+
+model StatusCache {
+  id         String      @id @default(uuid())
+  state      StatusState
+  uptime24h  Float
+  payload    Json
+  updatedAt  DateTime    @updatedAt
+  createdAt  DateTime    @default(now())
+}
