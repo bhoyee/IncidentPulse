@@ -1,15 +1,7 @@
-﻿"use client";
+"use client";
 
-import Link from "next/link";
-import type { Route } from "next";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDownIcon } from "@heroicons/react/24/solid";
-import {
-  AdjustmentsHorizontalIcon,
-  ArrowRightIcon,
-  PlusIcon,
-  SparklesIcon
-} from "@heroicons/react/24/outline";
+import { ChevronDownIcon, Bars3Icon, XMarkIcon } from "@heroicons/react/24/solid";
 import { AuthGuard } from "@components/AuthGuard";
 import { DashboardStats } from "@components/DashboardStats";
 import { IncidentsTable } from "@components/IncidentsTable";
@@ -39,6 +31,9 @@ export default function DashboardPage() {
   const [assigneeFilter, setAssigneeFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
   const [teamPage, setTeamPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<"incidents" | "team">("incidents");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false); // NEW STATE
   const teamPageSize = 25;
 
   const { data: session } = useSession();
@@ -86,18 +81,6 @@ export default function DashboardPage() {
   const metricsQuery = useMetrics();
 
   const incidents = incidentsQuery.data?.data ?? EMPTY_INCIDENTS;
-  const openCount = useMemo(
-    () => incidents.filter((incident) => incident.status !== "resolved").length,
-    [incidents]
-  );
-  const criticalCount = useMemo(
-    () =>
-      incidents.filter(
-        (incident) => incident.status !== "resolved" && incident.severity === "critical"
-      ).length,
-    [incidents]
-  );
-
   const teamRoleOptions = useMemo(() => {
     const roles = new Set<string>();
     teamUsers.forEach((user) => user.teamRoles.forEach((role) => roles.add(role)));
@@ -143,268 +126,433 @@ export default function DashboardPage() {
     return chips;
   }, [statusFilter, severityFilter, teamRoleFilter, assigneeFilter, assigneeOptions]);
 
-  const viewerName = session?.name ?? "Team";
-  const quickActions = [
-    {
-      label: "Log incident",
-      description: "Capture impact & assign responders",
-      href: "#new-incident",
-      icon: PlusIcon,
-      disabled: !canCreate
-    },
-    {
-      label: "Status page",
-      description: "Check customer-facing comms",
-      href: "/status",
-      icon: SparklesIcon,
-      disabled: false
-    },
-    {
-      label: "Tweak filters",
-      description: "Severity, ownership & team roles",
-      href: "#incident-filters",
-      icon: AdjustmentsHorizontalIcon,
-      disabled: false
-    }
-  ];
-
-  const year = useMemo(() => new Date().getFullYear(), []);
+  // Calculate stats
+  const criticalIncidents = incidents.filter(i => i.severity === 'critical').length;
+  const activeIncidents = incidents.filter(i => i.status !== 'resolved').length;
+  const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
 
   return (
     <AuthGuard>
-      <div className="relative min-h-screen bg-slate-950">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.35),_transparent_55%)]" />
-        <div className="relative mx-auto w-[95%] max-w-[1600px] px-4 pb-20 pt-10 sm:px-6 lg:px-10">
-          <section className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 px-6 py-10 text-slate-100 shadow-2xl sm:px-8">
-            <div className="flex flex-wrap items-start justify-between gap-8">
-              <div className="max-w-2xl space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-indigo-300/80">
-                  Command center
-                </p>
-                <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Welcome back, {viewerName}.
-                </h1>
-                <p className="max-w-xl text-sm text-slate-300">
-                  Monitor live incidents, collaborate with responders, and keep the status page shining.
-                  Critical signals are surfaced automatically so the team can stay ahead.
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-3 text-right">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-slate-200">
-                  <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                  {openCount} active · {criticalCount} critical
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b border-gray-200">
+          <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              {/* Logo and title */}
+              <div className="flex items-center">
+                <div className="flex-shrink-0 flex items-center">
+                  <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">⚡</span>
+                  </div>
+                  <span className="ml-3 text-xl font-bold text-gray-900">IncidentPulse</span>
                 </div>
-                <div className="text-xs text-slate-400">
-                  Data refreshes every few minutes · Manual overrides available
-                </div>
-              </div>
-            </div>
-            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {quickActions.map((action) => {
-                const Icon = action.icon;
-                const content = (
-                  <span className="flex w-full items-center justify-between gap-3">
-                    <span>
-                      <span className="text-sm font-semibold text-slate-100">{action.label}</span>
-                      <span className="mt-1 block text-xs text-slate-300">{action.description}</span>
-                    </span>
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/10 text-slate-100 transition group-hover:bg-white/20">
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                    </span>
-                  </span>
-                );
-
-                if (action.disabled) {
-                  return (
-                    <div
-                      key={action.label}
-                      className="group rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-slate-300 opacity-60"
+                
+                {/* Desktop Navigation */}
+                <nav className="hidden md:ml-8 md:flex space-x-8">
+                  <button
+                    onClick={() => setActiveTab("incidents")}
+                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                      activeTab === "incidents"
+                        ? "border-blue-500 text-gray-900"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    Incidents
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setActiveTab("team")}
+                      className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                        activeTab === "team"
+                          ? "border-blue-500 text-gray-900"
+                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      }`}
                     >
-                      {content}
-                    </div>
-                  );
-                }
-
-                return action.href.startsWith("#") ? (
-                  <a
-                    key={action.label}
-                    href={action.href}
-                    className="group rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-slate-200 transition hover:border-indigo-300/40 hover:bg-white/10"
-                  >
-                    {content}
-                  </a>
-                ) : (
-                  <Link
-                    key={action.label}
-                    href={action.href as Route}
-                    className="group rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-slate-200 transition hover:border-indigo-300/40 hover:bg-white/10"
-                  >
-                    {content}
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-
-          <div className="mt-10 space-y-10">
-            <DashboardStats incidents={incidents} metrics={metricsQuery.data} />
-
-            <section className="space-y-8">
-              <div
-                id="incident-filters"
-                className="rounded-3xl border border-white/15 bg-white/80 p-6 shadow-xl backdrop-blur"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-6">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <FilterSelect
-                      label="Status"
-                      value={statusFilter}
-                      options={statusFilters}
-                      onChange={(status) => setStatusFilter(status)}
-                    />
-                    <FilterSelect
-                      label="Severity"
-                      value={severityFilter}
-                      options={severityFilters}
-                      onChange={(severity) => setSeverityFilter(severity)}
-                    />
-                    {teamRoleOptions.length > 0 ? (
-                      <FilterSelect
-                        label="Team role"
-                        value={teamRoleFilter}
-                        options={teamRoleOptions}
-                        onChange={(role) => setTeamRoleFilter(role)}
-                      />
-                    ) : null}
-                    {isAdmin ? (
-                      <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Assignee
-                        <div className="relative">
-                          <select
-                            value={assigneeFilter ?? ""}
-                            onChange={(event) =>
-                              setAssigneeFilter(
-                                event.target.value ? event.target.value : undefined
-                              )
-                            }
-                            className="appearance-none rounded-full border border-slate-300 bg-white px-3 py-1.5 pr-8 text-xs font-medium text-slate-700 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                          >
-                            <option value="">Any</option>
-                            {assigneeOptions.map((user) => (
-                              <option key={user.id} value={user.id}>
-                                {user.name}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        </div>
-                      </label>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <ArrowRightIcon className="h-3.5 w-3.5 text-slate-400" />
-                    <span>Use the quick filters to focus the queue.</span>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  {filterChips.length === 0 ? (
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
-                      No filters applied
-                    </span>
-                  ) : (
-                    filterChips.map((chip) => (
-                      <button
-                        key={chip.label}
-                        onClick={chip.onClear}
-                        className="inline-flex items-center gap-1 rounded-full bg-slate-900/5 px-3 py-1 text-slate-600 transition hover:bg-indigo-100"
-                      >
-                        {chip.label}
-                        <span aria-hidden="true">×</span>
-                      </button>
-                    ))
+                      Team Management
+                    </button>
                   )}
-                </div>
+                </nav>
               </div>
 
-              <IncidentsTable
-                incidents={incidents}
-                onSelect={(incident) => setSelectedIncident(incident)}
-                currentUserId={session?.id ?? ""}
-                isAdmin={Boolean(isAdmin)}
-              />
+              {/* User menu and mobile button */}
+              <div className="flex items-center">
+                {/* New Incident Button - NOW WITH CLICK HANDLER */}
+                {canCreate && (
+                  <button 
+                    onClick={() => setIsNewIncidentOpen(true)}
+                    className="hidden sm:inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mr-4"
+                  >
+                    + New Incident
+                  </button>
+                )}
 
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr),minmax(0,1fr)]">
-                <NewIncidentForm
-                  disabled={!canCreate}
-                  canAssign={Boolean(isAdmin)}
-                  assignees={teamUsers}
-                  currentUserId={session?.id ?? ""}
-                />
-                <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 p-6 text-sm text-slate-200 shadow-xl">
-                  <h3 className="text-sm font-semibold text-white">Today&apos;s playbook</h3>
-                  <ul className="mt-4 space-y-3 text-xs text-slate-300">
-                    <li className="flex items-start gap-3">
-                      <span className="mt-1 h-2 w-2 rounded-full bg-emerald-400" />
-                      Respond to new incidents within 15 minutes.
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="mt-1 h-2 w-2 rounded-full bg-sky-400" />
-                      Keep customers informed every 30 minutes with status notes.
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="mt-1 h-2 w-2 rounded-full bg-rose-400" />
-                      Resolve critical incidents under 2 hours and capture lessons learned.
-                    </li>
-                  </ul>
+                {/* User profile */}
+                <div className="flex items-center">
+                  <div className="hidden sm:flex sm:flex-col sm:items-end sm:mr-4">
+                    <div className="text-sm font-medium text-gray-900">{session?.name}</div>
+                    <div className="text-sm text-gray-500 capitalize">{session?.role}</div>
+                  </div>
+                  <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center border-2 border-white">
+                    <span className="text-blue-600 text-sm font-medium">
+                      {session?.name?.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Mobile menu button */}
+                <div className="md:hidden ml-4">
+                  <button
+                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                  >
+                    {mobileMenuOpen ? (
+                      <XMarkIcon className="block h-6 w-6" />
+                    ) : (
+                      <Bars3Icon className="block h-6 w-6" />
+                    )}
+                  </button>
                 </div>
               </div>
-
-              {isAdmin ? (
-                <TeamManagementPanel
-                  id="team-roster"
-                  users={teamUsers}
-                  meta={teamUsersMeta}
-                  isLoading={teamUsersQuery.isLoading}
-                  isRefetching={teamUsersQuery.isFetching}
-                  search={teamSearch}
-                  onSearchChange={setTeamSearch}
-                  page={teamPage}
-                  onPageChange={setTeamPage}
-                  pageSize={teamPageSize}
-                />
-              ) : null}
-            </section>
+            </div>
           </div>
-        </div>
 
-        <footer className="mx-auto w-[95%] max-w-[1600px] px-4 pb-10 text-xs text-slate-500 sm:px-6 lg:px-10">
-          <div className="flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
-            <span>© {year} IncidentPulse. Built for resilient teams.</span>
-            <div className="flex flex-wrap gap-4 text-slate-400">
-              <Link className="transition hover:text-slate-200" href={"/status" as Route}>
-                Status
-              </Link>
-              <a className="transition hover:text-slate-200" href="mailto:support@incidentpulse.com">
-                Support
-              </a>
-              <a className="transition hover:text-slate-200" href="#">
-                Docs
-              </a>
+          {/* Mobile menu */}
+          {mobileMenuOpen && (
+            <div className="md:hidden">
+              <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setActiveTab("incidents");
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${
+                    activeTab === "incidents"
+                      ? "bg-blue-50 text-blue-700 border-l-4 border-blue-700"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  }`}
+                >
+                  Incidents
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("team");
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${
+                      activeTab === "team"
+                        ? "bg-blue-50 text-blue-700 border-l-4 border-blue-700"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                  >
+                    Team Management
+                  </button>
+                )}
+                {canCreate && (
+                  <button 
+                    onClick={() => {
+                      setIsNewIncidentOpen(true);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-green-600 hover:bg-green-50 hover:text-green-700"
+                  >
+                    + New Incident
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </header>
+
+        {/* Main Content - Full Width */}
+        <main className="max-w-full mx-auto pb-8">
+          {/* Stats Overview */}
+          <div className="px-4 sm:px-6 lg:px-8 mt-6">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Total Incidents */}
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="px-4 py-5 sm:p-6">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 bg-blue-100 rounded-md p-3">
+                      <div className="h-6 w-6 text-blue-600">📊</div>
+                    </div>
+                    <div className="ml-5 w-0 flex-1">
+                      <dl>
+                        <dt className="text-sm font-medium text-gray-500 truncate">Total Incidents</dt>
+                        <dd className="text-lg font-semibold text-gray-900">{incidents.length}</dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Incidents */}
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="px-4 py-5 sm:p-6">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 bg-orange-100 rounded-md p-3">
+                      <div className="h-6 w-6 text-orange-600">🔥</div>
+                    </div>
+                    <div className="ml-5 w-0 flex-1">
+                      <dl>
+                        <dt className="text-sm font-medium text-gray-500 truncate">Active</dt>
+                        <dd className="text-lg font-semibold text-gray-900">{activeIncidents}</dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Critical */}
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="px-4 py-5 sm:p-6">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 bg-red-100 rounded-md p-3">
+                      <div className="h-6 w-6 text-red-600">🚨</div>
+                    </div>
+                    <div className="ml-5 w-0 flex-1">
+                      <dl>
+                        <dt className="text-sm font-medium text-gray-500 truncate">Critical</dt>
+                        <dd className="text-lg font-semibold text-gray-900">{criticalIncidents}</dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Resolved */}
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="px-4 py-5 sm:p-6">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 bg-green-100 rounded-md p-3">
+                      <div className="h-6 w-6 text-green-600">✅</div>
+                    </div>
+                    <div className="ml-5 w-0 flex-1">
+                      <dl>
+                        <dt className="text-sm font-medium text-gray-500 truncate">Resolved</dt>
+                        <dd className="text-lg font-semibold text-gray-900">{resolvedIncidents}</dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="px-4 sm:px-6 lg:px-8 mt-6">
+            <div className="bg-white shadow rounded-lg">
+              {/* Tab Content */}
+              {activeTab === "incidents" ? (
+                <div className="p-6">
+                  {/* Header and Filters */}
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
+                    <div>
+                      <h2 className="text-xl font-semibold text-gray-900">Incident Management</h2>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Monitor and manage all system incidents in real-time
+                      </p>
+                    </div>
+                    
+                    {/* Quick Actions */}
+                    <div className="mt-4 lg:mt-0 flex flex-wrap gap-3">
+                      {canCreate && (
+                        <button 
+                          onClick={() => setIsNewIncidentOpen(true)}
+                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >
+                          + New Incident
+                        </button>
+                      )}
+                      
+                      {/* Filter Toggles */}
+                      <div className="flex items-center space-x-2">
+                        <FilterSelect
+                          label="Status"
+                          value={statusFilter}
+                          options={statusFilters}
+                          onChange={(status) => setStatusFilter(status)}
+                        />
+                        <FilterSelect
+                          label="Severity"
+                          value={severityFilter}
+                          options={severityFilters}
+                          onChange={(severity) => setSeverityFilter(severity)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Active Filters */}
+                  {filterChips.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-6 p-4 bg-gray-50 rounded-lg">
+                      <span className="text-sm text-gray-500">Active filters:</span>
+                      {filterChips.map((chip) => (
+                        <button
+                          key={chip.label}
+                          onClick={chip.onClear}
+                          className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-sm font-medium hover:bg-blue-200 transition-colors"
+                        >
+                          {chip.label}
+                          <span className="ml-1.5 text-blue-600">×</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Incidents Table */}
+                  <div className="mt-6">
+                    <IncidentsTable
+                      incidents={incidents}
+                      onSelect={(incident) => setSelectedIncident(incident)}
+                      currentUserId={session?.id ?? ""}
+                      isAdmin={Boolean(isAdmin)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Team Management Tab */
+                <div className="p-6">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
+                    <div>
+                      <h2 className="text-xl font-semibold text-gray-900">Team Management</h2>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Manage team members and their roles
+                      </p>
+                    </div>
+                    
+                    {/* Team Search */}
+                    <div className="mt-4 lg:mt-0">
+                      <input
+                        type="text"
+                        placeholder="Search team members..."
+                        value={teamSearch}
+                        onChange={(e) => setTeamSearch(e.target.value)}
+                        className="block w-full lg:w-64 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Team Management Panel */}
+                  <TeamManagementPanel
+                    users={teamUsers}
+                    meta={teamUsersMeta}
+                    isLoading={teamUsersQuery.isLoading}
+                    isRefetching={teamUsersQuery.isFetching}
+                    search={teamSearch}
+                    onSearchChange={setTeamSearch}
+                    page={teamPage}
+                    onPageChange={setTeamPage}
+                    pageSize={teamPageSize}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Quick Create Card for Mobile */}
+            <div className="mt-6 lg:hidden">
+              <div className="bg-white shadow rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                <button 
+                  onClick={() => setIsNewIncidentOpen(true)}
+                  className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  + Create New Incident
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        {/* Footer */}
+        <footer className="bg-white border-t border-gray-200 mt-12">
+          <div className="max-w-full mx-auto py-8 px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col md:flex-row justify-between items-center">
+              <div className="flex items-center">
+                <div className="h-6 w-6 bg-blue-600 rounded flex items-center justify-center mr-2">
+                  <span className="text-white text-xs font-bold">⚡</span>
+                </div>
+                <span className="text-sm font-semibold text-gray-900">IncidentPulse</span>
+              </div>
+              
+              <div className="mt-4 md:mt-0">
+                <p className="text-center text-sm text-gray-500">
+                  &copy; {new Date().getFullYear()} IncidentPulse. All rights reserved.
+                </p>
+              </div>
+              
+              <div className="mt-4 md:mt-0 flex space-x-6">
+                <a href="#" className="text-gray-400 hover:text-gray-500">
+                  <span className="sr-only">Privacy Policy</span>
+                  <span className="text-sm">Privacy</span>
+                </a>
+                <a href="#" className="text-gray-400 hover:text-gray-500">
+                  <span className="sr-only">Terms of Service</span>
+                  <span className="text-sm">Terms</span>
+                </a>
+                <a href="#" className="text-gray-400 hover:text-gray-500">
+                  <span className="sr-only">Support</span>
+                  <span className="text-sm">Support</span>
+                </a>
+              </div>
             </div>
           </div>
         </footer>
-      </div>
 
-      <IncidentDrawer
-        incidentId={selectedIncident?.id}
-        open={Boolean(selectedIncident)}
-        onClose={() => setSelectedIncident(null)}
-        currentUser={{
-          id: session?.id ?? "",
-          role: session?.role ?? "viewer"
-        }}
-        teamUsers={teamUsers}
-      />
+        {/* Incident Drawer for viewing/editing */}
+        <IncidentDrawer
+          incidentId={selectedIncident?.id}
+          open={Boolean(selectedIncident)}
+          onClose={() => setSelectedIncident(null)}
+          currentUser={{
+            id: session?.id ?? "",
+            role: session?.role ?? "viewer"
+          }}
+          teamUsers={teamUsers}
+        />
+
+        {/* NEW: Modal for creating incidents */}
+        {isNewIncidentOpen && (
+          <div className="fixed inset-0 overflow-y-auto z-50">
+            <div className="flex items-end justify-center min-h-full pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+              {/* Background overlay */}
+              <div 
+                className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
+                onClick={() => setIsNewIncidentOpen(false)}
+              ></div>
+
+              {/* Modal panel */}
+              <div className="relative inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                <div className="absolute top-0 right-0 pt-4 pr-4">
+                  <button
+                    type="button"
+                    className="bg-white rounded-md text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    onClick={() => setIsNewIncidentOpen(false)}
+                  >
+                    <span className="sr-only">Close</span>
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+                
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                      Create New Incident
+                    </h3>
+                    <NewIncidentForm
+                      disabled={!canCreate}
+                      canAssign={Boolean(isAdmin)}
+                      assignees={teamUsers}
+                      currentUserId={session?.id ?? ""}
+                      onSuccess={() => setIsNewIncidentOpen(false)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </AuthGuard>
   );
 }
@@ -418,23 +566,23 @@ type FilterSelectProps<T extends string> = {
 
 function FilterSelect<T extends string>({ label, value, options, onChange }: FilterSelectProps<T>) {
   return (
-    <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-      {label}
+    <div className="flex flex-col">
+      <label className="text-xs font-medium text-gray-500 mb-1">{label}</label>
       <div className="relative">
         <select
           value={value ?? ""}
           onChange={(event) => onChange(event.target.value ? (event.target.value as T) : undefined)}
-          className="appearance-none rounded-full border border-slate-300 bg-white px-3 py-1.5 pr-8 text-xs font-medium text-slate-700 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          className="appearance-none rounded-md border border-gray-300 bg-white px-3 py-2 pr-8 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
-          <option value="">Any</option>
+          <option value="">All {label}</option>
           {options.map((option) => (
             <option key={option} value={option}>
-              {option}
+              {option.charAt(0).toUpperCase() + option.slice(1)}
             </option>
           ))}
         </select>
-        <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
       </div>
-    </label>
+    </div>
   );
 }
