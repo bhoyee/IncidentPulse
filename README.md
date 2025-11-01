@@ -3,11 +3,11 @@
 Modern incident response platform that combines an authenticated operations dashboard with a polished public status page so teams can triage outages fast and keep customers in the loop.
 
 ## Feature Highlights
-- **Real-time operations console** – assign incidents, update statuses, and share progress notes in a collaborative drawer experience.
-- **Role-aware access control** – admins, operators, and viewers each get the right capabilities backed by signed JWT cookies.
-- **Public status page** – cached SLA metrics and active incident summaries keep customers informed without exposing internal tooling.
-- **Insightful metrics** – track MTTR, first-response time, and 24h uptime with automated cache recomputation jobs.
-- **End-to-end testing** – Playwright smoke tests and Jest suites guard critical flows in CI.
+- **Real-time operations console** â€“ assign incidents, update statuses, and share progress notes in a collaborative drawer experience.
+- **Role-aware access control** â€“ admins, operators, and viewers each get the right capabilities backed by signed JWT cookies.
+- **Public status page** â€“ cached SLA metrics and active incident summaries keep customers informed without exposing internal tooling.
+- **Insightful metrics** â€“ track MTTR, first-response time, and 24h uptime with automated cache recomputation jobs.
+- **End-to-end testing** â€“ Playwright smoke tests and Jest suites guard critical flows in CI.
 
 ## Tech Stack
 | Layer      | Tools |
@@ -19,17 +19,8 @@ Modern incident response platform that combines an authenticated operations dash
 
 ## Monorepo Layout
 `
-incident-pulse/
-+-- backend/                  # Fastify API service + Prisma layer
-¦   +-- prisma/               # Schema, migrations, and seed scripts
-¦   +-- src/                  # Routes, domain logic, utilities, server bootstrap
-+-- frontend/                 # Next.js 14 client application
-¦   +-- app/                  # App Router segments (dashboard, auth, status)
-¦   +-- components/           # Shared UI widgets (tables, drawers, forms)
-¦   +-- hooks/                # TanStack Query hooks and session helpers
-+-- docker-compose.yml        # Local Postgres orchestration
-+-- .github/workflows/        # CI pipelines for backend & frontend
-`
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/b82fc23d-1911-442c-a1ef-648197a60722" />
+
 
 ## Getting Started
 ### Prerequisites
@@ -43,8 +34,8 @@ cp backend/.env.example backend/.env
 cp frontend/.env.local.example frontend/.env.local
 `
 Update the generated files with secrets:
-- **backend/.env** – DATABASE_URL, JWT_SECRET (32+ chars), COOKIE_DOMAIN, FRONTEND_URL
-- **frontend/.env.local** – NEXT_PUBLIC_API_BASE
+- **backend/.env** â€“ DATABASE_URL, JWT_SECRET (32+ chars), COOKIE_DOMAIN, FRONTEND_URL
+- **frontend/.env.local** â€“ NEXT_PUBLIC_API_BASE
 
 ### 2. Install dependencies
 `
@@ -94,13 +85,13 @@ pm run test:e2e      | Playwright smoke tests |
 
 ## Continuous Integration
 GitHub Actions pipelines enforce quality on every push:
-- **frontend-ci** – type check, lint, Playwright smoke tests, trigger Vercel deploy hook on main.
-- **backend-ci** – type check, lint, Jest suite, run prisma migrate deploy, ping Render deploy hook.
+- **frontend-ci** â€“ type check, lint, Playwright smoke tests, trigger Vercel deploy hook on main.
+- **backend-ci** â€“ type check, lint, Jest suite, run prisma migrate deploy, ping Render deploy hook.
 
 ## Deployment Notes
-- **Frontend (Vercel)** – set NEXT_PUBLIC_API_BASE to your deployed backend.
-- **Backend (Render or similar)** – supply DATABASE_URL, JWT_SECRET, FRONTEND_URL, COOKIE_DOMAIN. Schedule a job to hit /metrics/recompute for SLA cache refreshes.
-- **Database (Render Postgres or RDS)** – mirror the connection string locally and in CI secrets.
+- **Frontend (Vercel)** â€“ set NEXT_PUBLIC_API_BASE to your deployed backend.
+- **Backend (Render or similar)** â€“ supply DATABASE_URL, JWT_SECRET, FRONTEND_URL, COOKIE_DOMAIN. Schedule a job to hit /metrics/recompute for SLA cache refreshes.
+- **Database (Render Postgres or RDS)** â€“ mirror the connection string locally and in CI secrets.
 
 ## Roadmap Ideas
 - Incident analytics dashboards (Charts for MTTA/MTTR trends)
