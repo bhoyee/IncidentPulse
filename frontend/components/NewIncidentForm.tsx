@@ -94,16 +94,19 @@ export function NewIncidentForm({ disabled, canAssign = false, assignees = [], c
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div
+      id="new-incident"
+      className="rounded-3xl border border-white/15 bg-white/80 p-6 shadow-xl backdrop-blur"
+    >
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-slate-800">Create incident</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Create incident</h3>
           <p className="text-xs text-slate-500">Log a new customer-facing disruption.</p>
         </div>
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
-          className="text-sm font-medium text-brand-600 hover:underline"
+          className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={disabled}
         >
           {open ? "Close" : "New incident"}
@@ -121,7 +124,7 @@ export function NewIncidentForm({ disabled, canAssign = false, assignees = [], c
                 value={form.title}
                 onChange={handleChange}
                 required
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1 w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </label>
           </div>
@@ -132,7 +135,7 @@ export function NewIncidentForm({ disabled, canAssign = false, assignees = [], c
                 name="severity"
                 value={form.severity}
                 onChange={handleChange}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1 w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -143,16 +146,16 @@ export function NewIncidentForm({ disabled, canAssign = false, assignees = [], c
             {canAssign ? (
               <label className="block text-sm font-medium text-slate-700">
                 Assign to
-                <select
-                  name="assignedToId"
-                  value={form.assignedToId ?? "unassigned"}
-                  onChange={handleChange}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                >
-                  <option value="unassigned">Unassigned</option>
-                  {assignees
-                    .filter((user) => user.isActive)
-                    .map((user) => (
+              <select
+                name="assignedToId"
+                value={form.assignedToId ?? "unassigned"}
+                onChange={handleChange}
+                className="mt-1 w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="unassigned">Unassigned</option>
+                {assignees
+                  .filter((user) => user.isActive)
+                  .map((user) => (
                       <option key={user.id} value={user.id}>
                         {user.name} ({user.teamRoles.join(", ") || user.role})
                       </option>
@@ -170,7 +173,7 @@ export function NewIncidentForm({ disabled, canAssign = false, assignees = [], c
                 value={form.description}
                 onChange={handleChange}
                 required
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1 w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                 placeholder="Summarize the customer impact and scope."
               />
             </label>
@@ -183,7 +186,7 @@ export function NewIncidentForm({ disabled, canAssign = false, assignees = [], c
                 name="impactScope"
                 value={form.impactScope}
                 onChange={handleChange}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1 w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                 placeholder="e.g. Payments, On-call rotation"
               />
             </label>
@@ -194,7 +197,7 @@ export function NewIncidentForm({ disabled, canAssign = false, assignees = [], c
                 name="categoriesText"
                 value={form.categoriesText}
                 onChange={handleChange}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1 w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2.5 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                 placeholder="Comma separated (api, billing, comms)"
               />
             </label>
@@ -203,7 +206,7 @@ export function NewIncidentForm({ disabled, canAssign = false, assignees = [], c
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="inline-flex items-center rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex items-center rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {mutation.isPending ? "Creating..." : "Create incident"}
             </button>

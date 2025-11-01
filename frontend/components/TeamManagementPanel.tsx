@@ -16,6 +16,7 @@ type TeamUsersMeta = {
 };
 
 type Props = {
+  id?: string;
   users: TeamUser[];
   meta?: TeamUsersMeta;
   isLoading: boolean;
@@ -54,6 +55,7 @@ const DEFAULT_FORM_STATE: FormState = {
 };
 
 export function TeamManagementPanel({
+  id,
   users,
   meta,
   isLoading,
@@ -190,21 +192,24 @@ export function TeamManagementPanel({
   const busy = isLoading || isRefetching || updateUser.isPending || createUser.isPending;
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div
+      id={id}
+      className="space-y-4 rounded-3xl border border-white/15 bg-white/80 p-6 text-slate-900 shadow-xl backdrop-blur"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-800">Team management</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Team management</h3>
           <p className="text-xs text-slate-500">
             Invite teammates, manage permissions, and organise on-call roles.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-          {busy ? <span>Working...</span> : null}
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          {busy ? <span className="text-indigo-600">Syncing...</span> : null}
           <button
             type="button"
             onClick={() => setIsCreating((prev) => !prev)}
             disabled={createUser.isPending}
-            className="rounded-md border border-brand-500 bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isCreating ? "Close form" : "New teammate"}
           </button>
@@ -219,7 +224,7 @@ export function TeamManagementPanel({
             value={searchValue}
             onChange={(event) => handleSearchInputChange(event.target.value)}
             placeholder="Search by name, email, or team role"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="mt-1 w-full rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           />
         </label>
         <div className="text-xs text-slate-500">
@@ -380,29 +385,29 @@ export function TeamManagementPanel({
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
-              onClick={() => {
-                setForm(DEFAULT_FORM_STATE);
-                setFormError(null);
-              }}
-              className="rounded border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-500 transition hover:border-slate-300"
-            >
-              Reset
-            </button>
-            <button
-              type="submit"
-              disabled={createUser.isPending}
-              className="rounded bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {createUser.isPending ? "Creating..." : "Create teammate"}
-            </button>
-          </div>
+            onClick={() => {
+              setForm(DEFAULT_FORM_STATE);
+              setFormError(null);
+            }}
+            className="rounded-full border border-slate-200/80 bg-white px-3 py-1.5 text-sm font-semibold text-slate-500 transition hover:border-slate-300"
+          >
+            Reset
+          </button>
+          <button
+            type="submit"
+            disabled={createUser.isPending}
+            className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {createUser.isPending ? "Creating..." : "Create teammate"}
+          </button>
+        </div>
         </form>
       ) : null}
 
-      <div className="rounded-lg border border-slate-200">
+      <div className="rounded-2xl border border-white/10 bg-white/70 shadow-inner backdrop-blur">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <table className="min-w-full divide-y divide-slate-200/70 text-sm">
+            <thead className="bg-white/60 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-3 py-3 text-left">Name</th>
                 <th className="px-3 py-3 text-left">Email</th>
@@ -412,7 +417,7 @@ export function TeamManagementPanel({
                 <th className="px-3 py-3 text-left">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody className="divide-y divide-slate-200/70 bg-white/80">
               {isLoading && users.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
@@ -558,8 +563,8 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
   return (
     <tr
       className={clsx(
-        "transition hover:bg-slate-50",
-        !user.isActive && "bg-slate-50 text-slate-500"
+        "transition hover:bg-indigo-50/70",
+        user.isActive ? "bg-white/90" : "bg-slate-100 text-slate-400"
       )}
     >
       <td className="px-3 py-3">
@@ -614,7 +619,7 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
             type="button"
             onClick={handleReset}
             disabled={!hasChanges || isSaving || isGlobalSaving}
-            className="rounded border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-slate-500 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Reset
           </button>
@@ -622,7 +627,7 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
             type="button"
             onClick={handleSave}
             disabled={!canSave}
-            className="rounded bg-brand-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSaving ? "Saving..." : "Save"}
           </button>
