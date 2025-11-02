@@ -21,9 +21,12 @@ export function AppHeader() {
     <header className="border-b border-slate-200 bg-white shadow-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
-          <span className="rounded bg-brand-500 px-2 py-1 text-sm font-semibold text-white">
+          <Link
+            href="/"
+            className="rounded bg-brand-500 px-2 py-1 text-sm font-semibold text-white transition hover:bg-brand-600"
+          >
             IncidentPulse
-          </span>
+          </Link>
           <nav className="flex items-center gap-2 text-sm font-medium text-slate-600">
             {links
               .filter((link) => (link.auth ? Boolean(user) : true))

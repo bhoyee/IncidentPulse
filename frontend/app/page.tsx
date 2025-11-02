@@ -1,56 +1,471 @@
 "use client";
 
 import Link from "next/link";
-import { useStatus } from "@hooks/useStatus";
+import { useMemo } from "react";
+import {
+  ArrowPathIcon,
+  BoltIcon,
+  ChartBarIcon,
+  GlobeAltIcon,
+  PlayCircleIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
+  CheckCircleIcon,
+  BuildingOfficeIcon,
+  ClockIcon,
+  UserGroupIcon
+} from "@heroicons/react/24/outline";
 import { StatusBanner } from "@components/StatusBanner";
 import { PublicIncidentCard } from "@components/PublicIncidentCard";
+import { useStatus } from "@hooks/useStatus";
+import { useSession } from "@hooks/useSession";
+
+const heroHighlights = [
+  "Enterprise-grade incident management",
+  "Real-time status monitoring",
+  "Seamless team collaboration"
+];
+
+const featureCards = [
+  {
+    title: "Unified Incident Intake",
+    description:
+      "Centralize alerts from monitoring tools, on-call systems, and manual reports into a single prioritized queue.",
+    icon: BoltIcon
+  },
+  {
+    title: "Transparent Communication",
+    description:
+      "Publish accurate status updates with the same data responders see - eliminate manual copy-pasting between tools.",
+    icon: GlobeAltIcon
+  },
+  {
+    title: "Operational Intelligence",
+    description:
+      "Track MTTR, response times, and ownership trends with comprehensive analytics and reporting.",
+    icon: ChartBarIcon
+  }
+];
+
+const workflowSteps = [
+  {
+    title: "Detect and Scope",
+    description:
+      "Log incidents instantly with automated severity assessment and impact analysis for clear communication.",
+    icon: ShieldCheckIcon
+  },
+  {
+    title: "Coordinate Response",
+    description:
+      "Assign responders, track progress, and maintain timeline updates within a unified dashboard.",
+    icon: ArrowPathIcon
+  },
+  {
+    title: "Communicate Effectively",
+    description:
+      "Push curated updates to stakeholders and public status pages with one-click publishing.",
+    icon: SparklesIcon
+  }
+];
+
+const stats = [
+  { label: "Response Time", value: "< 2min" },
+  { label: "Uptime", value: "99.9%" },
+  { label: "Teams Supported", value: "500+" },
+  { label: "Incidents Resolved", value: "50K+" }
+];
 
 export default function HomePage() {
   const { data, isLoading } = useStatus();
+  const { data: session } = useSession();
+
+  const activeCount = useMemo(() => data?.data.active_incidents.length ?? 0, [data]);
+  const overallState = data?.meta.state;
+  const year = new Date().getFullYear();
+  const isAuthenticated = Boolean(session);
+  const primaryNavLabel = isAuthenticated ? "Dashboard" : "Sign In";
+  const primaryNavHref = isAuthenticated ? "/dashboard" : "/login";
+  const heroPrimaryLabel = isAuthenticated ? "Open Dashboard" : "Get Started Free";
+  const heroPrimaryHref = isAuthenticated ? "/dashboard" : "/login";
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Stay informed with IncidentPulse</h1>
-        <p className="mt-3 max-w-2xl text-sm text-slate-600">
-          Track incidents, keep your team aligned, and share transparent updates with your customers.
-        </p>
-        <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center rounded-md bg-brand-600 px-4 py-2 font-semibold text-white shadow hover:bg-brand-700"
-          >
-            Go to dashboard
-          </Link>
-          <Link href="/status" className="inline-flex items-center text-brand-600 hover:underline">
-            View public status page
-          </Link>
+    <div className="min-h-screen bg-white w-full">
+      {/* Header */}
+      <header className="border-b border-gray-100 bg-white/80 backdrop-blur-sm w-full">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="w-full max-w-7xl mx-auto">
+            <div className="flex h-20 items-center justify-between">
+              {/* Logo */}
+              <div className="flex items-center space-x-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700">
+                  <span className="text-lg font-bold text-white">IP</span>
+                </div>
+                <div>
+                  <span className="text-xl font-bold text-gray-900">IncidentPulse</span>
+                  <span className="block text-xs text-blue-600 font-medium">ENTERPRISE</span>
+                </div>
+              </div>
+
+              {/* Navigation */}
+              <nav className="hidden items-center space-x-8 md:flex">
+                <Link href="/status" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                  Status
+                </Link>
+                <Link href="/features" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                  Features
+                </Link>
+                <Link href="/pricing" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                  Pricing
+                </Link>
+                <Link href="/docs" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                  Documentation
+                </Link>
+              </nav>
+
+              {/* Auth Buttons */}
+              <div className="flex items-center space-x-4">
+                <Link
+                  href="/status"
+                  className="hidden text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors md:block"
+                >
+                  View Status
+                </Link>
+                <Link
+                  href={primaryNavHref}
+                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors"
+                >
+                  {primaryNavLabel}
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <section className="relative bg-gradient-to-br from-gray-50 to-blue-50 py-20 w-full">
+        <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="w-full max-w-7xl mx-auto">
+            <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
+              {/* Left Column */}
+              <div className="flex flex-col justify-center space-y-8">
+                <div>
+                  <div className="inline-flex items-center rounded-full bg-blue-100 px-4 py-1.5 text-sm font-medium text-blue-700 mb-6">
+                    <CheckCircleIcon className="h-4 w-4 mr-2" />
+                    Enterprise Incident Management
+                  </div>
+                  <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl lg:text-6xl">
+                    Command Center for
+                    <span className="block bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                      Modern Teams
+                    </span>
+                  </h1>
+                  <p className="mt-6 text-lg text-gray-600 max-w-2xl">
+                    IncidentPulse combines secure internal dashboards with polished customer-facing status pages. 
+                    Respond faster, keep teams aligned, and communicate with confidence.
+                  </p>
+                </div>
+
+                {/* CTA Buttons */}
+                <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
+                  <Link
+                    href={heroPrimaryHref}
+                    className="rounded-lg bg-blue-600 px-8 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors text-center"
+                  >
+                    {heroPrimaryLabel}
+                  </Link>
+                  <Link
+                    href="/demo"
+                    className="rounded-lg border border-gray-300 bg-white px-8 py-3.5 text-base font-semibold text-gray-900 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors text-center"
+                  >
+                    Schedule Demo
+                  </Link>
+                </div>
+
+                {/* Trust Indicators */}
+                <div className="pt-8">
+                  <p className="text-sm font-medium text-gray-500 mb-4">Trusted by engineering teams at</p>
+                  <div className="flex items-center space-x-8 opacity-60">
+                    <BuildingOfficeIcon className="h-8 w-8 text-gray-400" />
+                    <UserGroupIcon className="h-8 w-8 text-gray-400" />
+                    <ClockIcon className="h-8 w-8 text-gray-400" />
+                    <div className="h-8 w-8 rounded-lg bg-gray-200"></div>
+                    <div className="h-8 w-8 rounded-lg bg-gray-200"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column - Status Card */}
+              <div className="flex flex-col space-y-6">
+                {/* Highlights */}
+                <div className="space-y-4">
+                  {heroHighlights.map((item, index) => (
+                    <div key={item} className="flex items-center space-x-3 rounded-lg bg-white p-4 shadow-sm border border-gray-100">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100">
+                        <CheckCircleIcon className="h-4 w-4 text-green-600" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">{item}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Live Status */}
+                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">System Status</h3>
+                    <div className="flex items-center space-x-2">
+                      <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+                      <span className="text-sm text-gray-500">Live</span>
+                    </div>
+                  </div>
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="text-sm text-gray-500">Checking system status...</div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <StatusBanner state={overallState} />
+                      <div className="rounded-lg bg-gray-50 p-4">
+                        <p className="text-sm text-gray-600">
+                          {activeCount === 0
+                            ? "All systems operational with no active incidents"
+                            : `${activeCount} active ${activeCount === 1 ? "incident" : "incidents"} being monitored`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <Link
+                    href="/status"
+                    className="mt-4 flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    View Detailed Status
+                    <PlayCircleIcon className="ml-2 h-4 w-4" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Current system state</h2>
-        {isLoading || !data ? (
-          <div className="h-24 rounded-lg border border-dashed border-slate-200 bg-white/60 text-sm text-slate-500">
-            <div className="flex h-full items-center justify-center">Loading status...</div>
-          </div>
-        ) : (
-          <>
-            <StatusBanner state={data.meta.state} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              {data.data.active_incidents.length === 0 ? (
-                <div className="col-span-full rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">
-                  No active incidents. All systems are healthy.
+      {/* Stats Section */}
+      <section className="bg-white py-16 w-full">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="w-full max-w-7xl mx-auto">
+            <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+              {stats.map((stat, index) => (
+                <div key={stat.label} className="text-center">
+                  <div className="text-3xl font-bold text-gray-900">{stat.value}</div>
+                  <div className="mt-2 text-sm text-gray-500">{stat.label}</div>
                 </div>
-              ) : (
-                data.data.active_incidents.map((incident) => (
-                  <PublicIncidentCard key={incident.id} incident={incident} />
-                ))
-              )}
+              ))}
             </div>
-          </>
-        )}
+          </div>
+        </div>
       </section>
+
+      {/* Features Section */}
+      <section className="bg-gray-50 py-20 w-full">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="w-full max-w-7xl mx-auto">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                Enterprise-Grade Features
+              </h2>
+              <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">
+                Designed for modern engineering teams that demand reliability, security, and seamless collaboration.
+              </p>
+            </div>
+
+            <div className="grid gap-8 md:grid-cols-3">
+              {featureCards.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <div
+                    key={card.title}
+                    className="group relative overflow-hidden rounded-2xl bg-white p-8 shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300"
+                  >
+                    <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                      <Icon className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-3">{card.title}</h3>
+                    <p className="text-gray-600 leading-relaxed">{card.description}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Workflow Section */}
+      <section className="bg-white py-20 w-full">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="w-full max-w-7xl mx-auto">
+            <div className="grid gap-16 lg:grid-cols-2">
+              {/* Left Column */}
+              <div>
+                <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl mb-6">
+                  Streamlined Incident Workflow
+                </h2>
+                <p className="text-lg text-gray-600 mb-8">
+                  From detection to resolution, IncidentPulse provides a structured approach that ensures nothing falls through the cracks.
+                </p>
+                
+                <div className="space-y-6">
+                  {workflowSteps.map((step, index) => {
+                    const Icon = step.icon;
+                    return (
+                      <div key={step.title} className="flex space-x-4">
+                        <div className="flex flex-col items-center">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                            <Icon className="h-6 w-6" />
+                          </div>
+                          {index < workflowSteps.length - 1 && (
+                            <div className="h-full w-0.5 bg-gray-200 mt-2"></div>
+                          )}
+                        </div>
+                        <div className="flex-1 pb-8">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-2">{step.title}</h3>
+                          <p className="text-gray-600">{step.description}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Column - Live Status Feed */}
+              <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold text-gray-900">Live Status Feed</h3>
+                  <Link
+                    href="/status"
+                    className="text-sm font-medium text-blue-600 hover:text-blue-500 transition-colors"
+                  >
+                    View Full History
+                  </Link>
+                </div>
+
+                {isLoading ? (
+                  <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-gray-300">
+                    <div className="text-sm text-gray-500">Loading incident data...</div>
+                  </div>
+                ) : data ? (
+                  <div className="space-y-4">
+                    <StatusBanner state={overallState} />
+                    {activeCount === 0 ? (
+                      <div className="rounded-lg bg-green-50 p-6 text-center">
+                        <CheckCircleIcon className="mx-auto h-8 w-8 text-green-500 mb-2" />
+                        <p className="text-sm font-medium text-green-800">All systems operational</p>
+                        <p className="text-sm text-green-600 mt-1">No active incidents</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {data.data.active_incidents.map((incident) => (
+                          <PublicIncidentCard key={incident.id} incident={incident} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-gray-300">
+                    <div className="text-sm text-gray-500">Unable to load status data</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section - FULL WIDTH */}
+      <section className="bg-gradient-to-r w-screen relative left-1/2 right-1/2 -mx-[50vw] py-12 from-blue-600 to-blue-800 py-16 w-full">
+        <div className="w-full px-4 sm:px-6 lg:px-8 text-center">
+          <div className="w-full max-w-7xl mx-auto">
+            <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl mb-4">
+              Ready to Transform Your Incident Response?
+            </h2>
+            <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
+              Join thousands of engineering teams that trust IncidentPulse for reliable incident management.
+            </p>
+            <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4 justify-center">
+              <Link
+                href="/signup"
+                className="rounded-lg bg-white px-8 py-3.5 text-base font-semibold text-blue-600 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors"
+              >
+                Start Free Trial
+              </Link>
+              <Link
+                href="/demo"
+                className="rounded-lg border border-white px-8 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors"
+              >
+                Schedule Demo
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer - FULL WIDTH */}
+
+      <footer className="bg-gray-900 w-screen relative left-1/2 right-1/2 -mx-[50vw] py-12">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="w-full max-w-7xl mx-auto">
+            {/* Your footer content remains the same */}
+                        <div className="grid gap-8 md:grid-cols-4">
+                    {/* Company */}
+                    <div className="md:col-span-2">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
+                          <span className="text-sm font-bold text-white">IP</span>
+                        </div>
+                        <span className="text-xl font-bold text-white">IncidentPulse</span>
+                      </div>
+                      <p className="text-gray-400 text-sm max-w-md">
+                        Enterprise incident management platform designed for modern engineering teams. 
+                        Reliable, secure, and built for scale.
+                      </p>
+                    </div>
+
+                    {/* Links */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-white mb-4">Product</h4>
+                      <ul className="space-y-2 text-sm">
+                        <li><Link href="/features" className="text-gray-400 hover:text-white transition-colors">Features</Link></li>
+                        <li><Link href="/pricing" className="text-gray-400 hover:text-white transition-colors">Pricing</Link></li>
+                        <li><Link href="/status" className="text-gray-400 hover:text-white transition-colors">Status</Link></li>
+                        <li><Link href="/docs" className="text-gray-400 hover:text-white transition-colors">Documentation</Link></li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-semibold text-white mb-4">Company</h4>
+                      <ul className="space-y-2 text-sm">
+                        <li><Link href="/about" className="text-gray-400 hover:text-white transition-colors">About</Link></li>
+                        <li><Link href="/blog" className="text-gray-400 hover:text-white transition-colors">Blog</Link></li>
+                        <li><Link href="/careers" className="text-gray-400 hover:text-white transition-colors">Careers</Link></li>
+                        <li><Link href="/contact" className="text-gray-400 hover:text-white transition-colors">Contact</Link></li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="mt-12 border-t border-gray-800 pt-8">
+                    <div className="flex flex-col items-center justify-between space-y-4 md:flex-row md:space-y-0">
+                      <p className="text-sm text-gray-400">
+                        &copy; {year} IncidentPulse. All rights reserved.
+                      </p>
+                      <div className="flex space-x-6 text-sm text-gray-400">
+                        <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+                        <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+                        <Link href="/security" className="hover:text-white transition-colors">Security</Link>
+                      </div>
+                  </div>
+                </div>
+          </div>
+        </div>
+      </footer>
+      
     </div>
   );
 }

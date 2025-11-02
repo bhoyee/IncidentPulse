@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { format } from "date-fns";
 import {
@@ -44,7 +44,7 @@ export function DashboardStats({ incidents, metrics }: Props) {
     {
       label: "High & critical",
       value: highOrCritical.length.toString(),
-      subLabel: `snapshot · ${format(new Date(), "MMM d")}`,
+      subLabel: `Snapshot @ ${format(new Date(), "MMM d")}`,
       icon: ExclamationTriangleIcon,
       accent: "border-rose-400/60 bg-rose-500/10 text-rose-200",
       glow: "from-rose-400/20 via-rose-500/15 to-transparent"
@@ -99,3 +99,6 @@ export function DashboardStats({ incidents, metrics }: Props) {
     </div>
   );
 }
+
+
+
