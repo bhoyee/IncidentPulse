@@ -113,13 +113,13 @@ jobs:
             exit 1
           fi
 
-          ORG_FLAG=""
+          export VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID"
           if [ -n "$VERCEL_ORG_ID" ]; then
-            ORG_FLAG="--org $VERCEL_ORG_ID"
+            export VERCEL_ORG_ID="$VERCEL_ORG_ID"
           fi
 
-          npx vercel link --yes --project "$VERCEL_PROJECT_ID" $ORG_FLAG --token "$VERCEL_TOKEN"
+          npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
 
           npm run build
 
-          npx vercel deploy --prod --yes --prebuilt --token "$VERCEL_TOKEN" $ORG_FLAG
+          npx vercel deploy --prod --yes --prebuilt --token "$VERCEL_TOKEN"
