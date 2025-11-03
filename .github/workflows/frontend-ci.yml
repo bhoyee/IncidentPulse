@@ -55,9 +55,26 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
-        
+
       - name: Deploy to Vercel
         working-directory: frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx vercel --prod --token $VERCEL_TOKEN --yes
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_SLUG: ${{ secrets.VERCEL_TEAM_SLUG }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "VERCEL_TOKEN or VERCEL_PROJECT_ID secret is missing."
+            exit 1
+          fi
+
+          TEAM_FLAG=""
+          if [ -n "$VERCEL_TEAM_SLUG" ]; then
+            TEAM_FLAG="--scope $VERCEL_TEAM_SLUG"
+          fi
+
+          npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN" --project-id "$VERCEL_PROJECT_ID" $TEAM_FLAG
+
+          npm run build
+
+          npx vercel deploy --prod --yes --prebuilt --token "$VERCEL_TOKEN" $TEAM_FLAG
