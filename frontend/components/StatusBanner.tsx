@@ -23,11 +23,11 @@ const copy: Record<StatusSnapshot["overall_state"], { title: string; description
   };
 
 type Props = {
-  state: StatusSnapshot["overall_state"];
+  state?: StatusSnapshot["overall_state"];
 };
 
 export function StatusBanner({ state }: Props) {
-  const content = copy[state];
+  const content = copy[state ?? "operational"];
   return (
     <div className={clsx("rounded-lg border px-4 py-5 text-center shadow-sm", content.tone)}>
       <h2 className="text-lg font-semibold">{content.title}</h2>

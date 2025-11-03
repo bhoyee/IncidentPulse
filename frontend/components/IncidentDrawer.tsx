@@ -1,13 +1,14 @@
 "use client";
 
 import { Dialog, Transition } from "@headlessui/react";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { useIncidentDetail, useInvalidateIncidents } from "@hooks/useIncidents";
+import { isAxiosError } from "axios";
+import { useIncidentDetail, useInvalidateIncidents, useDeleteIncident } from "@hooks/useIncidents";
 import { apiClient } from "@lib/api-client";
 import { formatDate, formatRelative } from "@lib/format";
-import type { IncidentStatus } from "@lib/types";
+import type { IncidentSeverity, IncidentStatus } from "@lib/types";
 import { SeverityBadge } from "./SeverityBadge";
 import type { TeamUser } from "@hooks/useTeamUsers";
 
@@ -49,7 +50,23 @@ export function IncidentDrawer({ incidentId, open, onClose, currentUser, teamUse
   const queryClient = useQueryClient();
   const [updateMessage, setUpdateMessage] = useState("");
   const [statusChangePending, setStatusChangePending] = useState<IncidentStatus | null>(null);
-  const [assignmentChangePending, setAssignmentChangePending] = useState<string | null>(null);
+const [assignmentChangePending, setAssignmentChangePending] = useState<string | null>(null);
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    title: string;
+    severity: IncidentSeverity;
+    description: string;
+    categoriesText: string;
+    impactScope: string;
+  }>({
+    title: "",
+    severity: "medium",
+    description: "",
+    categoriesText: "",
+    impactScope: ""
+  });
+  const deleteIncident = useDeleteIncident();
 
   const isAdmin = currentUser.role === "admin";
   const availableAssignees = useMemo(
@@ -102,11 +119,30 @@ export function IncidentDrawer({ incidentId, open, onClose, currentUser, teamUse
   const incident = data?.data;
   const timeline = incident?.updates ?? [];
 
+  useEffect(() => {
+    if (!incident) {
+      return;
+    }
+    setEditForm({
+      title: incident.title,
+      severity: incident.severity,
+      description: incident.description,
+      categoriesText: (incident.categories ?? []).join(", "),
+      impactScope: incident.impactScope ?? ""
+    });
+  }, [incident, open]);
+
+  useEffect(() => {
+    setIsEditingDetails(false);
+    setDetailError(null);
+  }, [incidentId]);
+
   const canCollaborate =
     incident &&
     (isAdmin ||
       (currentUser.role === "operator" &&
         (incident.createdById === currentUser.id || incident.assignedToId === currentUser.id)));
+  const canEditDetails = Boolean(canCollaborate);
 
   const handleStatusChange = (status: IncidentStatus) => {
     setStatusChangePending(status);
@@ -133,7 +169,111 @@ export function IncidentDrawer({ incidentId, open, onClose, currentUser, teamUse
     addUpdateMutation.mutate({ message: updateMessage.trim() });
   };
 
+  const handleDetailFieldChange = (
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = event.target;
+    setEditForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCancelEditDetails = () => {
+    if (incident) {
+      setEditForm({
+        title: incident.title,
+        severity: incident.severity,
+        description: incident.description,
+        categoriesText: (incident.categories ?? []).join(", "),
+        impactScope: incident.impactScope ?? ""
+      });
+    }
+    setIsEditingDetails(false);
+    setDetailError(null);
+  };
+
+  const handleDetailSubmit: React.FormEventHandler<HTMLFormElement> = (event) => {
+    event.preventDefault();
+    if (!incidentId) {
+      return;
+    }
+
+    const trimmedTitle = editForm.title.trim();
+    const trimmedDescription = editForm.description.trim();
+    if (!trimmedTitle || !trimmedDescription) {
+      setDetailError("Title and description are required.");
+      return;
+    }
+
+    const categories = editForm.categoriesText
+      .split(",")
+      .map((category) => category.trim())
+      .filter((category) => category.length > 0);
+
+    const payload: PatchIncidentPayload = {
+      title: trimmedTitle,
+      severity: editForm.severity,
+      description: trimmedDescription,
+      categories,
+      impactScope: editForm.impactScope.trim() ? editForm.impactScope.trim() : null
+    };
+
+    setDetailError(null);
+    updateIncidentMutation.mutate(payload, {
+      onSuccess: () => {
+        setIsEditingDetails(false);
+        setDetailError(null);
+      },
+      onError: (error) => {
+        let message = "Failed to update incident details.";
+        if (isAxiosError(error)) {
+          message = error.response?.data?.message ?? error.message;
+        } else if (error instanceof Error) {
+          message = error.message;
+        }
+        setDetailError(message);
+      }
+    });
+  };
+
+  const handleDeleteIncident = () => {
+    if (!incidentId || !isAdmin) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Delete this incident? This action cannot be undone."
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    deleteIncident.mutate(incidentId, {
+      onSuccess: () => {
+        onClose();
+        setDetailError(null);
+      },
+      onError: (error) => {
+        let message = "Failed to delete incident.";
+        if (isAxiosError(error)) {
+          message = error.response?.data?.message ?? error.message;
+        } else if (error instanceof Error) {
+          message = error.message;
+        }
+        window.alert(message);
+      }
+    });
+  };
+
+  const handleToggleEditDetails = () => {
+    if (isEditingDetails) {
+      handleCancelEditDetails();
+    } else {
+      setDetailError(null);
+      setIsEditingDetails(true);
+    }
+  };
+
   const statusButtons: IncidentStatus[] = ["open", "investigating", "monitoring", "resolved"];
+  const severityOptions: IncidentSeverity[] = ["low", "medium", "high", "critical"];
 
   return (
     <Transition show={open} as={Fragment}>
@@ -175,6 +315,26 @@ export function IncidentDrawer({ incidentId, open, onClose, currentUser, teamUse
                       </div>
                       <div className="flex items-center gap-2">
                         {incident ? <SeverityBadge severity={incident.severity} /> : null}
+                        {incident && canEditDetails ? (
+                          <button
+                            type="button"
+                            onClick={handleToggleEditDetails}
+                            disabled={updateIncidentMutation.isPending && isEditingDetails}
+                            className="rounded-md border border-indigo-200 px-3 py-1.5 text-sm font-medium text-indigo-600 transition hover:border-indigo-300 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isEditingDetails ? "Cancel edit" : "Edit details"}
+                          </button>
+                        ) : null}
+                        {incident && isAdmin ? (
+                          <button
+                            type="button"
+                            onClick={handleDeleteIncident}
+                            disabled={deleteIncident.isPending}
+                            className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:border-red-300 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deleteIncident.isPending ? "Deleting..." : "Delete"}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={onClose}
@@ -192,36 +352,123 @@ export function IncidentDrawer({ incidentId, open, onClose, currentUser, teamUse
                     ) : incident ? (
                       <div className="flex flex-1 flex-col gap-6 px-6 py-6">
                         <section className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                          <h3 className="text-sm font-semibold text-slate-800">Description</h3>
-                          <p className="mt-2 whitespace-pre-line leading-relaxed">
-                            {incident.description}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-full bg-white px-3 py-1 text-slate-600">
-                              Reporter: {incident.createdBy?.name ?? "Unknown"}
-                            </span>
-                            <span className="rounded-full bg-white px-3 py-1 text-slate-600">
-                              Owner: {incident.assignedTo?.name ?? "Unassigned"}
-                            </span>
+                          <div className="flex items-start justify-between gap-3">
+                            <h3 className="text-sm font-semibold text-slate-800">Details</h3>
                           </div>
-                          <div className="mt-2 text-xs text-slate-500">
-                            Impact scope: {incident.impactScope ?? "Not specified"}
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            Categories:{" "}
-                            {incident.categories?.length
-                              ? incident.categories.join(", ")
-                              : "None"}
-                          </div>
-                          <div className="mt-4 text-xs text-slate-500">
-                            First response:{" "}
-                            {incident.firstResponseAt
-                              ? formatRelative(incident.firstResponseAt)
-                              : "Pending"}
-                            {" - "}
-                            Resolved:{" "}
-                            {incident.resolvedAt ? formatRelative(incident.resolvedAt) : "Pending"}
-                          </div>
+                          {detailError ? (
+                            <p className="mt-3 text-xs text-red-600">{detailError}</p>
+                          ) : null}
+                          {isEditingDetails ? (
+                            <form onSubmit={handleDetailSubmit} className="mt-4 space-y-4">
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Title
+                                  <input
+                                    name="title"
+                                    disabled={updateIncidentMutation.isPending}
+                                    value={editForm.title}
+                                    onChange={handleDetailFieldChange}
+                                    required
+                                    minLength={3}
+                                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  />
+                                </label>
+                                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Severity
+                                  <select
+                                    name="severity"
+                                    disabled={updateIncidentMutation.isPending}
+                                    value={editForm.severity}
+                                    onChange={handleDetailFieldChange}
+                                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {severityOptions.map((option) => (
+                                      <option key={option} value={option}>
+                                        {option.charAt(0).toUpperCase() + option.slice(1)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Description
+                                <textarea
+                                  name="description"
+                                  disabled={updateIncidentMutation.isPending}
+                                  value={editForm.description}
+                                  onChange={handleDetailFieldChange}
+                                  rows={4}
+                                  required
+                                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                />
+                              </label>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Impact scope
+                                  <input
+                                    name="impactScope"
+                                    disabled={updateIncidentMutation.isPending}
+                                    value={editForm.impactScope}
+                                    onChange={handleDetailFieldChange}
+                                    placeholder="e.g. Payments, API"
+                                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  />
+                                </label>
+                                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Categories
+                                  <input
+                                    name="categoriesText"
+                                    disabled={updateIncidentMutation.isPending}
+                                    value={editForm.categoriesText}
+                                    onChange={handleDetailFieldChange}
+                                    placeholder="infra, database, comms"
+                                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  />
+                                </label>
+                              </div>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditDetails}
+                                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={updateIncidentMutation.isPending}
+                                  className="rounded-md bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {updateIncidentMutation.isPending ? "Saving..." : "Save changes"}
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <>
+                              <p className="mt-2 whitespace-pre-line leading-relaxed">
+                                {incident.description}
+                              </p>
+                              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                                <span className="rounded-full bg-white px-3 py-1 text-slate-600">
+                                  Reporter: {incident.createdBy?.name ?? "Unknown"}
+                                </span>
+                                <span className="rounded-full bg-white px-3 py-1 text-slate-600">
+                                  Owner: {incident.assignedTo?.name ?? "Unassigned"}
+                                </span>
+                              </div>
+                              <div className="mt-2 text-xs text-slate-500">
+                                Impact scope: {incident.impactScope ?? "Not specified"}
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                Categories: {incident.categories?.length ? incident.categories.join(", ") : "None"}
+                              </div>
+                              <div className="mt-4 text-xs text-slate-500">
+                                First response: {incident.firstResponseAt ? formatRelative(incident.firstResponseAt) : "Pending"}
+                                {" - "}
+                                Resolved: {incident.resolvedAt ? formatRelative(incident.resolvedAt) : "Open"}
+                              </div>
+                            </>
+                          )}
                         </section>
 
                         {isAdmin ? (
@@ -352,3 +599,12 @@ export function IncidentDrawer({ incidentId, open, onClose, currentUser, teamUse
     </Transition>
   );
 }
+
+
+
+
+
+
+
+
+

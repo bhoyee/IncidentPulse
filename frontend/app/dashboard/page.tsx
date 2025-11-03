@@ -7,6 +7,7 @@ import { DashboardStats } from "@components/DashboardStats";
 import { IncidentsTable } from "@components/IncidentsTable";
 import { IncidentDrawer } from "@components/IncidentDrawer";
 import { NewIncidentForm } from "@components/NewIncidentForm";
+import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { useIncidents } from "@hooks/useIncidents";
 import { useMetrics } from "@hooks/useMetrics";
 import { useSession } from "@hooks/useSession";
@@ -22,6 +23,10 @@ const statusFilters: IncidentStatus[] = ["open", "investigating", "monitoring", 
 const severityFilters: IncidentSeverity[] = ["low", "medium", "high", "critical"];
 const EMPTY_INCIDENTS: Incident[] = [];
 const EMPTY_TEAM_USERS: TeamUser[] = [];
+const DEMO_ACCOUNT_EMAILS = new Set([
+  "admin@demo.incidentpulse.com",
+  "operator@demo.incidentpulse.com"
+]);
 
 export default function DashboardPage() {
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
@@ -31,15 +36,19 @@ export default function DashboardPage() {
   const [assigneeFilter, setAssigneeFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
   const [teamPage, setTeamPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<"incidents" | "team">("incidents");
+  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "password">("incidents");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false); // NEW STATE
+  const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
   const teamPageSize = 25;
 
   const { data: session } = useSession();
   const isAdmin = session?.role === "admin";
   const isOperator = session?.role === "operator";
   const canCreate = Boolean(isAdmin || isOperator);
+  const isDemoAccount = session?.email
+    ? DEMO_ACCOUNT_EMAILS.has(session.email.toLowerCase())
+    : false;
+  const canChangePassword = Boolean((isAdmin || isOperator) && !isDemoAccount);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -171,12 +180,24 @@ export default function DashboardPage() {
                       Team Management
                     </button>
                   )}
+                  {canChangePassword && (
+                    <button
+                      onClick={() => setActiveTab("password")}
+                      className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                        activeTab === "password"
+                          ? "border-blue-500 text-gray-900"
+                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      Change Password
+                    </button>
+                  )}
                 </nav>
               </div>
 
               {/* User menu and mobile button */}
               <div className="flex items-center">
-                {/* New Incident Button - NOW WITH CLICK HANDLER */}
+                {/* New Incident Button */}
                 {canCreate && (
                   <button 
                     onClick={() => setIsNewIncidentOpen(true)}
@@ -246,6 +267,21 @@ export default function DashboardPage() {
                     }`}
                   >
                     Team Management
+                  </button>
+                )}
+                {canChangePassword && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("password");
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${
+                      activeTab === "password"
+                        ? "bg-blue-50 text-blue-700 border-l-4 border-blue-700"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                  >
+                    Change Password
                   </button>
                 )}
                 {canCreate && (
@@ -344,7 +380,7 @@ export default function DashboardPage() {
             <div className="bg-white shadow rounded-lg">
               {/* Tab Content */}
               {activeTab === "incidents" ? (
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   {/* Header and Filters */}
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
                     <div>
@@ -366,7 +402,7 @@ export default function DashboardPage() {
                       )}
                       
                       {/* Filter Toggles */}
-                      <div className="flex items-center space-x-2">
+                      <div className="flex flex-wrap gap-2">
                         <FilterSelect
                           label="Status"
                           value={statusFilter}
@@ -400,19 +436,23 @@ export default function DashboardPage() {
                     </div>
                   )}
 
-                  {/* Incidents Table */}
-                  <div className="mt-6">
-                    <IncidentsTable
-                      incidents={incidents}
-                      onSelect={(incident) => setSelectedIncident(incident)}
-                      currentUserId={session?.id ?? ""}
-                      isAdmin={Boolean(isAdmin)}
-                    />
+                  {/* Mobile Optimized Incidents Table */}
+                  <div className="mt-6 overflow-x-auto">
+                    <div className="min-w-full inline-block align-middle">
+                      <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                        <IncidentsTable
+                          incidents={incidents}
+                          onSelect={(incident) => setSelectedIncident(incident)}
+                          currentUserId={session?.id ?? ""}
+                          isAdmin={Boolean(isAdmin)}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
-              ) : (
+              ) : activeTab === "team" ? (
                 /* Team Management Tab */
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
                     <div>
                       <h2 className="text-xl font-semibold text-gray-900">Team Management</h2>
@@ -433,18 +473,34 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Team Management Panel */}
-                  <TeamManagementPanel
-                    users={teamUsers}
-                    meta={teamUsersMeta}
-                    isLoading={teamUsersQuery.isLoading}
-                    isRefetching={teamUsersQuery.isFetching}
-                    search={teamSearch}
-                    onSearchChange={setTeamSearch}
-                    page={teamPage}
-                    onPageChange={setTeamPage}
-                    pageSize={teamPageSize}
-                  />
+                  {/* Mobile Optimized Team Management Panel */}
+                  <div className="overflow-x-auto">
+                    <TeamManagementPanel
+                      users={teamUsers}
+                      meta={teamUsersMeta}
+                      isLoading={teamUsersQuery.isLoading}
+                      isRefetching={teamUsersQuery.isFetching}
+                      search={teamSearch}
+                      onSearchChange={setTeamSearch}
+                      page={teamPage}
+                      onPageChange={setTeamPage}
+                      pageSize={teamPageSize}
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Change Password Tab */
+                <div className="p-4 sm:p-6">
+                  <div className="max-w-2xl mx-auto">
+                    <div className="mb-6">
+                      <h2 className="text-xl font-semibold text-gray-900">Change Password</h2>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Update your account password
+                      </p>
+                    </div>
+                    
+                    <ChangePasswordCard className="bg-white" />
+                  </div>
                 </div>
               )}
             </div>
@@ -511,7 +567,7 @@ export default function DashboardPage() {
           teamUsers={teamUsers}
         />
 
-        {/* NEW: Modal for creating incidents */}
+        {/* Modal for creating incidents */}
         {isNewIncidentOpen && (
           <div className="fixed inset-0 overflow-y-auto z-50">
             <div className="flex items-end justify-center min-h-full pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -566,13 +622,13 @@ type FilterSelectProps<T extends string> = {
 
 function FilterSelect<T extends string>({ label, value, options, onChange }: FilterSelectProps<T>) {
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col min-w-[120px]">
       <label className="text-xs font-medium text-gray-500 mb-1">{label}</label>
       <div className="relative">
         <select
           value={value ?? ""}
           onChange={(event) => onChange(event.target.value ? (event.target.value as T) : undefined)}
-          className="appearance-none rounded-md border border-gray-300 bg-white px-3 py-2 pr-8 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="appearance-none rounded-md border border-gray-300 bg-white px-3 py-2 pr-8 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 w-full"
         >
           <option value="">All {label}</option>
           {options.map((option) => (
