@@ -1,33 +1,125 @@
-deploy:
-  needs: checks
-  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-  runs-on: ubuntu-latest
-  env:
-    NEXT_TELEMETRY_DISABLED: "1"
-  steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+name: Frontend CI
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: "20"
-        cache: "npm"
-        cache-dependency-path: "frontend/package-lock.json"
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
 
-    - name: Install dependencies
-      working-directory: frontend
-      run: npm ci
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Deploy to Vercel
-      working-directory: frontend
-      env:
-        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      run: |
-        if [ -z "$VERCEL_TOKEN" ]; then
-          echo "VERCEL_TOKEN secret is missing."
-          exit 1
-        fi
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
 
-        # Simple one-command deploy
-        npx vercel --prod --token "$VERCEL_TOKEN" --yes
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Type check
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps
+
+      - name: Build application
+        working-directory: frontend
+        run: npm run build
+
+      - name: Start Next.js server and run tests
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE: http://localhost:4000
+          PORT: 3000
+        run: |
+          # Start the server in background
+          npm start &
+          SERVER_PID=$!
+          
+          # Wait for server to be ready with retries
+          echo "Waiting for server to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:3000 > /dev/null; then
+              echo "Server is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Server failed to start within 60 seconds"
+              exit 1
+            fi
+            echo "Attempt $i: Server not ready yet..."
+            sleep 2
+          done
+          
+          # Run tests with the correct base URL
+          PLAYWRIGHT_BASE_URL=http://localhost:3000 npx playwright test
+          
+          # Kill the server
+          kill $SERVER_PID
+
+  deploy:
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Debug directory structure
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Directory contents:"
+          ls -la
+          echo "Frontend directory contents:"
+          ls -la frontend/
+
+      - name: Deploy to Vercel
+        working-directory: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN secret is missing."
+            exit 1
+          fi
+
+          # Simple one-command deploy
+          echo "Deploying to Vercel..."
+          npx vercel --prod --token "$VERCEL_TOKEN" --yes
