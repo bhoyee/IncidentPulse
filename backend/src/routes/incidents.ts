@@ -311,8 +311,13 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
 
       let resolvedAssignedToId: string | null | undefined = undefined;
 
+      const hasAssignedToKey = Object.prototype.hasOwnProperty.call(
+        parsedBody.data,
+        "assignedToId"
+      );
+
       if (request.user.role === "admin") {
-        if (parsedBody.data.hasOwnProperty("assignedToId")) {
+        if (hasAssignedToKey) {
           resolvedAssignedToId = assignedToId ?? null;
 
           if (resolvedAssignedToId) {
@@ -342,7 +347,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           ...(parsedBody.data.impactScope === undefined
             ? {}
             : { impactScope: impactScope ?? null }),
-          ...(parsedBody.data.hasOwnProperty("assignedToId")
+          ...(hasAssignedToKey
             ? { assignedToId: resolvedAssignedToId ?? null }
             : {}),
           ...(shouldSetResolvedAt ? { resolvedAt: now } : {})

@@ -45,11 +45,33 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps
 
+      - name: Build application
+        working-directory: frontend
+        run: npm run build
+
+      - name: Start Next.js server
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE: http://localhost:4000
+        run: |
+          npm run start -- --hostname 0.0.0.0 --port 3000 &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+          npx wait-on http://127.0.0.1:3000/status
+
       - name: Run Playwright smoke test
         working-directory: frontend
         env:
           NEXT_PUBLIC_API_BASE: http://localhost:4000
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
         run: npm run test:e2e
+
+      - name: Stop Next.js server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID || true
+          fi
 
   deploy:
     needs: checks
