@@ -2,10 +2,15 @@ name: Frontend CI/CD
 
 on:
   push:
-    branches: [main]
-    paths: ["frontend/**"]
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
   pull_request:
-    paths: ["frontend/**"]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
 
 jobs:
   build-and-test:
@@ -13,27 +18,28 @@ jobs:
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: "frontend/package-lock.json"
-          
+
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
-        
+
       - name: Type check
         working-directory: frontend
         run: npm run typecheck
-        
+
       - name: Lint
         working-directory: frontend
         run: npm run lint
-        
+
       - name: Build
         working-directory: frontend
         run: npm run build
@@ -42,16 +48,19 @@ jobs:
     needs: build-and-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: "frontend/package-lock.json"
-          
+
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
@@ -73,7 +82,7 @@ jobs:
             TEAM_FLAG="--scope $VERCEL_TEAM_SLUG"
           fi
 
-          npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN" --project-id "$VERCEL_PROJECT_ID" $TEAM_FLAG
+          npx vercel pull --yes --environment=production --project-id "$VERCEL_PROJECT_ID" --token "$VERCEL_TOKEN" $TEAM_FLAG
 
           npm run build
 
