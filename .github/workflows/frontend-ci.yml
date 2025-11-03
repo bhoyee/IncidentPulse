@@ -49,29 +49,36 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Start Next.js server
+      - name: Start Next.js server and run tests
         working-directory: frontend
         env:
           NEXT_PUBLIC_API_BASE: http://localhost:4000
+          PORT: 3000
         run: |
-          npm run start -- --hostname 0.0.0.0 --port 3000 &
+          # Start the server in background
+          npm start &
           SERVER_PID=$!
-          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
-          npx wait-on http://127.0.0.1:3000/status
-
-      - name: Run Playwright smoke test
-        working-directory: frontend
-        env:
-          NEXT_PUBLIC_API_BASE: http://localhost:4000
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
-        run: npm run test:e2e
-
-      - name: Stop Next.js server
-        if: always()
-        run: |
-          if [ -n "$SERVER_PID" ]; then
-            kill $SERVER_PID || true
-          fi
+          
+          # Wait for server to be ready with retries
+          echo "Waiting for server to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:3000 > /dev/null; then
+              echo "Server is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Server failed to start within 60 seconds"
+              exit 1
+            fi
+            echo "Attempt $i: Server not ready yet..."
+            sleep 2
+          done
+          
+          # Run tests with the correct base URL
+          PLAYWRIGHT_BASE_URL=http://localhost:3000 npx playwright test
+          
+          # Kill the server
+          kill $SERVER_PID
 
   deploy:
     needs: checks
@@ -110,8 +117,5 @@ jobs:
             exit 1
           fi
 
-          if [ -n "$VERCEL_ORG_ID" ]; then
-            export VERCEL_ORG_ID
-          fi
-
-          npx vercel deploy --prod --yes --token "$VERCEL_TOKEN" --project "$VERCEL_PROJECT_ID"
+          # Use correct Vercel CLI syntax
+          npx vercel --prod --token $VERCEL_TOKEN --confirm
