@@ -36,6 +36,8 @@ type CreateUserResponse = {
   data: TeamUser;
   meta: {
     initialPassword: string | null;
+    emailStatus?: "delivered" | "failed" | null;
+    emailError?: string | null;
   };
 };
 

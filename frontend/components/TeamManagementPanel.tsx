@@ -35,6 +35,8 @@ type LastCreatedSummary = {
   name: string;
   email: string;
   password: string | null;
+  emailStatus: "delivered" | "failed" | null;
+  emailError: string | null;
 };
 
 const ROLE_OPTIONS: Array<TeamUser["role"]> = ["admin", "operator", "viewer"];
@@ -161,7 +163,9 @@ export function TeamManagementPanel({
       setLastCreated({
         name: result.data.name,
         email: result.data.email,
-        password: result.meta.initialPassword ?? (password || null)
+        password: result.meta.initialPassword ?? (password || null),
+        emailStatus: result.meta.emailStatus ?? null,
+        emailError: result.meta.emailError ?? null
       });
       setCopied(false);
       setForm(DEFAULT_FORM_STATE);
@@ -268,6 +272,18 @@ export function TeamManagementPanel({
               You supplied a custom password - share it directly with the teammate.
             </p>
           )}
+          {lastCreated.emailStatus === "failed" ? (
+            <p className="mt-2 rounded border border-amber-200 bg-amber-100 px-3 py-2 text-xs text-amber-800">
+              We created the account, but the onboarding email could not be delivered.{" "}
+              {lastCreated.emailError
+                ? `Details: ${lastCreated.emailError}`
+                : "Copy the password above and share it manually."}
+            </p>
+          ) : lastCreated.emailStatus === "delivered" ? (
+            <p className="mt-2 text-xs text-emerald-700">
+              An onboarding email with the temporary password was sent to {lastCreated.email}.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
