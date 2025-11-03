@@ -200,7 +200,7 @@ export default function HomePage() {
               <div className="flex flex-col space-y-6">
                 {/* Highlights */}
                 <div className="space-y-4">
-                  {heroHighlights.map((item, index) => (
+                  {heroHighlights.map((item) => (
                     <div key={item} className="flex items-center space-x-3 rounded-lg bg-white p-4 shadow-sm border border-gray-100">
                       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100">
                         <CheckCircleIcon className="h-4 w-4 text-green-600" />
@@ -254,7 +254,7 @@ export default function HomePage() {
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="w-full max-w-7xl mx-auto">
             <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
-              {stats.map((stat, index) => (
+              {stats.map((stat) => (
                 <div key={stat.label} className="text-center">
                   <div className="text-3xl font-bold text-gray-900">{stat.value}</div>
                   <div className="mt-2 text-sm text-gray-500">{stat.label}</div>

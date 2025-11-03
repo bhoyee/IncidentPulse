@@ -3,13 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDownIcon, Bars3Icon, XMarkIcon, ChevronRightIcon, ChevronLeftIcon, PencilIcon, TrashIcon, KeyIcon, CheckIcon, XMarkIcon as XIcon } from "@heroicons/react/24/solid";
 import { AuthGuard } from "@components/AuthGuard";
-import { DashboardStats } from "@components/DashboardStats";
 import { IncidentsTable } from "@components/IncidentsTable";
 import { IncidentDrawer } from "@components/IncidentDrawer";
 import { NewIncidentForm } from "@components/NewIncidentForm";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { useIncidents } from "@hooks/useIncidents";
-import { useMetrics } from "@hooks/useMetrics";
 import { useSession } from "@hooks/useSession";
 import {
   useTeamUsers,
@@ -107,19 +105,7 @@ export default function DashboardPage() {
   );
 
   const incidentsQuery = useIncidents(incidentFilters);
-  const metricsQuery = useMetrics();
-
   const incidents = incidentsQuery.data?.data ?? EMPTY_INCIDENTS;
-  const teamRoleOptions = useMemo(() => {
-    const roles = new Set<string>();
-    teamUsers.forEach((user) => user.teamRoles.forEach((role) => roles.add(role)));
-    incidents.forEach((incident) => {
-      incident.assignedTo?.teamRoles.forEach((role) => roles.add(role));
-      incident.createdBy?.teamRoles.forEach((role) => roles.add(role));
-    });
-    return Array.from(roles).sort();
-  }, [teamUsers, incidents]);
-
   const assigneeOptions = useMemo(() => {
     return teamUsers.filter((user) => user.isActive);
   }, [teamUsers]);
@@ -225,7 +211,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: string | boolean) => {
     setEditFormData(prev => ({
       ...prev,
       [field]: value
