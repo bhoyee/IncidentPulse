@@ -101,10 +101,6 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build (sanity check)
-        working-directory: frontend
-        run: npm run build
-
       - name: Deploy to Vercel
         working-directory: frontend
         env:
@@ -117,9 +113,13 @@ jobs:
             exit 1
           fi
 
-          EXTRA_FLAGS=""
+          ORG_FLAG=""
           if [ -n "$VERCEL_ORG_ID" ]; then
-            EXTRA_FLAGS="--org $VERCEL_ORG_ID"
+            ORG_FLAG="--org-id $VERCEL_ORG_ID"
           fi
 
-          npx vercel deploy --prod --yes --token "$VERCEL_TOKEN" --project "$VERCEL_PROJECT_ID" $EXTRA_FLAGS
+          npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN" --project-id "$VERCEL_PROJECT_ID" $ORG_FLAG
+
+          npm run build
+
+          npx vercel deploy --prod --yes --prebuilt --token "$VERCEL_TOKEN" $ORG_FLAG
