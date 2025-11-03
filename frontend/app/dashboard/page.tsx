@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDownIcon, Bars3Icon, XMarkIcon } from "@heroicons/react/24/solid";
+import { ChevronDownIcon, Bars3Icon, XMarkIcon, ChevronRightIcon, ChevronLeftIcon, PencilIcon, TrashIcon, KeyIcon, CheckIcon, XMarkIcon as XIcon } from "@heroicons/react/24/solid";
 import { AuthGuard } from "@components/AuthGuard";
 import { DashboardStats } from "@components/DashboardStats";
 import { IncidentsTable } from "@components/IncidentsTable";
@@ -28,6 +28,22 @@ const DEMO_ACCOUNT_EMAILS = new Set([
   "operator@demo.incidentpulse.com"
 ]);
 
+// Mock functions for CRUD operations - replace with your actual implementations
+const mockUpdateUser = async (userId: string, updates: Partial<TeamUser>) => {
+  console.log('Updating user:', userId, updates);
+  return Promise.resolve();
+};
+
+const mockDeleteUser = async (userId: string) => {
+  console.log('Deleting user:', userId);
+  return Promise.resolve();
+};
+
+const mockResetPassword = async (userId: string) => {
+  console.log('Resetting password for user:', userId);
+  return Promise.resolve();
+};
+
 export default function DashboardPage() {
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [statusFilter, setStatusFilter] = useState<IncidentStatus | undefined>();
@@ -39,6 +55,10 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<"incidents" | "team" | "password">("incidents");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<TeamUser>>({});
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const teamPageSize = 25;
 
   const { data: session } = useSession();
@@ -139,6 +159,96 @@ export default function DashboardPage() {
   const criticalIncidents = incidents.filter(i => i.severity === 'critical').length;
   const activeIncidents = incidents.filter(i => i.status !== 'resolved').length;
   const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
+
+  const toggleUserExpansion = (userId: string) => {
+    setExpandedUser(expandedUser === userId ? null : userId);
+    setEditingUser(null);
+    setEditFormData({});
+  };
+
+  const startEditing = (user: TeamUser, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEditingUser(user.id);
+    setEditFormData({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      teamRoles: [...user.teamRoles],
+      isActive: user.isActive
+    });
+  };
+
+  const cancelEditing = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEditingUser(null);
+    setEditFormData({});
+  };
+
+  const saveEditing = async (userId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await mockUpdateUser(userId, editFormData);
+      setEditingUser(null);
+      setEditFormData({});
+      // Refresh the team users data
+      teamUsersQuery.refetch();
+    } catch (error) {
+      console.error('Failed to update user:', error);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+      setIsDeleting(userId);
+      try {
+        await mockDeleteUser(userId);
+        // Refresh the team users data
+        teamUsersQuery.refetch();
+      } catch (error) {
+        console.error('Failed to delete user:', error);
+      } finally {
+        setIsDeleting(null);
+      }
+    }
+  };
+
+  const handleResetPassword = async (userId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (window.confirm('Are you sure you want to reset this user\'s password? They will receive an email with instructions to set a new password.')) {
+      try {
+        await mockResetPassword(userId);
+        alert('Password reset email has been sent to the user.');
+      } catch (error) {
+        console.error('Failed to reset password:', error);
+      }
+    }
+  };
+
+  const handleInputChange = (field: string, value: any) => {
+    setEditFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleTeamRoleChange = (role: string, checked: boolean) => {
+    setEditFormData(prev => {
+      const currentRoles = prev.teamRoles || [];
+      const newRoles = checked 
+        ? [...currentRoles, role]
+        : currentRoles.filter(r => r !== role);
+      
+      return {
+        ...prev,
+        teamRoles: newRoles
+      };
+    });
+  };
+
+  // Available roles for the role selector
+  const availableRoles = ['admin', 'operator', 'viewer'];
+  const availableTeamRoles = ['Frontend', 'Backend', 'DevOps', 'Security', 'Support', 'Manager'];
 
   return (
     <AuthGuard>
@@ -451,7 +561,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ) : activeTab === "team" ? (
-                /* Team Management Tab */
+                /* Team Management Tab - Mobile Optimized */
                 <div className="p-4 sm:p-6">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
                     <div>
@@ -473,8 +583,249 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Mobile Optimized Team Management Panel */}
-                  <div className="overflow-x-auto">
+                  {/* Mobile Team Cards */}
+                  <div className="md:hidden space-y-4">
+                    {teamUsers.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        No team members found
+                      </div>
+                    ) : (
+                      teamUsers.map((user) => (
+                        <div 
+                          key={user.id}
+                          className={`bg-white border rounded-lg transition-all duration-200 ${
+                            expandedUser === user.id 
+                              ? 'border-blue-300 shadow-md' 
+                              : 'border-gray-200 shadow-sm'
+                          }`}
+                        >
+                          {/* Compact View */}
+                          <div 
+                            className="p-4 cursor-pointer"
+                            onClick={() => toggleUserExpansion(user.id)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center space-x-3">
+                                  <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <span className="text-blue-600 font-medium text-sm">
+                                      {user.name?.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                      {user.name}
+                                    </p>
+                                    <p className="text-sm text-gray-500 truncate">
+                                      {user.email}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  user.isActive 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {user.isActive ? 'Active' : 'Inactive'}
+                                </span>
+                                <ChevronRightIcon 
+                                  className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
+                                    expandedUser === user.id ? 'rotate-90' : ''
+                                  }`}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Expanded Details */}
+                          {expandedUser === user.id && (
+                            <div className="px-4 pb-4 border-t border-gray-200 pt-4 space-y-4">
+                              {editingUser === user.id ? (
+                                /* Edit Mode */
+                                <div className="space-y-4">
+                                  <div className="grid grid-cols-1 gap-4">
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Name
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={editFormData.name || ''}
+                                        onChange={(e) => handleInputChange('name', e.target.value)}
+                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Email
+                                      </label>
+                                      <input
+                                        type="email"
+                                        value={editFormData.email || ''}
+                                        onChange={(e) => handleInputChange('email', e.target.value)}
+                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Role
+                                      </label>
+                                      <select
+                                        value={editFormData.role || ''}
+                                        onChange={(e) => handleInputChange('role', e.target.value)}
+                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                      >
+                                        {availableRoles.map(role => (
+                                          <option key={role} value={role}>
+                                            {role.charAt(0).toUpperCase() + role.slice(1)}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Team Roles
+                                      </label>
+                                      <div className="space-y-2">
+                                        {availableTeamRoles.map(role => (
+                                          <label key={role} className="flex items-center">
+                                            <input
+                                              type="checkbox"
+                                              checked={(editFormData.teamRoles || []).includes(role)}
+                                              onChange={(e) => handleTeamRoleChange(role, e.target.checked)}
+                                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <span className="ml-2 text-sm text-gray-700">{role}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="flex items-center">
+                                        <input
+                                          type="checkbox"
+                                          checked={editFormData.isActive || false}
+                                          onChange={(e) => handleInputChange('isActive', e.target.checked)}
+                                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span className="ml-2 text-sm text-gray-700">Active User</span>
+                                      </label>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Edit Action Buttons */}
+                                  <div className="flex flex-wrap gap-2 pt-2">
+                                    <button
+                                      onClick={(e) => saveEditing(user.id, e)}
+                                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                                    >
+                                      <CheckIcon className="h-4 w-4 mr-1" />
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={cancelEditing}
+                                      className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                    >
+                                      <XIcon className="h-4 w-4 mr-1" />
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                /* View Mode */
+                                <>
+                                  <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                      <span className="font-medium text-gray-500">Role:</span>
+                                      <p className="text-gray-900 capitalize mt-1">{user.role}</p>
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-gray-500">Status:</span>
+                                      <div className="mt-1">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                          user.isActive 
+                                            ? 'bg-green-100 text-green-800' 
+                                            : 'bg-red-100 text-red-800'
+                                        }`}>
+                                          {user.isActive ? 'Active' : 'Inactive'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  <div>
+                                    <span className="font-medium text-gray-500 text-sm">Team Roles:</span>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {user.teamRoles.map((role) => (
+                                        <span 
+                                          key={role}
+                                          className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800"
+                                        >
+                                          {role}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                      <span className="font-medium text-gray-500">Last Active:</span>
+                                      <p className="text-gray-900 mt-1">
+                                        {user.lastActiveAt 
+                                          ? new Date(user.lastActiveAt).toLocaleDateString()
+                                          : 'Never'
+                                        }
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-gray-500">Created:</span>
+                                      <p className="text-gray-900 mt-1">
+                                        {user.createdAt 
+                                          ? new Date(user.createdAt).toLocaleDateString()
+                                          : 'N/A'
+                                        }
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* Action Buttons */}
+                                  <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
+                                    <button
+                                      onClick={(e) => startEditing(user, e)}
+                                      className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                    >
+                                      <PencilIcon className="h-4 w-4 mr-1" />
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={(e) => handleResetPassword(user.id, e)}
+                                      className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                    >
+                                      <KeyIcon className="h-4 w-4 mr-1" />
+                                      Reset Password
+                                    </button>
+                                    <button
+                                      onClick={(e) => handleDeleteUser(user.id, e)}
+                                      disabled={isDeleting === user.id}
+                                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                                    >
+                                      <TrashIcon className="h-4 w-4 mr-1" />
+                                      {isDeleting === user.id ? 'Deleting...' : 'Delete'}
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto">
                     <TeamManagementPanel
                       users={teamUsers}
                       meta={teamUsersMeta}
@@ -487,6 +838,38 @@ export default function DashboardPage() {
                       pageSize={teamPageSize}
                     />
                   </div>
+
+                  {/* Pagination for Mobile */}
+                  {teamUsersMeta && teamUsersMeta.totalPages > 1 && (
+                    <div className="mt-6 flex items-center justify-between">
+                      <div className="flex-1 flex justify-between items-center">
+                        <button
+                          onClick={() => setTeamPage(Math.max(1, teamPage - 1))}
+                          disabled={teamPage <= 1}
+                          className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <ChevronLeftIcon className="h-5 w-5 mr-1" />
+                          Previous
+                        </button>
+                        
+                        <div className="hidden sm:flex">
+                          <p className="text-sm text-gray-700">
+                            Page <span className="font-medium">{teamPage}</span> of{" "}
+                            <span className="font-medium">{teamUsersMeta.totalPages}</span>
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => setTeamPage(Math.min(teamUsersMeta.totalPages, teamPage + 1))}
+                          disabled={teamPage >= teamUsersMeta.totalPages}
+                          className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                          <ChevronRightIcon className="h-5 w-5 ml-1" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* Change Password Tab */
