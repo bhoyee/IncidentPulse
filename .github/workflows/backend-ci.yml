@@ -56,21 +56,43 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Render deploy
-        run: |
-          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
-            echo "RENDER_DEPLOY_HOOK secret not set. Skipping."
-            exit 0
-          fi
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "backend/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
 
       - name: Run Prisma migrate deploy
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
         run: |
-          if [ -z "${{ secrets.RENDER_DATABASE_URL }}" ]; then
+          if [ -z "$DATABASE_URL" ]; then
             echo "RENDER_DATABASE_URL secret not set. Skipping migrate deploy."
             exit 0
           fi
           npx prisma migrate deploy
-        working-directory: backend
+
+      - name: Trigger Render deploy
         env:
-          DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "RENDER_API_KEY or RENDER_SERVICE_ID secret not set. Skipping Render deploy."
+            exit 0
+          fi
+
+          curl -sS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys \
+            -d '{"clearCache":true}'
