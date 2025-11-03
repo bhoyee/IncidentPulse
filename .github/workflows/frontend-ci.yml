@@ -115,10 +115,10 @@ jobs:
 
           ORG_FLAG=""
           if [ -n "$VERCEL_ORG_ID" ]; then
-            ORG_FLAG="--org-id $VERCEL_ORG_ID"
+            ORG_FLAG="--org $VERCEL_ORG_ID"
           fi
 
-          npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN" --project-id "$VERCEL_PROJECT_ID" $ORG_FLAG
+          npx vercel link --yes --project "$VERCEL_PROJECT_ID" $ORG_FLAG --token "$VERCEL_TOKEN"
 
           npm run build
 
