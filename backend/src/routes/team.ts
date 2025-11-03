@@ -121,6 +121,9 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
           }
         });
 
+        let emailStatus: "delivered" | "failed" | null = null;
+        let emailError: string | null = null;
+
         try {
           const loginUrl = new URL("/login", env.FRONTEND_URL).toString();
           const textBody = [
@@ -153,7 +156,12 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
             text: textBody,
             html: htmlBody
           });
+
+          emailStatus = "delivered";
         } catch (mailError) {
+          emailStatus = "failed";
+          emailError =
+            mailError instanceof Error ? mailError.message : "Failed to deliver onboarding email.";
           fastify.log.error(
             { err: mailError, userId: user.id, email: user.email },
             "Failed to send onboarding email to new user"
@@ -164,7 +172,9 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
           error: false,
           data: toSafeUser(user),
           meta: {
-            initialPassword: password ? null : finalPassword
+            initialPassword: password ? null : finalPassword,
+            emailStatus,
+            emailError
           }
         });
       } catch (error) {
