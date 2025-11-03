@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@lib/api-client";
 import type { Incident, IncidentStatus, IncidentSeverity } from "@lib/types";
 
@@ -98,4 +98,18 @@ async function fetchIncidentDetail(id: string) {
 export function useInvalidateIncidents() {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: ["incidents"] });
+}
+
+export function useDeleteIncident() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/incidents/${id}`);
+      return id;
+    },
+    onSuccess: async (_data, incidentId) => {
+      await queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      await queryClient.removeQueries({ queryKey: ["incident", incidentId] });
+    }
+  });
 }

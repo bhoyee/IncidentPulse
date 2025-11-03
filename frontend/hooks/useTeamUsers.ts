@@ -38,10 +38,12 @@ type CreateUserResponse = {
   };
 };
 
-type UpdateUserPayload = {
+export type UpdateUserPayload = {
   role?: "admin" | "operator" | "viewer";
   isActive?: boolean;
   teamRoles?: string[];
+  name?: string;
+  email?: string;
 };
 
 type CreateUserPayload = {
@@ -97,6 +99,20 @@ export function useUpdateTeamUser() {
     mutationFn: async ({ id, payload }: { id: string; payload: UpdateUserPayload }) => {
       const response = await apiClient.patch<UpdateUserResponse>(`/team/users/${id}`, payload);
       return response.data.data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      await queryClient.invalidateQueries({ queryKey: ["incidents"] });
+    }
+  });
+}
+
+export function useDeleteTeamUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/team/users/${id}`);
+      return id;
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["team-users"] });
