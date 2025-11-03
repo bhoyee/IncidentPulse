@@ -47,6 +47,8 @@ jobs:
 
       - name: Build application
         working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE: http://localhost:4000  # For testing
         run: npm run build
 
       - name: Start Next.js server and run tests
@@ -107,13 +109,12 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          NEXT_PUBLIC_API_BASE: ${{ vars.NEXT_PUBLIC_API_BASE }}
         run: |
           if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
             echo "VERCEL_TOKEN or VERCEL_PROJECT_ID secret is missing."
             exit 1
           fi
 
-          # Simple approach - remove org flags entirely
-          npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
-          npm run build
-          npx vercel deploy --prod --yes --prebuilt --token "$VERCEL_TOKEN"
+          # Option 2: Simple approach without --prebuilt
+          npx vercel --prod --yes --token "$VERCEL_TOKEN"

@@ -35,7 +35,7 @@ type LastCreatedSummary = {
   name: string;
   email: string;
   password: string | null;
-  emailStatus: "delivered" | "failed" | "pending" | "skipped" | null;
+  emailStatus: "delivered" | "failed" | "queued" | "skipped" | null;
   emailError: string | null;
 };
 
@@ -283,7 +283,7 @@ export function TeamManagementPanel({
             <p className="mt-2 text-xs text-emerald-700">
               An onboarding email with the temporary password was sent to {lastCreated.email}.
             </p>
-          ) : lastCreated.emailStatus === "pending" ? (
+          ) : lastCreated.emailStatus === "queued" ? (
             <p className="mt-2 rounded border border-emerald-200 bg-emerald-100 px-3 py-2 text-xs text-emerald-800">
               We’re attempting to send the onboarding email. If it does not arrive shortly, share the
               password above with the teammate.

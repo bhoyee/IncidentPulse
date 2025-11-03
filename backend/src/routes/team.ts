@@ -121,7 +121,7 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
           }
         });
 
-        let emailStatus: "pending" | "delivered" | "failed" | "skipped" = "pending";
+        let emailStatus: "queued" | "delivered" | "failed" | "skipped" = "queued";
         let emailError: string | null = null;
 
         const shouldSendEmail = true;
@@ -154,36 +154,50 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
             <p>If you weren’t expecting this message, reach out to your team lead.</p>
           `;
 
-          const mailPromise = sendMail({
+          const sendPromise = sendMail({
             to: user.email,
             subject: "Your new IncidentPulse account",
             text: textBody,
             html: htmlBody
           })
-            .then(() => {
-              emailStatus = "delivered";
-            })
-            .catch((mailError) => {
-              emailStatus = "failed";
-              emailError =
-                mailError instanceof Error
-                  ? mailError.message
-                  : "Failed to deliver onboarding email.";
-              fastify.log.error(
-                { err: mailError, userId: user.id, email: user.email },
-                "Failed to send onboarding email to new user"
-              );
-            });
+            .then(() => "delivered" as const)
+            .catch((mailError: unknown) => mailError);
 
-          const EMAIL_TIMEOUT_MS = 4000;
-          await Promise.race([
-            mailPromise,
-            new Promise((resolve) => setTimeout(resolve, EMAIL_TIMEOUT_MS))
+          const EMAIL_TIMEOUT_MS = 1500;
+          const outcome = await Promise.race([
+            sendPromise,
+            new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), EMAIL_TIMEOUT_MS))
           ]);
 
-          if (emailStatus === "pending") {
-            // Allow the promise to finish in the background without causing an unhandled rejection.
-            void mailPromise.catch(() => {});
+          if (outcome === "delivered") {
+            emailStatus = "delivered";
+            fastify.log.info(
+              { userId: user.id, email: user.email },
+              "Onboarding email delivered to teammate"
+            );
+          } else if (outcome === "timeout") {
+            emailStatus = "queued";
+            void sendPromise.then((result) => {
+              if (result === "delivered") {
+                fastify.log.info(
+                  { userId: user.id, email: user.email },
+                  "Onboarding email delivered to teammate"
+                );
+              } else if (result instanceof Error) {
+                fastify.log.error(
+                  { err: result, userId: user.id, email: user.email },
+                  "Failed to send onboarding email to new user"
+                );
+              }
+            });
+          } else if (outcome instanceof Error) {
+            emailStatus = "failed";
+            emailError =
+              outcome instanceof Error ? outcome.message : "Failed to deliver onboarding email.";
+            fastify.log.error(
+              { err: outcome, userId: user.id, email: user.email },
+              "Failed to send onboarding email to new user"
+            );
           }
         }
 
@@ -332,3 +346,5 @@ function generatePassword(): string {
 }
 
 export default teamRoutes;
+
+
