@@ -117,5 +117,9 @@ jobs:
             exit 1
           fi
 
-          # Use correct Vercel CLI syntax
-          npx vercel --prod --token $VERCEL_TOKEN --confirm
+          EXTRA_FLAGS=""
+          if [ -n "$VERCEL_ORG_ID" ]; then
+            EXTRA_FLAGS="--org $VERCEL_ORG_ID"
+          fi
+
+          npx vercel deploy --prod --yes --token "$VERCEL_TOKEN" --project "$VERCEL_PROJECT_ID" $EXTRA_FLAGS
