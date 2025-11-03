@@ -445,6 +445,30 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
   );
+
+  fastify.delete(
+    "/:id",
+    { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
+    async (request, reply) => {
+      const params = request.params as { id: string };
+
+      try {
+        await prisma.incident.delete({
+          where: { id: params.id }
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+          return reply.status(404).send({
+            error: true,
+            message: "Incident not found"
+          });
+        }
+        throw error;
+      }
+
+      return reply.status(204).send();
+    }
+  );
 };
 
 export default incidentsRoutes;

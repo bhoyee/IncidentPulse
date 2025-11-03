@@ -65,6 +65,7 @@ model Incident {
   updatedAt       DateTime         @updatedAt
   categories      String[]         @default([])
   impactScope     String?          @db.Text
+  escalationNotifiedAt DateTime?
 
   @@index([status])
   @@index([severity])

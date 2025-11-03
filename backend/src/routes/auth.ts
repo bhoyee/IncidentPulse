@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { prisma } from "../lib/db";
-import { loginSchema } from "../lib/validation";
-import { clearSession, setSessionCookie, toSafeUser, verifyPassword } from "../lib/auth";
+import { changePasswordSchema, loginSchema } from "../lib/validation";
+import { clearSession, hashPassword, setSessionCookie, toSafeUser, verifyPassword } from "../lib/auth";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/login", async (request, reply) => {
@@ -85,6 +85,67 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       user
     });
   });
+
+  fastify.post(
+    "/change-password",
+    { preHandler: fastify.authenticate },
+    async (request, reply) => {
+      const parsedBody = changePasswordSchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.status(400).send({
+          error: true,
+          message: parsedBody.error.flatten().formErrors.join(", ") || "Invalid payload"
+        });
+      }
+
+      const { currentPassword, newPassword } = parsedBody.data;
+
+      const user = await prisma.user.findUnique({
+        where: { id: request.user.id }
+      });
+
+      if (!user || !user.isActive) {
+        await clearSession(reply);
+        return reply.status(401).send({
+          error: true,
+          message: "Unauthorized"
+        });
+      }
+
+      const demoEmails = new Set([
+        "admin@demo.incidentpulse.com",
+        "operator@demo.incidentpulse.com"
+      ]);
+
+      if (demoEmails.has(user.email.toLowerCase())) {
+        return reply.status(403).send({
+          error: true,
+          message: "Password changes are disabled for demo accounts."
+        });
+      }
+
+      const matches = await verifyPassword(currentPassword, user.passwordHash);
+      if (!matches) {
+        return reply.status(400).send({
+          error: true,
+          message: "Current password is incorrect."
+        });
+      }
+
+      const hashed = await hashPassword(newPassword);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: hashed
+        }
+      });
+
+      return reply.status(200).send({
+        error: false,
+        message: "Password updated successfully."
+      });
+    }
+  );
 };
 
 export default authRoutes;

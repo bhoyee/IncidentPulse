@@ -6,6 +6,7 @@ import fastifyJwt from "@fastify/jwt";
 import { env } from "./env";
 import { databaseHealthCheck } from "./lib/db";
 import { getSessionCookieName } from "./lib/auth";
+import { registerIncidentEscalationWatcher } from "./lib/escalation-monitor";
 import authRoutes from "./routes/auth";
 import incidentsRoutes from "./routes/incidents";
 import publicRoutes from "./routes/public";
@@ -83,6 +84,8 @@ export function buildApp() {
   fastify.register(publicRoutes, { prefix: "/public" });
   fastify.register(metricsRoutes, { prefix: "/metrics" });
   fastify.register(teamRoutes, { prefix: "/team" });
+
+  registerIncidentEscalationWatcher(fastify);
 
   fastify.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error }, "Request failed");

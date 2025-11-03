@@ -6,6 +6,24 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   FRONTEND_URL: z.string().url(),
   COOKIE_DOMAIN: z.string().min(1),
+  SMTP_HOST: z.string().min(1, "SMTP_HOST is required"),
+  SMTP_PORT: z.coerce.number().int().positive(),
+  SMTP_USERNAME: z.string().min(1, "SMTP_USERNAME is required"),
+  SMTP_PASSWORD: z.string().min(1, "SMTP_PASSWORD is required"),
+  SMTP_ENCRYPTION: z
+    .string()
+    .optional()
+    .default("ssl")
+    .transform((value) => value.toLowerCase())
+    .pipe(z.enum(["ssl", "tls", "starttls", "none"])),
+  SMTP_FROM_ADDRESS: z.string().email("SMTP_FROM_ADDRESS must be a valid email"),
+  SMTP_FROM_NAME: z.string().min(1, "SMTP_FROM_NAME is required"),
+  INCIDENT_ESCALATION_MINUTES: z.coerce.number().int().positive().default(15),
+  INCIDENT_ESCALATION_POLL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
   PORT: z
     .string()
     .optional()

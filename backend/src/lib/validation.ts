@@ -61,8 +61,20 @@ export const updateUserSchema = z
   .object({
     role: z.enum(["admin", "operator", "viewer"]).optional(),
     isActive: z.boolean().optional(),
-    teamRoles: z.array(z.string().min(2).max(50)).max(10).optional()
+    teamRoles: z.array(z.string().min(2).max(50)).max(10).optional(),
+    name: z.string().min(2).max(120).optional(),
+    email: z.string().email().optional()
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided"
+  });
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(8).max(128),
+    newPassword: z.string().min(10).max(128)
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: "New password must be different from the current password",
+    path: ["newPassword"]
   });

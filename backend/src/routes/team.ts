@@ -4,6 +4,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/db";
 import { hashPassword, toSafeUser } from "../lib/auth";
 import { createUserSchema, teamUsersQuerySchema, updateUserSchema } from "../lib/validation";
+import { sendMail } from "../lib/mailer";
+import { env } from "../env";
 
 const teamRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -119,6 +121,45 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
           }
         });
 
+        try {
+          const loginUrl = new URL("/login", env.FRONTEND_URL).toString();
+          const textBody = [
+            `Hi ${user.name},`,
+            "",
+            "An IncidentPulse administrator created an account for you.",
+            "",
+            `Email: ${user.email}`,
+            `Temporary password: ${finalPassword}`,
+            "",
+            `You can sign in at ${loginUrl}. For security, please update your password after logging in.`,
+            "",
+            "If you weren’t expecting this message, reach out to your team lead."
+          ].join("\n");
+
+          const htmlBody = `
+            <p>Hi ${user.name},</p>
+            <p>An IncidentPulse administrator created an account for you.</p>
+            <ul>
+              <li><strong>Email:</strong> ${user.email}</li>
+              <li><strong>Temporary password:</strong> ${finalPassword}</li>
+            </ul>
+            <p>You can sign in at <a href="${loginUrl}">${loginUrl}</a>. For security, please update your password after logging in.</p>
+            <p>If you weren’t expecting this message, reach out to your team lead.</p>
+          `;
+
+          await sendMail({
+            to: user.email,
+            subject: "Your new IncidentPulse account",
+            text: textBody,
+            html: htmlBody
+          });
+        } catch (mailError) {
+          fastify.log.error(
+            { err: mailError, userId: user.id, email: user.email },
+            "Failed to send onboarding email to new user"
+          );
+        }
+
         return reply.status(201).send({
           error: false,
           data: toSafeUser(user),
@@ -155,29 +196,102 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
 
       const data = parsedBody.data;
 
-      const user = await prisma.user.update({
-        where: { id: params.id },
-        data: {
-          ...(data.role ? { role: data.role } : {}),
-          ...(data.isActive === undefined ? {} : { isActive: data.isActive }),
-          ...(data.teamRoles === undefined ? {} : { teamRoles: data.teamRoles })
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          isActive: true,
-          teamRoles: true,
-          createdAt: true,
-          updatedAt: true
-        }
-      });
+      const updatePayload: Prisma.UserUpdateInput = {};
 
-      return reply.send({
-        error: false,
-        data: toSafeUser(user)
-      });
+      if (data.role) {
+        updatePayload.role = data.role;
+      }
+      if (data.isActive !== undefined) {
+        updatePayload.isActive = data.isActive;
+      }
+      if (data.teamRoles !== undefined) {
+        updatePayload.teamRoles = data.teamRoles;
+      }
+      if (data.name) {
+        updatePayload.name = data.name;
+      }
+      if (data.email) {
+        updatePayload.email = data.email;
+      }
+
+      try {
+        const user = await prisma.user.update({
+          where: { id: params.id },
+          data: updatePayload,
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            isActive: true,
+            teamRoles: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        });
+
+        return reply.send({
+          error: false,
+          data: toSafeUser(user)
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === "P2025") {
+            return reply.status(404).send({
+              error: true,
+              message: "User not found"
+            });
+          }
+          if (error.code === "P2002") {
+            return reply.status(409).send({
+              error: true,
+              message: "A user with this email already exists"
+            });
+          }
+        }
+
+        throw error;
+      }
+    }
+  );
+
+  fastify.delete(
+    "/users/:id",
+    { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
+    async (request, reply) => {
+      const params = request.params as { id: string };
+
+      if (params.id === request.user.id) {
+        return reply.status(400).send({
+          error: true,
+          message: "You cannot delete your own account."
+        });
+      }
+
+      try {
+        await prisma.user.delete({
+          where: { id: params.id }
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === "P2025") {
+            return reply.status(404).send({
+              error: true,
+              message: "User not found"
+            });
+          }
+          if (error.code === "P2003") {
+            return reply.status(409).send({
+              error: true,
+              message:
+                "Unable to delete this user because they are referenced by existing incidents. Deactivate the account instead."
+            });
+          }
+        }
+        throw error;
+      }
+
+      return reply.status(204).send();
     }
   );
 };

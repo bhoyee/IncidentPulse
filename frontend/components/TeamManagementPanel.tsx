@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import clsx from "clsx";
+import { isAxiosError } from "axios";
 import {
   useCreateTeamUser,
   useUpdateTeamUser,
-  type TeamUser
+  useDeleteTeamUser,
+  type TeamUser,
+  type UpdateUserPayload
 } from "@hooks/useTeamUsers";
 
 type TeamUsersMeta = {
@@ -68,6 +71,7 @@ export function TeamManagementPanel({
 }: Props) {
   const createUser = useCreateTeamUser();
   const updateUser = useUpdateTeamUser();
+  const deleteUser = useDeleteTeamUser();
 
   const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState<FormState>(DEFAULT_FORM_STATE);
@@ -436,7 +440,12 @@ export function TeamManagementPanel({
                     key={user.id}
                     user={user}
                     onSave={updateUser.mutateAsync}
+                    onDelete={deleteUser.mutateAsync}
                     isGlobalSaving={updateUser.isPending}
+                    isGlobalDeleting={deleteUser.isPending}
+                    deletingUserId={
+                      typeof deleteUser.variables === "string" ? deleteUser.variables : undefined
+                    }
                   />
                 ))
               )}
@@ -474,22 +483,35 @@ export function TeamManagementPanel({
 
 type TeamMemberRowProps = {
   user: TeamUser;
-  onSave: (variables: {
-    id: string;
-    payload: {
-      role?: TeamUser["role"];
-      isActive?: boolean;
-      teamRoles?: string[];
-    };
-  }) => Promise<unknown>;
+  onSave: (variables: { id: string; payload: UpdateUserPayload }) => Promise<unknown>;
+  onDelete: (id: string) => Promise<unknown>;
   isGlobalSaving: boolean;
+  isGlobalDeleting: boolean;
+  deletingUserId?: string;
 };
 
-function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
+function TeamMemberRow({
+  user,
+  onSave,
+  onDelete,
+  isGlobalSaving,
+  isGlobalDeleting,
+  deletingUserId
+}: TeamMemberRowProps) {
+  const [name, setName] = useState(user.name);
+  const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState<TeamUser["role"]>(user.role);
   const [teamRolesText, setTeamRolesText] = useState(user.teamRoles.join(", "));
   const [isActive, setIsActive] = useState(user.isActive);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setName(user.name);
+  }, [user.name]);
+
+  useEffect(() => {
+    setEmail(user.email);
+  }, [user.email]);
 
   useEffect(() => {
     setRole(user.role);
@@ -512,26 +534,37 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
     [teamRolesText]
   );
 
+  const trimmedName = name.trim();
+  const trimmedEmail = email.trim();
   const invalidRoles = normalizedTeamRoles.some((item) => item.length < 2);
+  const invalidName = trimmedName.length < 2;
+  const invalidEmail =
+    trimmedEmail.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+  const isRowDeleting = isGlobalDeleting && deletingUserId === user.id;
 
   const hasChanges =
+    trimmedName !== user.name ||
+    trimmedEmail !== user.email ||
     role !== user.role ||
     isActive !== user.isActive ||
     normalizedTeamRoles.join(",") !== user.teamRoles.join(",");
 
-  const canSave = hasChanges && !invalidRoles && !isSaving && !isGlobalSaving;
+  const canSave =
+    hasChanges && !invalidRoles && !invalidName && !invalidEmail && !isSaving && !isGlobalSaving && !isRowDeleting;
 
   const handleSave = async () => {
     if (!canSave) {
       return;
     }
 
-    const payload: {
-      role?: TeamUser["role"];
-      isActive?: boolean;
-      teamRoles?: string[];
-    } = {};
+    const payload: UpdateUserPayload = {};
 
+    if (trimmedName !== user.name) {
+      payload.name = trimmedName;
+    }
+    if (trimmedEmail !== user.email) {
+      payload.email = trimmedEmail;
+    }
     if (role !== user.role) {
       payload.role = role;
     }
@@ -555,9 +588,36 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
   };
 
   const handleReset = () => {
+    setName(user.name);
+    setEmail(user.email);
     setRole(user.role);
     setIsActive(user.isActive);
     setTeamRolesText(user.teamRoles.join(", "));
+  };
+
+  const handleDelete = async () => {
+    if (isRowDeleting) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${user.name}'s account? This action cannot be undone.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await onDelete(user.id);
+    } catch (error) {
+      let message = "Failed to delete user.";
+      if (isAxiosError(error)) {
+        message = error.response?.data?.message ?? error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      window.alert(message);
+    }
   };
 
   return (
@@ -568,16 +628,34 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
       )}
     >
       <td className="px-3 py-3">
-        <div className="font-medium text-slate-800">{user.name}</div>
+        <input
+          type="text"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          disabled={isSaving || isGlobalSaving || isRowDeleting}
+          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm font-medium text-slate-800 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        {invalidName ? (
+          <p className="mt-1 text-xs text-red-500">Name must be at least 2 characters.</p>
+        ) : null}
       </td>
       <td className="px-3 py-3">
-        <div className="text-slate-600">{user.email}</div>
+        <input
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          disabled={isSaving || isGlobalSaving || isRowDeleting}
+          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        {invalidEmail ? (
+          <p className="mt-1 text-xs text-red-500">Enter a valid email address.</p>
+        ) : null}
       </td>
       <td className="px-3 py-3">
         <select
           value={role}
           onChange={(event) => setRole(event.target.value as TeamUser["role"])}
-          disabled={isSaving || isGlobalSaving}
+          disabled={isSaving || isGlobalSaving || isRowDeleting}
           className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {ROLE_OPTIONS.map((option) => (
@@ -592,7 +670,7 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
           type="text"
           value={teamRolesText}
           onChange={(event) => setTeamRolesText(event.target.value)}
-          disabled={isSaving || isGlobalSaving}
+          disabled={isSaving || isGlobalSaving || isRowDeleting}
           placeholder="ops, writer, support"
           className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
         />
@@ -606,7 +684,7 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
         <select
           value={isActive ? "active" : "inactive"}
           onChange={(event) => setIsActive(event.target.value === "active")}
-          disabled={isSaving || isGlobalSaving}
+          disabled={isSaving || isGlobalSaving || isRowDeleting}
           className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <option value="active">Active</option>
@@ -618,7 +696,7 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
           <button
             type="button"
             onClick={handleReset}
-            disabled={!hasChanges || isSaving || isGlobalSaving}
+            disabled={!hasChanges || isSaving || isGlobalSaving || isRowDeleting}
             className="rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-slate-500 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Reset
@@ -630,6 +708,14 @@ function TeamMemberRow({ user, onSave, isGlobalSaving }: TeamMemberRowProps) {
             className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSaving ? "Saving..." : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isRowDeleting || isSaving || isGlobalSaving}
+            className="rounded-full border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 transition hover:border-red-300 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isRowDeleting ? "Deleting..." : "Delete"}
           </button>
         </div>
       </td>
