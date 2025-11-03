@@ -23,8 +23,8 @@ test("status page renders public information", async ({ page }) => {
     });
   });
 
-  await page.goto("/status");
-  await expect(page.getByRole("heading", { name: /status/i })).toBeVisible();
+  await page.goto("/status", { waitUntil: "networkidle" });
+  await expect(page.locator("h1")).toContainText(/status/i);
   await expect(
     page.getByText(/All systems operational|Partial outage|Major outage/i)
   ).toBeVisible();

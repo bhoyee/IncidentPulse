@@ -6,7 +6,8 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "echo \"No backend tests defined.\" && exit 0"
   },
   "dependencies": {
     "@fastify/cookie": "^9.3.1",
