@@ -121,10 +121,14 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
           }
         });
 
-        let emailStatus: "delivered" | "failed" | null = null;
+        let emailStatus: "pending" | "delivered" | "failed" | "skipped" = "pending";
         let emailError: string | null = null;
 
-        try {
+        const shouldSendEmail = true;
+
+        if (!shouldSendEmail) {
+          emailStatus = "skipped";
+        } else {
           const loginUrl = new URL("/login", env.FRONTEND_URL).toString();
           const textBody = [
             `Hi ${user.name},`,
@@ -150,22 +154,37 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
             <p>If you weren’t expecting this message, reach out to your team lead.</p>
           `;
 
-          await sendMail({
+          const mailPromise = sendMail({
             to: user.email,
             subject: "Your new IncidentPulse account",
             text: textBody,
             html: htmlBody
-          });
+          })
+            .then(() => {
+              emailStatus = "delivered";
+            })
+            .catch((mailError) => {
+              emailStatus = "failed";
+              emailError =
+                mailError instanceof Error
+                  ? mailError.message
+                  : "Failed to deliver onboarding email.";
+              fastify.log.error(
+                { err: mailError, userId: user.id, email: user.email },
+                "Failed to send onboarding email to new user"
+              );
+            });
 
-          emailStatus = "delivered";
-        } catch (mailError) {
-          emailStatus = "failed";
-          emailError =
-            mailError instanceof Error ? mailError.message : "Failed to deliver onboarding email.";
-          fastify.log.error(
-            { err: mailError, userId: user.id, email: user.email },
-            "Failed to send onboarding email to new user"
-          );
+          const EMAIL_TIMEOUT_MS = 4000;
+          await Promise.race([
+            mailPromise,
+            new Promise((resolve) => setTimeout(resolve, EMAIL_TIMEOUT_MS))
+          ]);
+
+          if (emailStatus === "pending") {
+            // Allow the promise to finish in the background without causing an unhandled rejection.
+            void mailPromise.catch(() => {});
+          }
         }
 
         return reply.status(201).send({

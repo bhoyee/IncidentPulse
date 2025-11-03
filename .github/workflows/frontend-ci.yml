@@ -113,13 +113,7 @@ jobs:
             exit 1
           fi
 
-          export VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID"
-          if [ -n "$VERCEL_ORG_ID" ]; then
-            export VERCEL_ORG_ID="$VERCEL_ORG_ID"
-          fi
-
+          # Simple approach - remove org flags entirely
           npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
-
           npm run build
-
           npx vercel deploy --prod --yes --prebuilt --token "$VERCEL_TOKEN"
