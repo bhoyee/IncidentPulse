@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type SVGProps } from "react";
 import clsx from "clsx";
 import {
   ArrowUpIcon,
@@ -18,7 +18,7 @@ import {
   CheckCircleIcon
 } from "@heroicons/react/24/outline";
 
-type IconComponent = (props: ComponentProps<"svg">) => JSX.Element;
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
 const docSections = [
   { id: "overview", label: "Overview" },
@@ -1016,13 +1016,15 @@ export default function DocumentationPage() {
                   <div className="flex flex-wrap items-center gap-4">
                     <span className="font-semibold text-slate-700">Resources:</span>
                     {credits.links.map((link) => (
-                      <Link
+                      <a
                         key={link.label}
                         href={link.href}
                         className="inline-flex items-center gap-1 text-blue-600 underline"
+                        target={link.href.startsWith("http") ? "_blank" : undefined}
+                        rel={link.href.startsWith("http") ? "noreferrer" : undefined}
                       >
                         {link.label}
-                      </Link>
+                      </a>
                     ))}
                   </div>
                 </dl>

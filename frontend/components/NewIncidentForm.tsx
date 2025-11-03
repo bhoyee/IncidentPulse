@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "@lib/api-client";
 import type { IncidentSeverity } from "@lib/types";
 import { useInvalidateIncidents } from "@hooks/useIncidents";
+import type { TeamUser } from "@hooks/useTeamUsers";
 
 type FormState = {
   title: string;
@@ -27,18 +28,18 @@ const defaultState: FormState = {
 type Props = {
   disabled?: boolean;
   canAssign?: boolean;
-  assignees?: Array<{
-    id: string;
-    name: string;
-    email: string;
-    role: "admin" | "operator" | "viewer";
-    teamRoles: string[];
-    isActive: boolean;
-  }>;
+  assignees?: TeamUser[];
   currentUserId: string;
+  onSuccess?: () => void;
 };
 
-export function NewIncidentForm({ disabled, canAssign = false, assignees = [], currentUserId }: Props) {
+export function NewIncidentForm({
+  disabled,
+  canAssign = false,
+  assignees = [],
+  currentUserId,
+  onSuccess
+}: Props) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>({
     ...defaultState,
@@ -70,6 +71,7 @@ export function NewIncidentForm({ disabled, canAssign = false, assignees = [], c
       });
       setOpen(false);
       await invalidateIncidents();
+      onSuccess?.();
     }
   });
 

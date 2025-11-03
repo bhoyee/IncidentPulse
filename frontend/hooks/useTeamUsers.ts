@@ -12,6 +12,7 @@ export type TeamUser = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  lastActiveAt?: string | null;
 };
 
 export type TeamUsersResponse = {

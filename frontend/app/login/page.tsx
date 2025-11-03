@@ -166,9 +166,12 @@ export default function LoginPage() {
             <div className="mt-8 text-center">
               <p className="text-xs text-gray-500">
                 Need access?{" "}
-                <Link href="/contact" className="text-blue-600 hover:text-blue-500 font-medium">
+                <a
+                  href="mailto:team@incidentpulse.io"
+                  className="text-blue-600 hover:text-blue-500 font-medium"
+                >
                   Contact your administrator
-                </Link>
+                </a>
               </p>
             </div>
           </div>

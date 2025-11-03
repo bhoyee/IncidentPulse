@@ -111,12 +111,12 @@ export default function HomePage() {
                 <Link href="/status" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
                   Status
                 </Link>
-                <Link href="/features" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
                   Features
-                </Link>
-                <Link href="/pricing" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                </a>
+                <a href="#pricing" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
                   Pricing
-                </Link>
+                </a>
                 <Link href="/docs" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
                   Documentation
                 </Link>
@@ -175,12 +175,12 @@ export default function HomePage() {
                   >
                     {heroPrimaryLabel}
                   </Link>
-                  <Link
-                    href="/demo"
+                  <a
+                    href="mailto:team@incidentpulse.io"
                     className="rounded-lg border border-gray-300 bg-white px-8 py-3.5 text-base font-semibold text-gray-900 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors text-center"
                   >
                     Schedule Demo
-                  </Link>
+                  </a>
                 </div>
 
                 {/* Trust Indicators */}
@@ -266,7 +266,7 @@ export default function HomePage() {
       </section>
 
       {/* Features Section */}
-      <section className="bg-gray-50 py-20 w-full">
+      <section id="features" className="bg-gray-50 py-20 w-full">
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="w-full max-w-7xl mx-auto">
             <div className="text-center mb-16">
@@ -381,7 +381,10 @@ export default function HomePage() {
       </section>
 
       {/* CTA Section - FULL WIDTH */}
-      <section className="bg-gradient-to-r w-screen relative left-1/2 right-1/2 -mx-[50vw] py-12 from-blue-600 to-blue-800 py-16 w-full">
+      <section
+        id="pricing"
+        className="bg-gradient-to-r w-screen relative left-1/2 right-1/2 -mx-[50vw] py-12 from-blue-600 to-blue-800 py-16 w-full"
+      >
         <div className="w-full px-4 sm:px-6 lg:px-8 text-center">
           <div className="w-full max-w-7xl mx-auto">
             <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl mb-4">
@@ -392,17 +395,17 @@ export default function HomePage() {
             </p>
             <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4 justify-center">
               <Link
-                href="/signup"
+                href="/login"
                 className="rounded-lg bg-white px-8 py-3.5 text-base font-semibold text-blue-600 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors"
               >
                 Start Free Trial
               </Link>
-              <Link
-                href="/demo"
+              <a
+                href="mailto:team@incidentpulse.io"
                 className="rounded-lg border border-white px-8 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors"
               >
                 Schedule Demo
-              </Link>
+              </a>
             </div>
           </div>
         </div>
@@ -433,8 +436,8 @@ export default function HomePage() {
                     <div>
                       <h4 className="text-sm font-semibold text-white mb-4">Product</h4>
                       <ul className="space-y-2 text-sm">
-                        <li><Link href="/features" className="text-gray-400 hover:text-white transition-colors">Features</Link></li>
-                        <li><Link href="/pricing" className="text-gray-400 hover:text-white transition-colors">Pricing</Link></li>
+                        <li><a href="#features" className="text-gray-400 hover:text-white transition-colors">Features</a></li>
+                        <li><a href="#pricing" className="text-gray-400 hover:text-white transition-colors">Pricing</a></li>
                         <li><Link href="/status" className="text-gray-400 hover:text-white transition-colors">Status</Link></li>
                         <li><Link href="/docs" className="text-gray-400 hover:text-white transition-colors">Documentation</Link></li>
                       </ul>
@@ -443,10 +446,39 @@ export default function HomePage() {
                     <div>
                       <h4 className="text-sm font-semibold text-white mb-4">Company</h4>
                       <ul className="space-y-2 text-sm">
-                        <li><Link href="/about" className="text-gray-400 hover:text-white transition-colors">About</Link></li>
-                        <li><Link href="/blog" className="text-gray-400 hover:text-white transition-colors">Blog</Link></li>
-                        <li><Link href="/careers" className="text-gray-400 hover:text-white transition-colors">Careers</Link></li>
-                        <li><Link href="/contact" className="text-gray-400 hover:text-white transition-colors">Contact</Link></li>
+                        <li>
+                          <a href="/docs#overview" className="text-gray-400 hover:text-white transition-colors">
+                            About
+                          </a>
+                        </li>
+                        <li>
+                          <a
+                            href="https://medium.com/@incidentpulse"
+                            className="text-gray-400 hover:text-white transition-colors"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Blog
+                          </a>
+                        </li>
+                        <li>
+                          <a
+                            href="https://www.linkedin.com/company/incidentpulse"
+                            className="text-gray-400 hover:text-white transition-colors"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Careers
+                          </a>
+                        </li>
+                        <li>
+                          <a
+                            href="mailto:team@incidentpulse.io"
+                            className="text-gray-400 hover:text-white transition-colors"
+                          >
+                            Contact
+                          </a>
+                        </li>
                       </ul>
                     </div>
                   </div>
@@ -456,9 +488,9 @@ export default function HomePage() {
                         &copy; {year} IncidentPulse. All rights reserved.
                       </p>
                       <div className="flex space-x-6 text-sm text-gray-400">
-                        <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
-                        <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
-                        <Link href="/security" className="hover:text-white transition-colors">Security</Link>
+                        <a href="/docs#faq" className="hover:text-white transition-colors">Privacy</a>
+                        <a href="/docs#credits" className="hover:text-white transition-colors">Terms</a>
+                        <a href="/docs#architecture" className="hover:text-white transition-colors">Security</a>
                       </div>
                   </div>
                 </div>
