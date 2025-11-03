@@ -9,7 +9,8 @@ import { useLogout } from "@hooks/useLogout";
 
 const links: Array<{ href: Route; label: string; auth: boolean }> = [
   { href: "/dashboard", label: "Dashboard", auth: true },
-  { href: "/status", label: "Status", auth: false }
+  { href: "/status", label: "Status", auth: false },
+  { href: "/docs", label: "Documentation", auth: false }
 ];
 
 export function AppHeader() {
