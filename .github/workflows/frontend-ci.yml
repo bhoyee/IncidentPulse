@@ -49,8 +49,26 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps
 
+      - name: Start Next.js server
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE: http://localhost:4000
+        run: |
+          npm run start -- --hostname 0.0.0.0 --port 3000 &
+          echo $! > .next-server-pid
+          npx wait-on http://127.0.0.1:3000/status
+
       - name: Run Playwright smoke tests
         working-directory: frontend
         env:
           NEXT_PUBLIC_API_BASE: http://localhost:4000
         run: npx playwright test
+
+      - name: Stop Next.js server
+        if: always()
+        working-directory: frontend
+        run: |
+          if [ -f .next-server-pid ]; then
+            kill $(cat .next-server-pid) || true
+            rm .next-server-pid
+          fi
