@@ -7,6 +7,8 @@ import {
   incidentUpdateLogSchema,
   updateIncidentSchema
 } from "../lib/validation";
+import { sendMail } from "../lib/mailer";
+import { env } from "../env";
 
 const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -147,7 +149,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       if (request.user.role === "admin") {
         resolvedAssignedToId = assignedToId ?? null;
       } else {
-        resolvedAssignedToId = request.user.id;
+        resolvedAssignedToId = null;
       }
 
       if (resolvedAssignedToId) {
@@ -192,6 +194,56 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           }
         }
       });
+
+      void prisma.user
+        .findMany({
+          where: { role: "admin", isActive: true },
+          select: { email: true }
+        })
+        .then(async (admins) => {
+          if (admins.length === 0) {
+            return;
+          }
+
+          const reporterName =
+            incident.createdBy?.name ||
+            incident.createdBy?.email ||
+            "Unknown reporter";
+          const incidentUrl = `${env.FRONTEND_URL}/dashboard`;
+          const subject = `New incident reported: ${incident.title}`;
+          const textBody = [
+            `A new incident needs attention.`,
+            "",
+            `Title: ${incident.title}`,
+            `Severity: ${incident.severity}`,
+            `Reported by: ${reporterName}`,
+            "",
+            `Review the incident: ${incidentUrl}`,
+            "",
+            incident.description ? `Description:\n${incident.description}` : ""
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          try {
+            await sendMail({
+              to: admins.map((admin) => admin.email),
+              subject,
+              text: textBody
+            });
+          } catch (error) {
+            fastify.log.error(
+              { err: error, incidentId: incident.id },
+              "Failed to send admin incident notification"
+            );
+          }
+        })
+        .catch((error) => {
+          fastify.log.error(
+            { err: error, incidentId: incident.id },
+            "Failed to queue admin list for incident notification"
+          );
+        });
 
       return reply.status(201).send({
         error: false,
