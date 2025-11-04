@@ -145,6 +145,17 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const { assignedToId, categories, impactScope, ...incidentPayload } = parsedBody.data;
 
+      const admins = await prisma.user.findMany({
+        where: {
+          role: "admin",
+          isActive: true
+        },
+        select: {
+          email: true,
+          name: true
+        }
+      });
+
       let resolvedAssignedToId: string | null = null;
       if (request.user.role === "admin") {
         resolvedAssignedToId = assignedToId ?? null;
@@ -195,55 +206,52 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       });
 
-      void prisma.user
-        .findMany({
-          where: { role: "admin", isActive: true },
-          select: { email: true }
-        })
-        .then(async (admins) => {
-          if (admins.length === 0) {
-            return;
-          }
+      if (admins.length === 0) {
+        fastify.log.warn(
+          { incidentId: incident.id },
+          "Incident created but no active admins available for notification"
+        );
+      } else {
+        const adminEmails = admins.map((admin) => admin.email);
+        const reporterName =
+          incident.createdBy?.name ||
+          incident.createdBy?.email ||
+          "Unknown reporter";
+        const incidentUrl = `${env.FRONTEND_URL}/dashboard/incidents/${incident.id}`;
+        const subject = `New incident reported: ${incident.title}`;
+        const description = incident.description?.trim();
+        const textBody = [
+          `A new incident was reported and requires review.`,
+          "",
+          `Title: ${incident.title}`,
+          `Severity: ${incident.severity}`,
+          `Status: ${incident.status}`,
+          `Reported by: ${reporterName}`,
+          "",
+          `Review the incident: ${incidentUrl}`,
+          "",
+          description ? `Description:\n${description}` : ""
+        ]
+          .filter(Boolean)
+          .join("\n");
 
-          const reporterName =
-            incident.createdBy?.name ||
-            incident.createdBy?.email ||
-            "Unknown reporter";
-          const incidentUrl = `${env.FRONTEND_URL}/dashboard`;
-          const subject = `New incident reported: ${incident.title}`;
-          const textBody = [
-            `A new incident needs attention.`,
-            "",
-            `Title: ${incident.title}`,
-            `Severity: ${incident.severity}`,
-            `Reported by: ${reporterName}`,
-            "",
-            `Review the incident: ${incidentUrl}`,
-            "",
-            incident.description ? `Description:\n${incident.description}` : ""
-          ]
-            .filter(Boolean)
-            .join("\n");
-
-          try {
-            await sendMail({
-              to: admins.map((admin) => admin.email),
-              subject,
-              text: textBody
-            });
-          } catch (error) {
-            fastify.log.error(
-              { err: error, incidentId: incident.id },
-              "Failed to send admin incident notification"
-            );
-          }
-        })
-        .catch((error) => {
+        try {
+          await sendMail({
+            to: adminEmails,
+            subject,
+            text: textBody
+          });
+          fastify.log.info(
+            { incidentId: incident.id, recipients: adminEmails },
+            "Sent admin notification for new incident"
+          );
+        } catch (error) {
           fastify.log.error(
             { err: error, incidentId: incident.id },
-            "Failed to queue admin list for incident notification"
+            "Failed to send admin incident notification"
           );
-        });
+        }
+      }
 
       return reply.status(201).send({
         error: false,
@@ -367,6 +375,13 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         parsedBody.data,
         "assignedToId"
       );
+
+      if (hasAssignedToKey && request.user.role !== "admin") {
+        return reply.status(403).send({
+          error: true,
+          message: "Only admins can assign incidents"
+        });
+      }
 
       if (request.user.role === "admin") {
         if (hasAssignedToKey) {
