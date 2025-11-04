@@ -1,17 +1,16 @@
 name: Frontend CI/CD
 
 on:
-  pull_request:
-    paths:
-      - "frontend/**"
-      - ".github/workflows/frontend-ci.yml"
   push:
     branches:
       - main
     paths:
       - "frontend/**"
       - ".github/workflows/frontend-ci.yml"
-<<<<<<< HEAD
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
 
 jobs:
   checks:
@@ -19,18 +18,6 @@ jobs:
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-=======
-  pull_request:
-    paths:
-      - "frontend/**"
-      - ".github/workflows/frontend-ci.yml"
-
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-    env:
-      NEXT_TELEMETRY_DISABLED: "1"
->>>>>>> 2856b75 (updated the frontend worflow and package)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,11 +31,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-<<<<<<< HEAD
-        run: npm install
-=======
         run: npm ci
->>>>>>> 2856b75 (updated the frontend worflow and package)
 
       - name: Type check
         working-directory: frontend
@@ -58,107 +41,16 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
-<<<<<<< HEAD
-      - name: Install Playwright browsers
-        working-directory: frontend
-        run: npx playwright install --with-deps
-
-      - name: Build application
-        working-directory: frontend
-        run: npm run build
-
-      - name: Start Next.js server and run tests
-        working-directory: frontend
-        env:
-          NEXT_PUBLIC_API_BASE: http://localhost:4000
-          PORT: 3000
-        run: |
-          # Start the server in background
-          npm start &
-          SERVER_PID=$!
-          
-          # Wait for server to be ready with retries
-          echo "Waiting for server to start..."
-          for i in {1..30}; do
-            if curl -s http://localhost:3000 > /dev/null; then
-              echo "Server is ready!"
-              break
-            fi
-            if [ $i -eq 30 ]; then
-              echo "Server failed to start within 60 seconds"
-              exit 1
-            fi
-            echo "Attempt $i: Server not ready yet..."
-            sleep 2
-          done
-          
-          # Run tests with the correct base URL
-          PLAYWRIGHT_BASE_URL=http://localhost:3000 npx playwright test
-          
-          # Kill the server
-          kill $SERVER_PID
-
-  deploy:
-    needs: checks
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Deploy to Vercel
-        uses: vercel/action@v28
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: frontend
-=======
       - name: Build
         working-directory: frontend
         run: npm run build
 
-  deploy:
-    needs: build-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    env:
-      NEXT_TELEMETRY_DISABLED: "1"
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: "frontend/package-lock.json"
-
-      - name: Install dependencies
+      - name: Install Playwright browsers
         working-directory: frontend
-        run: npm ci
+        run: npx playwright install --with-deps
 
-      - name: Deploy to Vercel
+      - name: Run Playwright smoke tests
         working-directory: frontend
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VERCEL_TEAM_SLUG: ${{ secrets.VERCEL_TEAM_SLUG }}
-        run: |
-          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
-            echo "VERCEL_TOKEN or VERCEL_PROJECT_ID secret is missing."
-            exit 1
-          fi
-
-          TEAM_FLAG=""
-          if [ -n "$VERCEL_TEAM_SLUG" ]; then
-            TEAM_FLAG="--scope $VERCEL_TEAM_SLUG"
-          fi
-
-          npx vercel pull --yes --environment=production --project-id "$VERCEL_PROJECT_ID" --token "$VERCEL_TOKEN" $TEAM_FLAG
-
-          npm run build
-
-          npx vercel deploy --prod --yes --prebuilt --token "$VERCEL_TOKEN" $TEAM_FLAG
->>>>>>> 2856b75 (updated the frontend worflow and package)
+          NEXT_PUBLIC_API_BASE: http://localhost:4000
+        run: npx playwright test
