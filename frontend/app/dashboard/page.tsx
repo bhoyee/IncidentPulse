@@ -968,7 +968,6 @@ export default function DashboardPage() {
                       disabled={!canCreate}
                       canAssign={Boolean(isAdmin)}
                       assignees={teamUsers}
-                      currentUserId={session?.id ?? ""}
                       onSuccess={() => setIsNewIncidentOpen(false)}
                     />
                   </div>

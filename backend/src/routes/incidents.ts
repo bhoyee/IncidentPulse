@@ -343,6 +343,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         where: { id: id.id },
         select: {
           id: true,
+          status: true,
           resolvedAt: true,
           createdById: true,
           assignedToId: true
@@ -403,8 +404,9 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const now = new Date();
-      const shouldSetResolvedAt =
-        parsedBody.data.status === "resolved" && existing.resolvedAt === null;
+      const statusChangedToResolved =
+        parsedBody.data.status === "resolved" && existing.status !== "resolved";
+      const shouldSetResolvedAt = statusChangedToResolved && existing.resolvedAt === null;
 
       const incident = await prisma.incident.update({
         where: { id: id.id },
@@ -440,6 +442,51 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           }
         }
       });
+
+      if (statusChangedToResolved && incident.assignedTo?.email) {
+        const resolutionTime = incident.resolvedAt ?? now;
+        const subject = `Incident resolved: ${incident.title}`;
+        const description = incident.description?.trim();
+        const textLines = [
+          `Good news — the incident "${incident.title}" has been resolved.`,
+          "",
+          `Severity: ${incident.severity}`,
+          `Status: ${incident.status}`,
+          `Resolved at: ${resolutionTime.toISOString()}`,
+          "",
+          `Reported by: ${
+            incident.createdBy?.name ?? incident.createdBy?.email ?? "Unknown reporter"
+          }`
+        ];
+
+        if (description) {
+          textLines.push("", `Summary:\n${description}`);
+        }
+
+        textLines.push(
+          "",
+          "You were listed as the owner. No further action is required unless stakeholders need a follow-up."
+        );
+
+        const textBody = textLines.join("\n");
+
+        try {
+          await sendMail({
+            to: incident.assignedTo.email,
+            subject,
+            text: textBody
+          });
+          fastify.log.info(
+            { incidentId: incident.id, assignee: incident.assignedTo.email },
+            "Sent incident resolution notification"
+          );
+        } catch (error) {
+          fastify.log.error(
+            { err: error, incidentId: incident.id, assignee: incident.assignedTo.email },
+            "Failed to send incident resolution notification"
+          );
+        }
+      }
 
       return reply.send({
         error: false,

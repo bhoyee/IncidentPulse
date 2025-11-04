@@ -29,7 +29,6 @@ type Props = {
   disabled?: boolean;
   canAssign?: boolean;
   assignees?: TeamUser[];
-  currentUserId: string;
   onSuccess?: () => void;
 };
 
@@ -37,14 +36,10 @@ export function NewIncidentForm({
   disabled,
   canAssign = false,
   assignees = [],
-  currentUserId,
   onSuccess
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<FormState>({
-    ...defaultState,
-    assignedToId: canAssign ? null : currentUserId
-  });
+  const [form, setForm] = useState<FormState>(defaultState);
   const invalidateIncidents = useInvalidateIncidents();
 
   const mutation = useMutation({
@@ -65,10 +60,7 @@ export function NewIncidentForm({
       return response.data;
     },
     onSuccess: async () => {
-      setForm({
-        ...defaultState,
-        assignedToId: canAssign ? null : currentUserId
-      });
+      setForm(defaultState);
       setOpen(false);
       await invalidateIncidents();
       onSuccess?.();
