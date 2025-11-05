@@ -1,4 +1,4 @@
-name: Backend CI
+name: Backend CI/CD
 
 on:
   pull_request:
@@ -58,6 +58,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # This ensures all history is fetched
+
+      - name: Debug - Show latest commit
+        run: |
+          echo "Latest commit:"
+          git log -1 --oneline
+          echo "Branch: $(git branch --show-current)"
+          echo "HEAD: $(git rev-parse HEAD)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -76,23 +85,57 @@ jobs:
           DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "RENDER_DATABASE_URL secret not set. Skipping migrate deploy."
+            echo "⚠️ RENDER_DATABASE_URL secret not set. Skipping migrate deploy."
             exit 0
           fi
+          echo "🚀 Running database migrations..."
           npx prisma migrate deploy
+          echo "✅ Migrations completed"
 
       - name: Trigger Render deploy
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
         run: |
+          # Check if required secrets are set
           if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
-            echo "RENDER_API_KEY or RENDER_SERVICE_ID secret not set. Skipping Render deploy."
+            echo "❌ RENDER_API_KEY or RENDER_SERVICE_ID secret not set. Skipping Render deploy."
+            echo "Please check your GitHub repository secrets."
             exit 0
           fi
 
-          curl -sS -X POST \
+          echo "🚀 Triggering Render deploy..."
+          echo "Service ID: $RENDER_SERVICE_ID"
+          
+          # Make API request to trigger deploy
+          response=$(curl -s -w "\n%{http_code}" -X POST \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
             https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys \
-            -d '{"clearCache":true}'
+            -d '{"clearCache": true}')
+          
+          # Extract HTTP status code (last line)
+          http_code=$(echo "$response" | tail -n1)
+          # Extract response body (all but last line)
+          response_body=$(echo "$response" | head -n1)
+          
+          echo "📡 Response HTTP Code: $http_code"
+          echo "📦 Response Body: $response_body"
+          
+          if [ "$http_code" -eq 201 ]; then
+            echo "✅ Deploy triggered successfully!"
+            echo "Check your Render dashboard for deploy progress."
+          else
+            echo "❌ Failed to trigger deploy. HTTP code: $http_code"
+            echo "Please check:"
+            echo "1. Your RENDER_API_KEY is correct"
+            echo "2. Your RENDER_SERVICE_ID is correct"
+            echo "3. The service exists in your Render account"
+            exit 1
+          fi
+
+      - name: Verify deploy triggered
+        run: |
+          echo "🎉 If you see the success message above, Render deploy was triggered."
+          echo "Note: It may take a few minutes for Render to start the deployment."
+          echo "Check your Render dashboard for the deployment status."
