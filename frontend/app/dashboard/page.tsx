@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDownIcon, Bars3Icon, XMarkIcon, ChevronRightIcon, ChevronLeftIcon, PencilIcon, TrashIcon, KeyIcon, CheckIcon, XMarkIcon as XIcon } from "@heroicons/react/24/solid";
 import { AuthGuard } from "@components/AuthGuard";
@@ -43,12 +43,11 @@ const mockResetPassword = async (userId: string) => {
   return Promise.resolve();
 };
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const incidentIdFromQuery = searchParams.get("incidentId");
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
-  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [statusFilter, setStatusFilter] = useState<IncidentStatus | undefined>();
   const [severityFilter, setSeverityFilter] = useState<IncidentSeverity | undefined>();
   const [teamRoleFilter, setTeamRoleFilter] = useState<string | undefined>();
@@ -116,19 +115,12 @@ export default function DashboardPage() {
   }, [teamUsers]);
 
   useEffect(() => {
-    if (!incidentIdFromQuery) {
+    if (incidentIdFromQuery) {
+      setSelectedIncidentId(incidentIdFromQuery);
+    } else {
       setSelectedIncidentId(null);
-      setSelectedIncident(null);
-      return;
     }
-
-    setSelectedIncidentId(incidentIdFromQuery);
-
-    const match = incidents.find((incident) => incident.id === incidentIdFromQuery);
-    if (match) {
-      setSelectedIncident(match);
-    }
-  }, [incidentIdFromQuery, incidents]);
+  }, [incidentIdFromQuery]);
 
   const filterChips = useMemo(() => {
     const chips: Array<{ label: string; onClear: () => void }> = [];
@@ -167,13 +159,11 @@ export default function DashboardPage() {
   const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
 
   const handleIncidentSelect = (incident: Incident) => {
-    setSelectedIncident(incident);
     setSelectedIncidentId(incident.id);
     router.replace(`/dashboard?incidentId=${incident.id}`, { scroll: false });
   };
 
   const handleIncidentDrawerClose = () => {
-    setSelectedIncident(null);
     setSelectedIncidentId(null);
     router.replace("/dashboard", { scroll: false });
   };
@@ -1010,6 +1000,14 @@ export default function DashboardPage() {
         )}
       </div>
     </AuthGuard>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading dashboard...</div>}>
+      <DashboardPageContent />
+    </Suspense>
   );
 }
 
