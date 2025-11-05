@@ -206,6 +206,45 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       });
 
+      if (incident.assignedTo) {
+        const subject = `Incident assigned: ${incident.title}`;
+        const description = incident.description?.trim();
+        const textLines = [
+          `You have been assigned to incident "${incident.title}".`,
+          "",
+          `Severity: ${incident.severity}`,
+          `Status: ${incident.status}`,
+          "",
+          `Reported by: ${
+            incident.createdBy?.name ?? incident.createdBy?.email ?? "Unknown reporter"
+          }`
+        ];
+        if (description) {
+          textLines.push("", `Summary:\n${description}`);
+        }
+        textLines.push(
+          "",
+          `Review the incident: ${env.FRONTEND_URL}/dashboard/incidents/${incident.id}`
+        );
+
+        try {
+          await sendMail({
+            to: incident.assignedTo.email,
+            subject,
+            text: textLines.join("\n")
+          });
+          fastify.log.info(
+            { incidentId: incident.id, assignee: incident.assignedTo.email },
+            "Sent assignment notification email"
+          );
+        } catch (error) {
+          fastify.log.error(
+            { err: error, incidentId: incident.id, assignee: incident.assignedTo.email },
+            "Failed to send assignment notification email"
+          );
+        }
+      }
+
       if (admins.length === 0) {
         fastify.log.warn(
           { incidentId: incident.id },
@@ -407,6 +446,12 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       const statusChangedToResolved =
         parsedBody.data.status === "resolved" && existing.status !== "resolved";
       const shouldSetResolvedAt = statusChangedToResolved && existing.resolvedAt === null;
+      const assignmentChanged =
+        request.user.role === "admin" &&
+        hasAssignedToKey &&
+        resolvedAssignedToId !== undefined &&
+        resolvedAssignedToId !== existing.assignedToId &&
+        resolvedAssignedToId !== null;
 
       const incident = await prisma.incident.update({
         where: { id: id.id },
@@ -484,6 +529,44 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           fastify.log.error(
             { err: error, incidentId: incident.id, assignee: incident.assignedTo.email },
             "Failed to send incident resolution notification"
+          );
+        }
+      }
+
+      if (assignmentChanged && incident.assignedTo?.email) {
+        const subject = `Incident assigned: ${incident.title}`;
+        const description = incident.description?.trim();
+        const assignedBy = request.user.name ?? request.user.email ?? "Administrator";
+        const textLines = [
+          `You have been assigned to incident "${incident.title}".`,
+          "",
+          `Severity: ${incident.severity}`,
+          `Status: ${incident.status}`,
+          "",
+          `Assigned by: ${assignedBy}`
+        ];
+        if (description) {
+          textLines.push("", `Summary:\n${description}`);
+        }
+        textLines.push(
+          "",
+          `Review the incident: ${env.FRONTEND_URL}/dashboard/incidents/${incident.id}`
+        );
+
+        try {
+          await sendMail({
+            to: incident.assignedTo.email,
+            subject,
+            text: textLines.join("\n")
+          });
+          fastify.log.info(
+            { incidentId: incident.id, assignee: incident.assignedTo.email },
+            "Sent reassignment notification email"
+          );
+        } catch (error) {
+          fastify.log.error(
+            { err: error, incidentId: incident.id, assignee: incident.assignedTo.email },
+            "Failed to send reassignment notification email"
           );
         }
       }
