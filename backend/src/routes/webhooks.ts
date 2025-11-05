@@ -397,25 +397,15 @@ function authenticateRequest(
   };
 }
 
-<<<<<<< HEAD
-function verifySignature(rawBody: Buffer | undefined, signature: string): boolean {
-=======
 function verifySignature(rawBody: Buffer | string | undefined, signature: string): boolean {
->>>>>>> 04c182f (Add webhook automation with notifications and metrics)
   if (!rawBody) {
     return false;
   }
   try {
-<<<<<<< HEAD
-    const expected = crypto
-      .createHmac("sha256", env.WEBHOOK_HMAC_SECRET)
-      .update(rawBody)
-=======
     const bodyBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
     const expected = crypto
       .createHmac("sha256", env.WEBHOOK_HMAC_SECRET)
       .update(bodyBuffer)
->>>>>>> 04c182f (Add webhook automation with notifications and metrics)
       .digest("hex");
 
     const providedBuffer = Buffer.from(signature.toLowerCase(), "hex");
