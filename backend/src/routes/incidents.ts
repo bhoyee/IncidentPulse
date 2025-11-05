@@ -7,8 +7,13 @@ import {
   incidentUpdateLogSchema,
   updateIncidentSchema
 } from "../lib/validation";
-import { sendMail } from "../lib/mailer";
-import { env } from "../env";
+import {
+  incidentNotificationInclude,
+  loadActiveAdmins,
+  notifyAdminsOfIncident,
+  notifyAssigneeOfAssignment,
+  notifyAssigneeOfResolution
+} from "../lib/incident-notifier";
 
 const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -145,16 +150,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const { assignedToId, categories, impactScope, ...incidentPayload } = parsedBody.data;
 
-      const admins = await prisma.user.findMany({
-        where: {
-          role: "admin",
-          isActive: true
-        },
-        select: {
-          email: true,
-          name: true
-        }
-      });
+      const admins = await loadActiveAdmins();
 
       let resolvedAssignedToId: string | null = null;
       if (request.user.role === "admin") {
@@ -184,113 +180,16 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           assignedToId: resolvedAssignedToId ?? undefined,
           createdById: request.user.id
         },
-        include: {
-          assignedTo: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              teamRoles: true
-            }
-          },
-          createdBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              teamRoles: true
-            }
-          }
-        }
+        include: incidentNotificationInclude
       });
 
       if (incident.assignedTo) {
-        const subject = `Incident assigned: ${incident.title}`;
-        const description = incident.description?.trim();
-        const textLines = [
-          `You have been assigned to incident "${incident.title}".`,
-          "",
-          `Severity: ${incident.severity}`,
-          `Status: ${incident.status}`,
-          "",
-          `Reported by: ${
-            incident.createdBy?.name ?? incident.createdBy?.email ?? "Unknown reporter"
-          }`
-        ];
-        if (description) {
-          textLines.push("", `Summary:\n${description}`);
-        }
-        textLines.push(
-          "",
-          `Review the incident: ${env.FRONTEND_URL}/dashboard/incidents/${incident.id}`
-        );
-
-        try {
-          await sendMail({
-            to: incident.assignedTo.email,
-            subject,
-            text: textLines.join("\n")
-          });
-          fastify.log.info(
-            { incidentId: incident.id, assignee: incident.assignedTo.email },
-            "Sent assignment notification email"
-          );
-        } catch (error) {
-          fastify.log.error(
-            { err: error, incidentId: incident.id, assignee: incident.assignedTo.email },
-            "Failed to send assignment notification email"
-          );
-        }
+        const assignedBy =
+          request.user.name ?? request.user.email ?? "Administrator";
+        await notifyAssigneeOfAssignment(fastify.log, incident, assignedBy);
       }
 
-      if (admins.length === 0) {
-        fastify.log.warn(
-          { incidentId: incident.id },
-          "Incident created but no active admins available for notification"
-        );
-      } else {
-        const adminEmails = admins.map((admin) => admin.email);
-        const reporterName =
-          incident.createdBy?.name ||
-          incident.createdBy?.email ||
-          "Unknown reporter";
-        const incidentUrl = `${env.FRONTEND_URL}/dashboard/incidents/${incident.id}`;
-        const subject = `New incident reported: ${incident.title}`;
-        const description = incident.description?.trim();
-        const textBody = [
-          `A new incident was reported and requires review.`,
-          "",
-          `Title: ${incident.title}`,
-          `Severity: ${incident.severity}`,
-          `Status: ${incident.status}`,
-          `Reported by: ${reporterName}`,
-          "",
-          `Review the incident: ${incidentUrl}`,
-          "",
-          description ? `Description:\n${description}` : ""
-        ]
-          .filter(Boolean)
-          .join("\n");
-
-        try {
-          await sendMail({
-            to: adminEmails,
-            subject,
-            text: textBody
-          });
-          fastify.log.info(
-            { incidentId: incident.id, recipients: adminEmails },
-            "Sent admin notification for new incident"
-          );
-        } catch (error) {
-          fastify.log.error(
-            { err: error, incidentId: incident.id },
-            "Failed to send admin incident notification"
-          );
-        }
-      }
+      await notifyAdminsOfIncident(fastify.log, incident, admins);
 
       return reply.status(201).send({
         error: false,
@@ -466,109 +365,18 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
             : {}),
           ...(shouldSetResolvedAt ? { resolvedAt: now } : {})
         },
-        include: {
-          assignedTo: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              teamRoles: true
-            }
-          },
-          createdBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              teamRoles: true
-            }
-          }
-        }
+        include: incidentNotificationInclude
       });
 
-      if (statusChangedToResolved && incident.assignedTo?.email) {
+      if (statusChangedToResolved) {
         const resolutionTime = incident.resolvedAt ?? now;
-        const subject = `Incident resolved: ${incident.title}`;
-        const description = incident.description?.trim();
-        const textLines = [
-          `Good news — the incident "${incident.title}" has been resolved.`,
-          "",
-          `Severity: ${incident.severity}`,
-          `Status: ${incident.status}`,
-          `Resolved at: ${resolutionTime.toISOString()}`,
-          "",
-          `Reported by: ${
-            incident.createdBy?.name ?? incident.createdBy?.email ?? "Unknown reporter"
-          }`
-        ];
-
-        if (description) {
-          textLines.push("", `Summary:\n${description}`);
-        }
-
-        textLines.push(
-          "",
-          "You were listed as the owner. No further action is required unless stakeholders need a follow-up."
-        );
-
-        const textBody = textLines.join("\n");
-
-        try {
-          await sendMail({
-            to: incident.assignedTo.email,
-            subject,
-            text: textBody
-          });
-          fastify.log.info(
-            { incidentId: incident.id, assignee: incident.assignedTo.email },
-            "Sent incident resolution notification"
-          );
-        } catch (error) {
-          fastify.log.error(
-            { err: error, incidentId: incident.id, assignee: incident.assignedTo.email },
-            "Failed to send incident resolution notification"
-          );
-        }
+        await notifyAssigneeOfResolution(fastify.log, incident, resolutionTime);
       }
 
-      if (assignmentChanged && incident.assignedTo?.email) {
-        const subject = `Incident assigned: ${incident.title}`;
-        const description = incident.description?.trim();
-        const assignedBy = request.user.name ?? request.user.email ?? "Administrator";
-        const textLines = [
-          `You have been assigned to incident "${incident.title}".`,
-          "",
-          `Severity: ${incident.severity}`,
-          `Status: ${incident.status}`,
-          "",
-          `Assigned by: ${assignedBy}`
-        ];
-        if (description) {
-          textLines.push("", `Summary:\n${description}`);
-        }
-        textLines.push(
-          "",
-          `Review the incident: ${env.FRONTEND_URL}/dashboard/incidents/${incident.id}`
-        );
-
-        try {
-          await sendMail({
-            to: incident.assignedTo.email,
-            subject,
-            text: textLines.join("\n")
-          });
-          fastify.log.info(
-            { incidentId: incident.id, assignee: incident.assignedTo.email },
-            "Sent reassignment notification email"
-          );
-        } catch (error) {
-          fastify.log.error(
-            { err: error, incidentId: incident.id, assignee: incident.assignedTo.email },
-            "Failed to send reassignment notification email"
-          );
-        }
+      if (assignmentChanged) {
+        const assignedBy =
+          request.user.name ?? request.user.email ?? "Administrator";
+        await notifyAssigneeOfAssignment(fastify.log, incident, assignedBy);
       }
 
       return reply.send({

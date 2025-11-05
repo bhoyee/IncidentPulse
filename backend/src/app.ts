@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import sensible from "@fastify/sensible";
+import rawBody from "fastify-raw-body";
 import fastifyJwt from "@fastify/jwt";
 import { env } from "./env";
 import { databaseHealthCheck } from "./lib/db";
@@ -12,6 +13,7 @@ import incidentsRoutes from "./routes/incidents";
 import publicRoutes from "./routes/public";
 import metricsRoutes from "./routes/metrics";
 import teamRoutes from "./routes/team";
+import webhooksRoutes from "./routes/webhooks";
 
 export function buildApp() {
   const fastify = Fastify({
@@ -29,6 +31,12 @@ export function buildApp() {
   });
 
   fastify.register(sensible);
+  fastify.register(rawBody, {
+    field: "rawBody",
+    global: false,
+    encoding: false,
+    runFirst: true
+  });
   fastify.register(cookie);
   fastify.register(cors, {
     origin: env.FRONTEND_URL,
@@ -84,6 +92,7 @@ export function buildApp() {
   fastify.register(publicRoutes, { prefix: "/public" });
   fastify.register(metricsRoutes, { prefix: "/metrics" });
   fastify.register(teamRoutes, { prefix: "/team" });
+  fastify.register(webhooksRoutes, { prefix: "/webhooks" });
 
   registerIncidentEscalationWatcher(fastify);
 

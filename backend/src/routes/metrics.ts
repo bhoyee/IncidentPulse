@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { prisma } from "../lib/db";
 import { refreshStatusCache } from "../lib/status";
+import { getWebhookMetrics } from "../lib/webhook-metrics";
 
 const metricsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -50,6 +51,17 @@ const metricsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.send({
         error: false,
         data: snapshot
+      });
+    }
+  );
+
+  fastify.get(
+    "/webhook",
+    { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
+    async (_request, reply) => {
+      return reply.send({
+        error: false,
+        data: getWebhookMetrics()
       });
     }
   );

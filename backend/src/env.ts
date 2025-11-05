@@ -9,6 +9,9 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
   SMTP_FROM_ADDRESS: z.string().email("SMTP_FROM_ADDRESS must be a valid email"),
   SMTP_FROM_NAME: z.string().min(1, "SMTP_FROM_NAME is required"),
+  WEBHOOK_HMAC_SECRET: z.string().min(1, "WEBHOOK_HMAC_SECRET is required"),
+  WEBHOOK_SHARED_TOKEN: z.string().min(1).optional(),
+  WEBHOOK_SYSTEM_USER_ID: z.string().uuid().optional(),
   INCIDENT_ESCALATION_MINUTES: z.coerce.number().int().positive().default(15),
   INCIDENT_ESCALATION_POLL_SECONDS: z.coerce
     .number()

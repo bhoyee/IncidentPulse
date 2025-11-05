@@ -16,6 +16,7 @@ declare module "fastify" {
       email: string;
       name: string;
     };
+    rawBody?: Buffer;
   }
 }
 
@@ -35,4 +36,3 @@ declare module "@fastify/jwt" {
     };
   }
 }
-
