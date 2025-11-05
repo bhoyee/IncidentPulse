@@ -68,7 +68,7 @@ export async function notifyAdminsOfIncident(
   const reporterName =
     incident.createdBy?.name ?? incident.createdBy?.email ?? "Unknown reporter";
   const description = incident.description?.trim();
-  const incidentUrl = `${env.FRONTEND_URL}/dashboard/incidents/${incident.id}`;
+  const incidentUrl = `${env.FRONTEND_URL}/dashboard?incidentId=${incident.id}`;
 
   const textLines = [
     "A new incident was reported and requires review.",
@@ -128,7 +128,7 @@ export async function notifyAssigneeOfAssignment(
     textLines.push("", `Summary:\n${description}`);
   }
 
-  textLines.push("", `Review the incident: ${env.FRONTEND_URL}/dashboard/incidents/${incident.id}`);
+  textLines.push("", `Review the incident: ${env.FRONTEND_URL}/dashboard?incidentId=${incident.id}`);
 
   try {
     await sendMail({

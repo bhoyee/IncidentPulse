@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDownIcon, Bars3Icon, XMarkIcon, ChevronRightIcon, ChevronLeftIcon, PencilIcon, TrashIcon, KeyIcon, CheckIcon, XMarkIcon as XIcon } from "@heroicons/react/24/solid";
 import { AuthGuard } from "@components/AuthGuard";
 import { IncidentsTable } from "@components/IncidentsTable";
@@ -43,6 +44,10 @@ const mockResetPassword = async (userId: string) => {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const incidentIdFromQuery = searchParams.get("incidentId");
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [statusFilter, setStatusFilter] = useState<IncidentStatus | undefined>();
   const [severityFilter, setSeverityFilter] = useState<IncidentSeverity | undefined>();
@@ -110,6 +115,21 @@ export default function DashboardPage() {
     return teamUsers.filter((user) => user.isActive);
   }, [teamUsers]);
 
+  useEffect(() => {
+    if (!incidentIdFromQuery) {
+      setSelectedIncidentId(null);
+      setSelectedIncident(null);
+      return;
+    }
+
+    setSelectedIncidentId(incidentIdFromQuery);
+
+    const match = incidents.find((incident) => incident.id === incidentIdFromQuery);
+    if (match) {
+      setSelectedIncident(match);
+    }
+  }, [incidentIdFromQuery, incidents]);
+
   const filterChips = useMemo(() => {
     const chips: Array<{ label: string; onClear: () => void }> = [];
     if (statusFilter) {
@@ -145,6 +165,18 @@ export default function DashboardPage() {
   const criticalIncidents = incidents.filter(i => i.severity === 'critical').length;
   const activeIncidents = incidents.filter(i => i.status !== 'resolved').length;
   const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
+
+  const handleIncidentSelect = (incident: Incident) => {
+    setSelectedIncident(incident);
+    setSelectedIncidentId(incident.id);
+    router.replace(`/dashboard?incidentId=${incident.id}`, { scroll: false });
+  };
+
+  const handleIncidentDrawerClose = () => {
+    setSelectedIncident(null);
+    setSelectedIncidentId(null);
+    router.replace("/dashboard", { scroll: false });
+  };
 
   const toggleUserExpansion = (userId: string) => {
     setExpandedUser(expandedUser === userId ? null : userId);
@@ -538,7 +570,7 @@ export default function DashboardPage() {
                       <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
                         <IncidentsTable
                           incidents={incidents}
-                          onSelect={(incident) => setSelectedIncident(incident)}
+                          onSelect={handleIncidentSelect}
                           currentUserId={session?.id ?? ""}
                           isAdmin={Boolean(isAdmin)}
                         />
@@ -926,9 +958,9 @@ export default function DashboardPage() {
 
         {/* Incident Drawer for viewing/editing */}
         <IncidentDrawer
-          incidentId={selectedIncident?.id}
-          open={Boolean(selectedIncident)}
-          onClose={() => setSelectedIncident(null)}
+          incidentId={selectedIncidentId ?? undefined}
+          open={Boolean(selectedIncidentId)}
+          onClose={handleIncidentDrawerClose}
           currentUser={{
             id: session?.id ?? "",
             role: session?.role ?? "viewer"
