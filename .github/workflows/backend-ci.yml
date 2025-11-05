@@ -58,15 +58,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # This ensures all history is fetched
-
-      - name: Debug - Show latest commit
-        run: |
-          echo "Latest commit:"
-          git log -1 --oneline
-          echo "Branch: $(git branch --show-current)"
-          echo "HEAD: $(git rev-parse HEAD)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -107,12 +98,15 @@ jobs:
           echo "🚀 Triggering Render deploy..."
           echo "Service ID: $RENDER_SERVICE_ID"
           
+          # Create a JSON file to ensure proper formatting
+          echo '{"clearCache": "clear"}' > deploy_payload.json
+          
           # Make API request to trigger deploy
           response=$(curl -s -w "\n%{http_code}" -X POST \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
             https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys \
-            -d '{"clearCache": true}')
+            -d @deploy_payload.json)
           
           # Extract HTTP status code (last line)
           http_code=$(echo "$response" | tail -n1)
@@ -133,9 +127,3 @@ jobs:
             echo "3. The service exists in your Render account"
             exit 1
           fi
-
-      - name: Verify deploy triggered
-        run: |
-          echo "🎉 If you see the success message above, Render deploy was triggered."
-          echo "Note: It may take a few minutes for Render to start the deployment."
-          echo "Check your Render dashboard for the deployment status."
