@@ -992,7 +992,12 @@ export default function DocumentationPage() {
                   </h3>
                   <ul className="mt-4 space-y-2 text-sm text-slate-600">
                     <li>
+<<<<<<< HEAD
                       <code className="font-mono text-xs text-slate-500">WEBHOOK_HMAC_SECRET</code> &ndash; required hex string used when calculating HMAC signatures.
+=======
+                      <code className="font-mono text-xs text-slate-500">WEBHOOK_HMAC_SECRET</code> &ndash; required hex string used when calculating HMAC signatures. Generate it once (for example
+                      <code className="ml-1 font-mono text-xs text-slate-500">openssl rand -hex 32</code>), store it in Render &rarr; Environment, and distribute it to downstream tools via your secrets manager &mdash; it is not displayed in the dashboard.
+>>>>>>> caa9d9e (Document webhook automation and surface dashboard links)
                     </li>
                     <li>
                       <code className="font-mono text-xs text-slate-500">WEBHOOK_SHARED_TOKEN</code> &ndash; optional bearer token for services that cannot sign requests.
@@ -1004,6 +1009,12 @@ export default function DocumentationPage() {
                       Track adoption via <code className="font-mono text-xs text-slate-500">GET /metrics/webhook</code> (requires admin authentication).
                     </li>
                   </ul>
+<<<<<<< HEAD
+=======
+                  <p className="mt-4 text-xs text-slate-600">
+                    Treat the HMAC secret like any other credential: rotate it from Render if compromised and share it with integrators through a secure channel (password vault, secret manager). The dashboard intentionally avoids displaying the secret to prevent leakage.
+                  </p>
+>>>>>>> caa9d9e (Document webhook automation and surface dashboard links)
                 </div>
               </div>
               <div className="grid gap-6 lg:grid-cols-2">

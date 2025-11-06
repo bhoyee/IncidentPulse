@@ -606,6 +606,12 @@ function DashboardPageContent() {
                           <span className="font-mono">GET /metrics/webhook</span>.
                         </div>
                       </div>
+
+
+                      <p className="mt-3 text-xs text-blue-700">
+                        Generate the HMAC secret once (for example <span className="font-mono">openssl rand -hex 32</span>), store it in your Render environment, and share it with monitoring tools through a secure channel. The dashboard never exposes secret values to reduce leakage risk.
+                      </p>
+
                     </div>
                   )}
 
