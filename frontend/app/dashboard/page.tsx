@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDownIcon, Bars3Icon, XMarkIcon, ChevronRightIcon, ChevronLeftIcon, PencilIcon, TrashIcon, KeyIcon, CheckIcon, XMarkIcon as XIcon } from "@heroicons/react/24/solid";
@@ -71,6 +72,10 @@ function DashboardPageContent() {
     ? DEMO_ACCOUNT_EMAILS.has(session.email.toLowerCase())
     : false;
   const canChangePassword = Boolean((isAdmin || isOperator) && !isDemoAccount);
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "";
+  const webhookBase = (apiBase || "https://your-backend.example.com").replace(/\/$/, "");
+  const alertEndpoint = `${webhookBase}/webhooks/incidents`;
+  const recoveryEndpoint = `${webhookBase}/webhooks/incidents/recovery`;
 
   useEffect(() => {
     if (!isAdmin) {
@@ -551,6 +556,56 @@ function DashboardPageContent() {
                           <span className="ml-1.5 text-blue-600">×</span>
                         </button>
                       ))}
+                    </div>
+                  )}
+
+                  {isAdmin && (
+                    <div className="mt-6 rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <h3 className="text-sm font-semibold text-blue-800">Webhook automation</h3>
+                          <p className="text-xs text-blue-700 mt-1">
+                            Pipe alerts from monitoring tools directly into IncidentPulse and close incidents automatically when systems recover.
+                          </p>
+                        </div>
+                        <Link
+                          href="/docs#webhooks"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 underline hover:text-blue-900"
+                        >
+                          View webhook guide →
+                        </Link>
+                      </div>
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Alert endpoint</p>
+                          <code className="mt-1 block break-all rounded border border-blue-200 bg-white px-3 py-2 font-mono text-xs text-blue-800">
+                            {alertEndpoint}
+                          </code>
+                          <p className="mt-2 text-xs text-blue-700">
+                            Authenticate with <span className="font-mono">X-Signature</span> (HMAC-SHA256) or the fallback{" "}
+                            <span className="font-mono">X-Webhook-Token</span>.
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Recovery endpoint</p>
+                          <code className="mt-1 block break-all rounded border border-blue-200 bg-white px-3 py-2 font-mono text-xs text-blue-800">
+                            {recoveryEndpoint}
+                          </code>
+                          <p className="mt-2 text-xs text-blue-700">
+                            Include the matching <span className="font-mono">fingerprint</span> to resolve incidents and notify the assignee.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid gap-2 text-xs text-blue-700 lg:grid-cols-2">
+                        <div>
+                          Required env: <span className="font-mono">WEBHOOK_HMAC_SECRET</span>. Optional:{" "}
+                          <span className="font-mono">WEBHOOK_SHARED_TOKEN</span>, <span className="font-mono">WEBHOOK_SYSTEM_USER_ID</span>.
+                        </div>
+                        <div>
+                          Rate limit 60 req/min per token, <span className="font-mono">occurredAt</span> skew ±10 min, metrics via{" "}
+                          <span className="font-mono">GET /metrics/webhook</span>.
+                        </div>
+                      </div>
                     </div>
                   )}
 

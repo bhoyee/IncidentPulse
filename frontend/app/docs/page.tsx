@@ -26,6 +26,7 @@ const docSections = [
   { id: "features", label: "Core Features" },
   { id: "architecture", label: "Architecture" },
   { id: "setup", label: "Setup Guide" },
+  { id: "webhooks", label: "Webhook Automation" },
   { id: "api", label: "API Reference" },
   { id: "ui", label: "UI Guide" },
   { id: "faq", label: "FAQ" },
@@ -287,6 +288,36 @@ Content-Type: application/json
 }`
   }
 ];
+
+const webhookAlertSample = `POST /webhooks/incidents
+Content-Type: application/json
+X-Signature: <hex-hmac-from-WEBHOOK_HMAC_SECRET>
+
+{
+  "service": "checkout-api",
+  "environment": "production",
+  "eventType": "error_spike",
+  "message": "500 errors exceeded 5% in the last 2 minutes",
+  "severity": "high",
+  "occurredAt": "2024-11-05T22:55:00Z",
+  "fingerprint": "checkout-api|production|error_spike",
+  "meta": {
+    "errorCount": 324,
+    "threshold": "5%"
+  }
+}`;
+
+const webhookRecoverySample = `POST /webhooks/incidents/recovery
+Content-Type: application/json
+X-Signature: <hex-hmac-from-WEBHOOK_HMAC_SECRET>
+
+{
+  "fingerprint": "checkout-api|production|error_spike",
+  "occurredAt": "2024-11-05T23:05:00Z",
+  "meta": {
+    "note": "Service restored automatically"
+  }
+}`;
 
 const uiScreens = [
   {
@@ -924,8 +955,84 @@ export default function DocumentationPage() {
               </div>
             </section>
 
+            <section id="webhooks" className="scroll-mt-32 space-y-8">
+              <SectionBadge index={5} label="Webhook Automation" />
+              <div className="space-y-4">
+                <h2 className="text-3xl font-semibold text-slate-900">Automate incident intake from observability tools</h2>
+                <p className="text-base text-slate-600">
+                  Connect monitoring platforms, scheduled jobs, or custom scripts to IncidentPulse. Alerts create or update incidents automatically,
+                  while recovery events close them and notify the assigned operator.
+                </p>
+              </div>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    Endpoints & authentication
+                  </h3>
+                  <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                    <li>
+                      <strong className="font-semibold text-slate-800">POST /webhooks/incidents</strong> &ndash; create, dedupe, or escalate incidents.
+                    </li>
+                    <li>
+                      <strong className="font-semibold text-slate-800">POST /webhooks/incidents/recovery</strong> &ndash; resolve the matching incident once service is healthy.
+                    </li>
+                    <li>
+                      Sign requests with <code className="font-mono text-xs text-slate-500">X-Signature</code> (HMAC-SHA256 using <code className="font-mono text-xs text-slate-500">WEBHOOK_HMAC_SECRET</code>).
+                      Trusted internal tools can fall back to <code className="font-mono text-xs text-slate-500">X-Webhook-Token</code>.
+                    </li>
+                    <li>
+                      Support for <code className="font-mono text-xs text-slate-500">X-Idempotency-Key</code>, a 60 requests/minute rate limit per token, and a &plusmn;10 minute skew window on
+                      <code className="font-mono text-xs text-slate-500">occurredAt</code> keeps integrations reliable.
+                    </li>
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    Environment variables
+                  </h3>
+                  <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                    <li>
+                      <code className="font-mono text-xs text-slate-500">WEBHOOK_HMAC_SECRET</code> &ndash; required hex string used when calculating HMAC signatures.
+                    </li>
+                    <li>
+                      <code className="font-mono text-xs text-slate-500">WEBHOOK_SHARED_TOKEN</code> &ndash; optional bearer token for services that cannot sign requests.
+                    </li>
+                    <li>
+                      <code className="font-mono text-xs text-slate-500">WEBHOOK_SYSTEM_USER_ID</code> &ndash; optional UUID of the automation account that should author webhook incidents.
+                    </li>
+                    <li>
+                      Track adoption via <code className="font-mono text-xs text-slate-500">GET /metrics/webhook</code> (requires admin authentication).
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <CodeBlock label="Alert webhook request" value={webhookAlertSample} />
+                <CodeBlock label="Recovery webhook request" value={webhookRecoverySample} />
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Platform behaviour
+                </h3>
+                <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                  <li>
+                    Alerts dedupe on <code className="font-mono text-xs text-slate-500">fingerprint</code> for ten minutes while the incident is open; higher severity replays automatically escalate.
+                  </li>
+                  <li>
+                    Recovery payloads resolve the open incident, set <code className="font-mono text-xs text-slate-500">resolvedAt</code>, and notify the assigned operator plus the incident timeline.
+                  </li>
+                  <li>
+                    Admins are notified on creation, repeat alerts append timeline updates, and all interactions are included in audit logs.
+                  </li>
+                  <li>
+                    Need a refresher? Visit <Link href="/docs#webhooks" className="text-blue-600 underline">/docs#webhooks</Link> for Postman scripts, cURL examples, and troubleshooting tips.
+                  </li>
+                </ul>
+              </div>
+            </section>
+
             <section id="api" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={5} label="API Reference" />
+              <SectionBadge index={6} label="API Reference" />
               <div className="space-y-4">
                 <h2 className="text-3xl font-semibold text-slate-900">Developer-friendly REST API</h2>
                 <p className="text-base text-slate-600">
@@ -955,7 +1062,7 @@ export default function DocumentationPage() {
             </section>
 
             <section id="ui" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={6} label="UI Guide" />
+              <SectionBadge index={7} label="UI Guide" />
               <div className="space-y-4">
                 <h2 className="text-3xl font-semibold text-slate-900">Screens built for clarity</h2>
                 <p className="text-base text-slate-600">
@@ -976,7 +1083,7 @@ export default function DocumentationPage() {
             </section>
 
             <section id="faq" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={7} label="FAQ & Troubleshooting" />
+              <SectionBadge index={8} label="FAQ & Troubleshooting" />
               <div className="space-y-4">
                 <h2 className="text-3xl font-semibold text-slate-900">Answers to common questions</h2>
                 <p className="text-base text-slate-600">
@@ -1002,7 +1109,7 @@ export default function DocumentationPage() {
             </section>
 
             <section id="credits" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={8} label="Credits & License" />
+              <SectionBadge index={9} label="Credits & License" />
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 className="text-2xl font-semibold text-slate-900">Open collaboration encouraged</h2>
                 <p className="mt-2 text-sm text-slate-600">
