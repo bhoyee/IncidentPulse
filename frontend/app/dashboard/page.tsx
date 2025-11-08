@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDownIcon, Bars3Icon, XMarkIcon, ChevronRightIcon, ChevronLeftIcon, PencilIcon, TrashIcon, KeyIcon, CheckIcon, XMarkIcon as XIcon } from "@heroicons/react/24/solid";
+import { ChevronDownIcon, Bars3Icon, XMarkIcon, ChevronRightIcon, PencilIcon, TrashIcon, KeyIcon, XMarkIcon as XIcon } from "@heroicons/react/24/solid";
 import { AuthGuard } from "@components/AuthGuard";
 import { IncidentsTable } from "@components/IncidentsTable";
 import { IncidentDrawer } from "@components/IncidentDrawer";
@@ -12,6 +13,8 @@ import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { IntegrationsPanel } from "@components/IntegrationsPanel";
 import { useIncidents } from "@hooks/useIncidents";
 import { useSession } from "@hooks/useSession";
+import type { SessionUser } from "@hooks/useSession";
+import { useLogout } from "@hooks/useLogout";
 import {
   useTeamUsers,
   type TeamUser,
@@ -24,6 +27,8 @@ import {
 } from "@hooks/useIntegrationSettings";
 import type { Incident, IncidentSeverity, IncidentStatus } from "@lib/types";
 import { TeamManagementPanel } from "@components/TeamManagementPanel";
+
+type DashboardTab = "incidents" | "team" | "password" | "webhooks";
 
 const statusFilters: IncidentStatus[] = ["open", "investigating", "monitoring", "resolved"];
 const severityFilters: IncidentSeverity[] = ["low", "medium", "high", "critical"];
@@ -61,9 +66,7 @@ function DashboardPageContent() {
   const [assigneeFilter, setAssigneeFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
   const [teamPage, setTeamPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "password" | "webhooks">(
-    "incidents"
-  );
+  const [activeTab, setActiveTab] = useState<DashboardTab>("incidents");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
@@ -73,6 +76,7 @@ function DashboardPageContent() {
   const teamPageSize = 25;
 
   const { data: session } = useSession();
+  const logout = useLogout();
   const isAdmin = session?.role === "admin";
   const isOperator = session?.role === "operator";
   const canCreate = Boolean(isAdmin || isOperator);
@@ -88,7 +92,6 @@ function DashboardPageContent() {
     Boolean(isAdmin && activeTab === "webhooks")
   );
   const updateIntegrationSettings = useUpdateIntegrationSettings();
-  const isWebhooksTab = activeTab === "webhooks";
 
   useEffect(() => {
     if (!isAdmin) {
@@ -279,858 +282,464 @@ const saveEditing = async (userId: string, e?: React.MouseEvent) => {
   // Available roles for the role selector
   const availableRoles = ['admin', 'operator', 'viewer'];
   const availableTeamRoles = ['Frontend', 'Backend', 'DevOps', 'Security', 'Support', 'Manager'];
+  const firstName = session?.name?.split(" ")[0] ?? "there";
+
+  const baseSidebarItems: Array<{
+    id: DashboardTab;
+    label: string;
+    description: string;
+    adminOnly?: boolean;
+    requiresPassword?: boolean;
+  }> = [
+    { id: "incidents", label: "Incidents", description: "Live incident feed" },
+    { id: "team", label: "Team", description: "Manage roles & assignments", adminOnly: true },
+    { id: "webhooks", label: "Automation", description: "Webhooks & notifications", adminOnly: true },
+    { id: "password", label: "Security", description: "Update password", requiresPassword: true }
+  ];
+
+  const sidebarNavItems = baseSidebarItems.filter((item) => {
+    if (item.adminOnly && !isAdmin) return false;
+    if (item.requiresPassword && !canChangePassword) return false;
+    return true;
+  });
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              {/* Logo and title */}
-              <div className="flex items-center">
-                <div className="flex-shrink-0 flex items-center">
-                  <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">⚡</span>
-                  </div>
-                  <span className="ml-3 text-xl font-bold text-gray-900">IncidentPulse</span>
-                </div>
-                
-                {/* Desktop Navigation */}
-                <nav className="hidden md:ml-8 md:flex space-x-8">
-                  <button
-                    onClick={() => setActiveTab("incidents")}
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                      activeTab === "incidents"
-                        ? "border-blue-500 text-gray-900"
-                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                    }`}
-                  >
-                    Incidents
-                  </button>
-                  {isAdmin && (
-                    <button
-                      onClick={() => setActiveTab("team")}
-                      className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                        activeTab === "team"
-                          ? "border-blue-500 text-gray-900"
-                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                      }`}
-                  >
-                    Team Management
-                  </button>
-                )}
-                {isAdmin && (
-                  <button
-                    onClick={() => setActiveTab("webhooks")}
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                      activeTab === "webhooks"
-                        ? "border-blue-500 text-gray-900"
-                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                    }`}
-                  >
-                    Webhooks
-                  </button>
-                )}
-                {canChangePassword && (
-                  <button
-                    onClick={() => setActiveTab("password")}
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                      activeTab === "password"
-                          ? "border-blue-500 text-gray-900"
-                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                      }`}
+
+      <DashboardShell
+        session={session}
+        canCreate={canCreate}
+        onNewIncident={() => setIsNewIncidentOpen(true)}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={(open) => setMobileMenuOpen(open)}
+        sidebarNavItems={sidebarNavItems}
+        stats={{
+          total: incidents.length,
+          active: activeIncidents,
+          critical: criticalIncidents,
+          resolved: resolvedIncidents
+        }}
+        firstName={firstName}
+        logout={logout}
+      >
+        {activeTab === "incidents" && (
+          <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Incident management</h2>
+                <p className="text-sm text-gray-600">
+                  Track investigations, assignments, and customer messaging in one view.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <FilterSelect
+                  label="Status"
+                  value={statusFilter}
+                  options={statusFilters}
+                  onChange={(status) => setStatusFilter(status)}
+                />
+                <FilterSelect
+                  label="Severity"
+                  value={severityFilter}
+                  options={severityFilters}
+                  onChange={(severity) => setSeverityFilter(severity)}
+                />
+                <FilterSelect
+                  label="Team role"
+                  value={teamRoleFilter}
+                  options={availableTeamRoles as readonly string[]}
+                  onChange={(role) => setTeamRoleFilter(role)}
+                />
+                <div className="flex min-w-[180px] flex-col">
+                  <label className="mb-1 text-xs font-medium text-gray-500">Assignee</label>
+                  <div className="relative">
+                    <select
+                      value={assigneeFilter ?? ""}
+                      onChange={(event) => setAssigneeFilter(event.target.value || undefined)}
+                      className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2 pr-8 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                      Change Password
-                    </button>
-                  )}
-                </nav>
-              </div>
-
-              {/* User menu and mobile button */}
-              <div className="flex items-center">
-                {/* New Incident Button */}
-                {canCreate && (
-                  <button 
-                    onClick={() => setIsNewIncidentOpen(true)}
-                    className="hidden sm:inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mr-4"
-                  >
-                    + New Incident
-                  </button>
-                )}
-
-                {/* User profile */}
-                <div className="flex items-center">
-                  <div className="hidden sm:flex sm:flex-col sm:items-end sm:mr-4">
-                    <div className="text-sm font-medium text-gray-900">{session?.name}</div>
-                    <div className="text-sm text-gray-500 capitalize">{session?.role}</div>
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center border-2 border-white">
-                    <span className="text-blue-600 text-sm font-medium">
-                      {session?.name?.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Mobile menu button */}
-                <div className="md:hidden ml-4">
-                  <button
-                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                    className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-                  >
-                    {mobileMenuOpen ? (
-                      <XMarkIcon className="block h-6 w-6" />
-                    ) : (
-                      <Bars3Icon className="block h-6 w-6" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Mobile menu */}
-          {mobileMenuOpen && (
-            <div className="md:hidden">
-              <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200">
-                <button
-                  onClick={() => {
-                    setActiveTab("incidents");
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${
-                    activeTab === "incidents"
-                      ? "bg-blue-50 text-blue-700 border-l-4 border-blue-700"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                  }`}
-                >
-                  Incidents
-                </button>
-                {isAdmin && (
-                  <button
-                    onClick={() => {
-                      setActiveTab("team");
-                      setMobileMenuOpen(false);
-                    }}
-                    className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${
-                      activeTab === "team"
-                        ? "bg-blue-50 text-blue-700 border-l-4 border-blue-700"
-                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                    }`}
-                  >
-                    Team Management
-                  </button>
-                )}
-                {isAdmin && (
-                  <button
-                    onClick={() => {
-                      setActiveTab("webhooks");
-                      setMobileMenuOpen(false);
-                    }}
-                    className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${
-                      activeTab === "webhooks"
-                        ? "bg-blue-50 text-blue-700 border-l-4 border-blue-700"
-                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                    }`}
-                  >
-                    Webhooks
-                  </button>
-                )}
-                {canChangePassword && (
-                  <button
-                    onClick={() => {
-                      setActiveTab("password");
-                      setMobileMenuOpen(false);
-                    }}
-                    className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${
-                      activeTab === "password"
-                        ? "bg-blue-50 text-blue-700 border-l-4 border-blue-700"
-                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                    }`}
-                  >
-                    Change Password
-                  </button>
-                )}
-                {canCreate && (
-                  <button 
-                    onClick={() => {
-                      setIsNewIncidentOpen(true);
-                      setMobileMenuOpen(false);
-                    }}
-                    className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-green-600 hover:bg-green-50 hover:text-green-700"
-                  >
-                    + New Incident
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </header>
-
-        {/* Main Content - Full Width */}
-        <main className="max-w-full mx-auto pb-8">
-          {/* Stats Overview */}
-          <div className="px-4 sm:px-6 lg:px-8 mt-6">
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {/* Total Incidents */}
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 bg-blue-100 rounded-md p-3">
-                      <div className="h-6 w-6 text-blue-600">📊</div>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Total Incidents</dt>
-                        <dd className="text-lg font-semibold text-gray-900">{incidents.length}</dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Active Incidents */}
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 bg-orange-100 rounded-md p-3">
-                      <div className="h-6 w-6 text-orange-600">🔥</div>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Active</dt>
-                        <dd className="text-lg font-semibold text-gray-900">{activeIncidents}</dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Critical */}
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 bg-red-100 rounded-md p-3">
-                      <div className="h-6 w-6 text-red-600">🚨</div>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Critical</dt>
-                        <dd className="text-lg font-semibold text-gray-900">{criticalIncidents}</dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Resolved */}
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 bg-green-100 rounded-md p-3">
-                      <div className="h-6 w-6 text-green-600">✅</div>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Resolved</dt>
-                        <dd className="text-lg font-semibold text-gray-900">{resolvedIncidents}</dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Main Content Area */}
-          <div className="px-4 sm:px-6 lg:px-8 mt-6">
-            <div className="bg-white shadow rounded-lg">
-              {/* Tab Content */}
-              {activeTab === "incidents" ? (
-                <div className="p-4 sm:p-6">
-                  {/* Header and Filters */}
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
-                    <div>
-                      <h2 className="text-xl font-semibold text-gray-900">Incident Management</h2>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Monitor and manage all system incidents in real-time
-                      </p>
-                    </div>
-                    
-                    {/* Quick Actions */}
-                    <div className="mt-4 lg:mt-0 flex flex-wrap gap-3">
-                      {canCreate && (
-                        <button 
-                          onClick={() => setIsNewIncidentOpen(true)}
-                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        >
-                          + New Incident
-                        </button>
-                      )}
-                      
-                      {/* Filter Toggles */}
-                      <div className="flex flex-wrap gap-2">
-                        <FilterSelect
-                          label="Status"
-                          value={statusFilter}
-                          options={statusFilters}
-                          onChange={(status) => setStatusFilter(status)}
-                        />
-                        <FilterSelect
-                          label="Severity"
-                          value={severityFilter}
-                          options={severityFilters}
-                          onChange={(severity) => setSeverityFilter(severity)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Active Filters */}
-                  {filterChips.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-6 p-4 bg-gray-50 rounded-lg">
-                      <span className="text-sm text-gray-500">Active filters:</span>
-                      {filterChips.map((chip) => (
-                        <button
-                          key={chip.label}
-                          onClick={chip.onClear}
-                          className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-sm font-medium hover:bg-blue-200 transition-colors"
-                        >
-                          {chip.label}
-                          <span className="ml-1.5 text-blue-600">×</span>
-                        </button>
+                      <option value="">All assignees</option>
+                      {assigneeOptions.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name}
+                        </option>
                       ))}
-                    </div>
-                  )}
-
-                  {isAdmin && (
-                    <div className="mt-6 rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                          <h3 className="text-sm font-semibold text-blue-800">Webhook automation</h3>
-                          <p className="text-xs text-blue-700 mt-1">
-                            Pipe alerts from monitoring tools directly into IncidentPulse and close incidents automatically when systems recover.
-                          </p>
-                        </div>
-                        <Link
-                          href="/docs#webhooks"
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 underline hover:text-blue-900"
-                        >
-                          View webhook guide →
-                        </Link>
-                      </div>
-                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Alert endpoint</p>
-                          <code className="mt-1 block break-all rounded border border-blue-200 bg-white px-3 py-2 font-mono text-xs text-blue-800">
-                            {alertEndpoint}
-                          </code>
-                          <p className="mt-2 text-xs text-blue-700">
-                            Authenticate with <span className="font-mono">X-Signature</span> (HMAC-SHA256) or the fallback{" "}
-                            <span className="font-mono">X-Webhook-Token</span>.
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Recovery endpoint</p>
-                          <code className="mt-1 block break-all rounded border border-blue-200 bg-white px-3 py-2 font-mono text-xs text-blue-800">
-                            {recoveryEndpoint}
-                          </code>
-                          <p className="mt-2 text-xs text-blue-700">
-                            Include the matching <span className="font-mono">fingerprint</span> to resolve incidents and notify the assignee.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-4 grid gap-2 text-xs text-blue-700 lg:grid-cols-2">
-                        <div>
-                          Required env: <span className="font-mono">WEBHOOK_HMAC_SECRET</span>. Optional:{" "}
-                          <span className="font-mono">WEBHOOK_SHARED_TOKEN</span>, <span className="font-mono">WEBHOOK_SYSTEM_USER_ID</span>.
-                        </div>
-                        <div>
-                          Rate limit 60 req/min per token, <span className="font-mono">occurredAt</span> skew ±10 min, metrics via{" "}
-                          <span className="font-mono">GET /metrics/webhook</span>.
-                        </div>
-                      </div>
-
-
-                      <p className="mt-3 text-xs text-blue-700">
-                        Generate the HMAC secret once (for example <span className="font-mono">openssl rand -hex 32</span>), store it in your Render environment, and share it with monitoring tools through a secure channel. The dashboard never exposes secret values to reduce leakage risk.
-                      </p>
-
-                    </div>
-                  )}
-
-                  {/* Mobile Optimized Incidents Table */}
-                  <div className="mt-6 overflow-x-auto">
-                    <div className="min-w-full inline-block align-middle">
-                      <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-                        <IncidentsTable
-                          incidents={incidents}
-                          onSelect={handleIncidentSelect}
-                          currentUserId={session?.id ?? ""}
-                          isAdmin={Boolean(isAdmin)}
-                        />
-                      </div>
-                    </div>
+                    </select>
+                    <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   </div>
                 </div>
-                    ) : activeTab === "team" ? (
-                      /* Team Management Tab - Mobile Optimized */
-                      <div className="p-4 sm:p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
-                    <div>
-                      <h2 className="text-xl font-semibold text-gray-900">Team Management</h2>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Manage team members and their roles
-                      </p>
-                    </div>
-                    
-                    {/* Team Search */}
-                    <div className="mt-4 lg:mt-0">
-                      <input
-                        type="text"
-                        placeholder="Search team members..."
-                        value={teamSearch}
-                        onChange={(e) => setTeamSearch(e.target.value)}
-                        className="block w-full lg:w-64 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                      />
-                    </div>
-                  </div>
+              </div>
+            </div>
 
-                  {/* Mobile Team Cards */}
-                  <div className="md:hidden space-y-4">
-                    {teamUsers.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        No team members found
-                      </div>
-                    ) : isWebhooksTab ? (
-                      <div className="bg-white rounded-lg shadow border border-gray-200">
-                        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
-                          <h2 className="text-lg font-semibold text-gray-900">Webhook Automation</h2>
-                          <p className="text-sm text-gray-600 mt-1">
-                            Connect monitoring tools, then configure Slack and Telegram notifications for lifecycle events.
-                          </p>
-                        </div>
-                        <div className="p-4 sm:p-6 space-y-6">
-                          <div className="grid gap-4 lg:grid-cols-2">
-                            <div className="rounded-lg border border-gray-200 p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <div>
-                                  <p className="text-xs uppercase tracking-wide text-gray-500">Alert endpoint</p>
-                                  <p className="text-sm font-semibold text-gray-900">Create or update incidents</p>
-                                </div>
-                                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                                  POST
-                                </span>
-                              </div>
-                              <code className="mt-3 block break-all rounded border border-gray-100 bg-gray-50 p-3 text-xs text-gray-800">
-                                {alertEndpoint}
-                              </code>
-                              <ul className="mt-3 space-y-1 text-xs text-gray-600">
-                                <li>Auth: <span className="font-mono">X-Signature</span> (HMAC SHA256) or <span className="font-mono">X-Webhook-Token</span></li>
-                                <li>Body: JSON with <span className="font-mono">service</span>, <span className="font-mono">severity</span>, <span className="font-mono">occurredAt</span>, <span className="font-mono">fingerprint</span></li>
-                              </ul>
-                            </div>
-                            <div className="rounded-lg border border-gray-200 p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <div>
-                                  <p className="text-xs uppercase tracking-wide text-gray-500">Recovery endpoint</p>
-                                  <p className="text-sm font-semibold text-gray-900">Resolve incidents automatically</p>
-                                </div>
-                                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                                  POST
-                                </span>
-                              </div>
-                              <code className="mt-3 block break-all rounded border border-gray-100 bg-gray-50 p-3 text-xs text-gray-800">
-                                {recoveryEndpoint}
-                              </code>
-                              <ul className="mt-3 space-y-1 text-xs text-gray-600">
-                                <li>Required: matching <span className="font-mono">fingerprint</span></li>
-                                <li>Optional: <span className="font-mono">occurredAt</span>, <span className="font-mono">meta.note</span></li>
-                              </ul>
-                            </div>
-                          </div>
+            {isAdmin ? (
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
+                Automate intake with secure webhooks and send Slack or Telegram alerts from the Integrations tab.
+              </div>
+            ) : null}
 
-                          <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900 space-y-2">
-                            <p>
-                              Generate <code className="font-mono text-xs">WEBHOOK_HMAC_SECRET</code> once (e.g.
-                              <code className="ml-1 font-mono text-xs">openssl rand -hex 32</code>), store it in Render, and share it via your secrets manager.
-                              Configure <code className="font-mono text-xs">WEBHOOK_SHARED_TOKEN</code> for trusted scripts and monitor activity via <code className="font-mono text-xs">GET /metrics/webhook</code>.
-                            </p>
-                          </div>
+            {filterChips.length > 0 ? (
+              <div className="mt-4 flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <span className="text-sm text-gray-500">Active filters:</span>
+                {filterChips.map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={chip.onClear}
+                    className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800 transition hover:bg-blue-200"
+                  >
+                    {chip.label}
+                    <span className="ml-1.5 text-blue-600">x</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
 
-                          {isAdmin ? (
-                            <IntegrationsPanel
-                              settings={integrationSettingsQuery.data}
-                              isLoading={integrationSettingsQuery.isLoading}
-                              isSaving={updateIntegrationSettings.isPending}
-                              onSave={handleIntegrationSettingsSave}
-                            />
-                          ) : (
-                            <p className="text-sm text-gray-600">
-                              Contact an administrator if you need Slack or Telegram notifications enabled.
-                            </p>
-                          )}
+            <div className="mt-6 overflow-x-auto">
+              <div className="min-w-full inline-block align-middle">
+                <div className="overflow-hidden rounded-xl border border-gray-100 shadow">
+                  <IncidentsTable
+                    incidents={incidents}
+                    onSelect={handleIncidentSelect}
+                    currentUserId={session?.id ?? ""}
+                    isAdmin={Boolean(isAdmin)}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
-                          <div className="flex justify-end">
-                            <Link
-                              href="/docs#webhooks"
-                              className="inline-flex items-center text-sm font-semibold text-blue-600 hover:text-blue-700"
-                            >
-                              Webhook docs
-                              <ChevronRightIcon className="ml-1.5 h-4 w-4" />
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      teamUsers.map((user) => (
-                        <div 
-                          key={user.id}
-                          className={`bg-white border rounded-lg transition-all duration-200 ${
-                            expandedUser === user.id 
-                              ? 'border-blue-300 shadow-md' 
-                              : 'border-gray-200 shadow-sm'
-                          }`}
-                        >
-                          {/* Compact View */}
-                          <div 
-                            className="p-4 cursor-pointer"
-                            onClick={() => toggleUserExpansion(user.id)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center space-x-3">
-                                  <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <span className="text-blue-600 font-medium text-sm">
-                                      {user.name?.charAt(0).toUpperCase()}
-                                    </span>
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-900 truncate">
-                                      {user.name}
-                                    </p>
-                                    <p className="text-sm text-gray-500 truncate">
-                                      {user.email}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  user.isActive 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : 'bg-red-100 text-red-800'
-                                }`}>
-                                  {user.isActive ? 'Active' : 'Inactive'}
-                                </span>
-                                <ChevronRightIcon 
-                                  className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
-                                    expandedUser === user.id ? 'rotate-90' : ''
-                                  }`}
-                                />
-                              </div>
-                            </div>
-                          </div>
+        {activeTab === "team" && isAdmin && (
+          <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Team management</h2>
+                <p className="text-sm text-gray-600">Invite responders, manage roles, and keep audit trails clean.</p>
+              </div>
+              <div>
+                <input
+                  type="text"
+                  placeholder="Search team members..."
+                  value={teamSearch}
+                  onChange={(event) => setTeamSearch(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 lg:w-64"
+                />
+              </div>
+            </div>
 
-                          {/* Expanded Details */}
-                          {expandedUser === user.id && (
-                            <div className="px-4 pb-4 border-t border-gray-200 pt-4 space-y-4">
-                              {editingUser === user.id ? (
-                                /* Edit Mode */
-                                <div className="space-y-4">
-                                  <div className="grid grid-cols-1 gap-4">
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Name
-                                      </label>
-                                      <input
-                                        type="text"
-                                        value={editFormData.name || ''}
-                                        onChange={(e) => handleInputChange('name', e.target.value)}
-                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Email
-                                      </label>
-                                      <input
-                                        type="email"
-                                        value={editFormData.email || ''}
-                                        onChange={(e) => handleInputChange('email', e.target.value)}
-                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Role
-                                      </label>
-                                      <select
-                                        value={editFormData.role || ''}
-                                        onChange={(e) => handleInputChange('role', e.target.value)}
-                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                                      >
-                                        {availableRoles.map(role => (
-                                          <option key={role} value={role}>
-                                            {role.charAt(0).toUpperCase() + role.slice(1)}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Team Roles
-                                      </label>
-                                      <div className="space-y-2">
-                                        {availableTeamRoles.map(role => (
-                                          <label key={role} className="flex items-center">
-                                            <input
-                                              type="checkbox"
-                                              checked={(editFormData.teamRoles || []).includes(role)}
-                                              onChange={(e) => handleTeamRoleChange(role, e.target.checked)}
-                                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                            />
-                                            <span className="ml-2 text-sm text-gray-700">{role}</span>
-                                          </label>
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="flex items-center">
-                                        <input
-                                          type="checkbox"
-                                          checked={editFormData.isActive || false}
-                                          onChange={(e) => handleInputChange('isActive', e.target.checked)}
-                                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                        />
-                                        <span className="ml-2 text-sm text-gray-700">Active User</span>
-                                      </label>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Edit Action Buttons */}
-                                  <div className="flex flex-wrap gap-2 pt-2">
-                                    <button
-                                      onClick={(e) => saveEditing(user.id, e)}
-                                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                                    >
-                                      <CheckIcon className="h-4 w-4 mr-1" />
-                                      Save
-                                    </button>
-                                    <button
-                                      onClick={cancelEditing}
-                                      className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                    >
-                                      <XIcon className="h-4 w-4 mr-1" />
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                /* View Mode */
-                                <>
-                                  <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                      <span className="font-medium text-gray-500">Role:</span>
-                                      <p className="text-gray-900 capitalize mt-1">{user.role}</p>
-                                    </div>
-                                    <div>
-                                      <span className="font-medium text-gray-500">Status:</span>
-                                      <div className="mt-1">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                          user.isActive 
-                                            ? 'bg-green-100 text-green-800' 
-                                            : 'bg-red-100 text-red-800'
-                                        }`}>
-                                          {user.isActive ? 'Active' : 'Inactive'}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  
-                                  <div>
-                                    <span className="font-medium text-gray-500 text-sm">Team Roles:</span>
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {user.teamRoles.map((role) => (
-                                        <span 
-                                          key={role}
-                                          className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800"
-                                        >
-                                          {role}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                      <span className="font-medium text-gray-500">Last Active:</span>
-                                      <p className="text-gray-900 mt-1">
-                                        {user.lastActiveAt 
-                                          ? new Date(user.lastActiveAt).toLocaleDateString()
-                                          : 'Never'
-                                        }
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <span className="font-medium text-gray-500">Created:</span>
-                                      <p className="text-gray-900 mt-1">
-                                        {user.createdAt 
-                                          ? new Date(user.createdAt).toLocaleDateString()
-                                          : 'N/A'
-                                        }
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  {/* Action Buttons */}
-                                  <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
-                                    <button
-                                      onClick={(e) => startEditing(user, e)}
-                                      className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                    >
-                                      <PencilIcon className="h-4 w-4 mr-1" />
-                                      Edit
-                                    </button>
-                                    <button
-                                      onClick={(e) => handleResetPassword(user.id, e)}
-                                      className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                    >
-                                      <KeyIcon className="h-4 w-4 mr-1" />
-                                      Reset Password
-                                    </button>
-                                    <button
-                                      onClick={(e) => handleDeleteUser(user.id, e)}
-                                      disabled={isDeleting === user.id}
-                                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
-                                    >
-                                      <TrashIcon className="h-4 w-4 mr-1" />
-                                      {isDeleting === user.id ? 'Deleting...' : 'Delete'}
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Desktop Table View */}
-                  <div className="hidden md:block overflow-x-auto">
-                    <TeamManagementPanel
-                      users={teamUsers}
-                      meta={teamUsersMeta}
-                      isLoading={teamUsersQuery.isLoading}
-                      isRefetching={teamUsersQuery.isFetching}
-                      search={teamSearch}
-                      onSearchChange={setTeamSearch}
-                      page={teamPage}
-                      onPageChange={setTeamPage}
-                      pageSize={teamPageSize}
-                    />
-                  </div>
-
-                  {/* Pagination for Mobile */}
-                  {teamUsersMeta && teamUsersMeta.totalPages > 1 && (
-                    <div className="mt-6 flex items-center justify-between">
-                      <div className="flex-1 flex justify-between items-center">
-                        <button
-                          onClick={() => setTeamPage(Math.max(1, teamPage - 1))}
-                          disabled={teamPage <= 1}
-                          className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <ChevronLeftIcon className="h-5 w-5 mr-1" />
-                          Previous
-                        </button>
-                        
-                        <div className="hidden sm:flex">
-                          <p className="text-sm text-gray-700">
-                            Page <span className="font-medium">{teamPage}</span> of{" "}
-                            <span className="font-medium">{teamUsersMeta.totalPages}</span>
-                          </p>
-                        </div>
-
-                        <button
-                          onClick={() => setTeamPage(Math.min(teamUsersMeta.totalPages, teamPage + 1))}
-                          disabled={teamPage >= teamUsersMeta.totalPages}
-                          className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Next
-                          <ChevronRightIcon className="h-5 w-5 ml-1" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
+            <div className="mt-6 space-y-4 md:hidden">
+              {teamUsers.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                  No team members found.
                 </div>
               ) : (
-                /* Change Password Tab */
-                <div className="p-4 sm:p-6">
-                  <div className="max-w-2xl mx-auto">
-                    <div className="mb-6">
-                      <h2 className="text-xl font-semibold text-gray-900">Change Password</h2>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Update your account password
-                      </p>
+                teamUsers.map((user) => (
+                  <div
+                    key={user.id}
+                    className={`rounded-2xl border p-4 transition ${
+                      expandedUser === user.id ? "border-blue-300 shadow" : "border-gray-200 shadow-sm"
+                    }`}
+                    onClick={() => toggleUserExpansion(user.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{user.name}</p>
+                        <p className="text-xs text-gray-500">{user.email}</p>
+                      </div>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">
+                        {user.role}
+                      </span>
                     </div>
-                    
-                    <ChangePasswordCard className="bg-white" />
+                    {expandedUser === user.id ? (
+                      <div className="mt-4 space-y-4 border-t border-gray-200 pt-4 text-sm text-gray-700">
+                        {editingUser === user.id ? (
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-1 gap-4">
+                              <label className="space-y-1 text-sm font-medium text-gray-700">
+                                Name
+                                <input
+                                  type="text"
+                                  value={editFormData.name || ""}
+                                  onChange={(event) => handleInputChange("name", event.target.value)}
+                                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </label>
+                              <label className="space-y-1 text-sm font-medium text-gray-700">
+                                Email
+                                <input
+                                  type="email"
+                                  value={editFormData.email || ""}
+                                  onChange={(event) => handleInputChange("email", event.target.value)}
+                                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </label>
+                              <label className="space-y-1 text-sm font-medium text-gray-700">
+                                Role
+                                <select
+                                  value={editFormData.role || user.role}
+                                  onChange={(event) => handleInputChange("role", event.target.value)}
+                                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                  {availableRoles.map((role) => (
+                                    <option key={role} value={role}>
+                                      {role.charAt(0).toUpperCase() + role.slice(1)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(editFormData.isActive ?? user.isActive)}
+                                  onChange={(event) => handleInputChange("isActive", event.target.checked)}
+                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                Active account
+                              </label>
+                            </div>
+
+                            <div>
+                              <p className="text-xs font-semibold uppercase text-gray-500">Team roles</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {availableTeamRoles.map((role) => {
+                                  const checked = (editFormData.teamRoles || user.teamRoles).includes(role);
+                                  return (
+                                    <label
+                                      key={role}
+                                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+                                        checked ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600"
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={(event) => handleTeamRoleChange(role, event.target.checked)}
+                                        className="mr-2 h-3 w-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                      />
+                                      {role}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={(event) => cancelEditing(event)}
+                                className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => saveEditing(user.id, event)}
+                                className="inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
+                              >
+                                Save changes
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <p className="text-xs uppercase text-gray-400">Status</p>
+                                <p className="font-semibold text-gray-900">
+                                  {user.isActive ? "Active" : "Suspended"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs uppercase text-gray-400">Role</p>
+                                <p className="font-semibold text-gray-900 capitalize">{user.role}</p>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase text-gray-400">Team roles</p>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {user.teamRoles.length === 0 ? (
+                                  <span className="text-xs text-gray-500">None assigned</span>
+                                ) : (
+                                  user.teamRoles.map((role) => (
+                                    <span key={role} className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                                      {role}
+                                    </span>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 text-xs text-gray-500">
+                              <div>
+                                <p className="uppercase tracking-wide text-gray-400">Last active</p>
+                                <p className="text-gray-900 text-sm">
+                                  {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleDateString() : "Never"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="uppercase tracking-wide text-gray-400">Created</p>
+                                <p className="text-gray-900 text-sm">
+                                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Unknown"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 border-t pt-3">
+                              <button
+                                type="button"
+                                onClick={(event) => startEditing(user, event)}
+                                className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600"
+                              >
+                                <PencilIcon className="mr-1 h-4 w-4" />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => handleResetPassword(user.id, event)}
+                                className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600"
+                              >
+                                <KeyIcon className="mr-1 h-4 w-4" />
+                                Reset
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => handleDeleteUser(user.id, event)}
+                                disabled={isDeleting === user.id}
+                                className="inline-flex items-center rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <TrashIcon className="mr-1 h-4 w-4" />
+                                {isDeleting === user.id ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
-                </div>
+                ))
               )}
             </div>
 
-            {/* Quick Create Card for Mobile */}
-            <div className="mt-6 lg:hidden">
-              <div className="bg-white shadow rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-                <button 
-                  onClick={() => setIsNewIncidentOpen(true)}
-                  className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  + Create New Incident
-                </button>
-              </div>
+            <div className="hidden md:block">
+              <TeamManagementPanel
+                users={teamUsers}
+                meta={teamUsersMeta}
+                isLoading={teamUsersQuery.isLoading}
+                isRefetching={teamUsersQuery.isFetching}
+                search={teamSearch}
+                onSearchChange={setTeamSearch}
+                page={teamPage}
+                onPageChange={setTeamPage}
+                pageSize={teamPageSize}
+              />
             </div>
           </div>
-        </main>
+        )}
 
-        {/* Footer */}
-        <footer className="bg-white border-t border-gray-200 mt-12">
-          <div className="max-w-full mx-auto py-8 px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row justify-between items-center">
-              <div className="flex items-center">
-                <div className="h-6 w-6 bg-blue-600 rounded flex items-center justify-center mr-2">
-                  <span className="text-white text-xs font-bold">⚡</span>
+        {activeTab === "webhooks" && isAdmin && (
+          <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-sm space-y-6">
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-6 space-y-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-blue-800">Automation</p>
+                  <h2 className="text-xl font-semibold text-blue-950">Webhooks & integrations</h2>
+                  <p className="text-sm text-blue-900">
+                    Create or resolve incidents from monitoring tools and broadcast lifecycle updates to Slack or Telegram.
+                  </p>
                 </div>
-                <span className="text-sm font-semibold text-gray-900">IncidentPulse</span>
+                <Link
+                  href="/docs#webhooks"
+                  className="inline-flex items-center text-sm font-semibold text-blue-800 underline"
+                >
+                  Open documentation
+                  <ChevronRightIcon className="ml-1.5 h-4 w-4" />
+                </Link>
               </div>
-              
-              <div className="mt-4 md:mt-0">
-                <p className="text-center text-sm text-gray-500">
-                  &copy; {new Date().getFullYear()} IncidentPulse. All rights reserved.
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Alert endpoint</p>
+                  <code className="mt-2 block break-all rounded-xl border border-blue-200 bg-white px-3 py-2 font-mono text-xs text-blue-900">
+                    {alertEndpoint}
+                  </code>
+                  <p className="mt-2 text-xs text-blue-800">
+                    Sign requests with <span className="font-mono">X-Signature</span> (HMAC-SHA256) or include the fallback <span className="font-mono">X-Webhook-Token</span> header.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Recovery endpoint</p>
+                  <code className="mt-2 block break-all rounded-xl border border-blue-200 bg-white px-3 py-2 font-mono text-xs text-blue-900">
+                    {recoveryEndpoint}
+                  </code>
+                  <p className="mt-2 text-xs text-blue-800">
+                    Send the matching <span className="font-mono">fingerprint</span> to resolve incidents and notify subscribers.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-4 text-xs text-blue-900 lg:grid-cols-2">
+                <div>
+                  Required headers: <span className="font-mono">X-Signature</span> or <span className="font-mono">X-Webhook-Token</span>. Include <span className="font-mono">X-Idempotency-Key</span> to dedupe retries.
+                </div>
+                <div>
+                  Dedupe window 10 minutes · rate limit 60 req/min · metrics via <span className="font-mono">GET /metrics/webhook</span>.
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-800">
+                <h3 className="text-base font-semibold text-gray-900">Secrets to configure</h3>
+                <ul className="mt-3 space-y-2 text-sm">
+                  <li>
+                    <span className="font-mono text-xs">WEBHOOK_HMAC_SECRET</span>  generate once (for example <code className="font-mono text-xs">openssl rand -hex 32</code>) and store it in Render &gt; Environment.
+                  </li>
+                  <li>
+                    <span className="font-mono text-xs">WEBHOOK_SHARED_TOKEN</span>  optional fallback header for trusted internal scripts.
+                  </li>
+                  <li>
+                    <span className="font-mono text-xs">WEBHOOK_SYSTEM_USER_ID</span>  operator id used when the platform appends automated updates.
+                  </li>
+                </ul>
+                <p className="mt-3 text-xs text-gray-500">
+                  Secrets are never displayed in the dashboard. Copy the values directly from Render when onboarding new tooling.
                 </p>
               </div>
-              
-              <div className="mt-4 md:mt-0 flex space-x-6">
-                <a href="#" className="text-gray-400 hover:text-gray-500">
-                  <span className="sr-only">Privacy Policy</span>
-                  <span className="text-sm">Privacy</span>
-                </a>
-                <a href="#" className="text-gray-400 hover:text-gray-500">
-                  <span className="sr-only">Terms of Service</span>
-                  <span className="text-sm">Terms</span>
-                </a>
-                <a href="#" className="text-gray-400 hover:text-gray-500">
-                  <span className="sr-only">Support</span>
-                  <span className="text-sm">Support</span>
-                </a>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-800">
+                <h3 className="text-base font-semibold text-gray-900">Sample alert payload</h3>
+                <pre className="mt-3 overflow-x-auto rounded-xl bg-gray-900/90 p-3 font-mono text-xs text-gray-50">
+{`curl -X POST ${alertEndpoint} \
+  -H "Content-Type: application/json" \
+  -H "X-Signature: <hex-hmac>" \
+  -d '{"service":"checkout-api","environment":"production","eventType":"error_spike","severity":"high","fingerprint":"checkout|production|error_spike"}'`}
+                </pre>
+                <p className="mt-2 text-xs text-gray-500">
+                  Include <span className="font-mono">occurredAt</span> (UTC ISO string) to control dedupe timing and SLA calculations.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-100 bg-white">
+              <IntegrationsPanel
+                settings={integrationSettingsQuery.data}
+                isLoading={integrationSettingsQuery.isLoading}
+                onSave={handleIntegrationSettingsSave}
+                isSaving={updateIntegrationSettings.isPending}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === "password" && canChangePassword && (
+          <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-sm">
+            <div className="mx-auto max-w-2xl">
+              <h2 className="text-xl font-semibold text-gray-900">Security</h2>
+              <p className="text-sm text-gray-600">Keep your operator account secure with a strong password.</p>
+              <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                <ChangePasswordCard className="bg-white" />
               </div>
             </div>
           </div>
-        </footer>
-
+        )}
+      </DashboardShell>
         {/* Incident Drawer for viewing/editing */}
         <IncidentDrawer
           incidentId={selectedIncidentId ?? undefined}
@@ -1183,7 +792,6 @@ const saveEditing = async (userId: string, e?: React.MouseEvent) => {
             </div>
           </div>
         )}
-      </div>
     </AuthGuard>
   );
 }
@@ -1193,6 +801,215 @@ export default function DashboardPage() {
     <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading dashboard...</div>}>
       <DashboardPageContent />
     </Suspense>
+  );
+}
+
+type StatsSummary = {
+  total: number;
+  active: number;
+  critical: number;
+  resolved: number;
+};
+
+type DashboardShellProps = {
+  session?: SessionUser | null;
+  canCreate: boolean;
+  onNewIncident: () => void;
+  activeTab: DashboardTab;
+  onTabChange: (tab: DashboardTab) => void;
+  mobileMenuOpen: boolean;
+  setMobileMenuOpen: (open: boolean) => void;
+  sidebarNavItems: Array<{ id: DashboardTab; label: string; description: string }>;
+  stats: StatsSummary;
+  firstName: string;
+  logout: ReturnType<typeof useLogout>;
+  children: ReactNode;
+};
+
+function DashboardShell({
+  session,
+  canCreate,
+  onNewIncident,
+  activeTab,
+  onTabChange,
+  mobileMenuOpen,
+  setMobileMenuOpen,
+  sidebarNavItems,
+  stats,
+  firstName,
+  logout,
+  children
+}: DashboardShellProps) {
+  const handleNavClick = (tab: DashboardTab) => {
+    onTabChange(tab);
+    setMobileMenuOpen(false);
+  };
+
+  return (
+    <div className="flex min-h-screen bg-gray-50">
+      {mobileMenuOpen ? (
+        <div
+          className="fixed inset-0 z-40 bg-gray-900/40 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      ) : null}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 transform bg-white shadow-xl transition-transform lg:static lg:translate-x-0 ${
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-sm font-semibold text-white">
+              IP
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-400">IncidentPulse</p>
+              <p className="text-lg font-semibold text-gray-900">Control Center</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="inline-flex rounded-lg p-2 text-gray-500 transition hover:bg-gray-50 lg:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex h-[calc(100%-5rem)] flex-col">
+          <div className="px-6 pt-6">
+            <p className="text-xs uppercase tracking-wide text-gray-400">Workspace</p>
+            <div className="mt-3 space-y-2">
+              {sidebarNavItems.map((item) => {
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleNavClick(item.id)}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
+                      isActive
+                        ? "border-blue-500 bg-blue-50 text-blue-900"
+                        : "border-transparent text-gray-600 hover:border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span>{item.label}</span>
+                      {item.id === "incidents" ? (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            isActive ? "bg-white/80 text-blue-700" : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          {stats.active}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs font-normal text-gray-500">{item.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-auto border-t border-gray-100 px-6 py-6 text-sm text-gray-600">
+            <div className="space-y-2">
+              <Link
+                href="/docs"
+                className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 transition hover:border-blue-500 hover:text-blue-600"
+              >
+                <span>Documentation</span>
+                <ChevronRightIcon className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/status"
+                className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 transition hover:border-blue-500 hover:text-blue-600"
+              >
+                <span>Status Page</span>
+                <ChevronRightIcon className="h-4 w-4" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => logout.mutate()}
+                disabled={logout.isPending}
+                className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-3 py-2 font-semibold text-gray-700 transition hover:border-red-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span>{logout.isPending ? "Signing out..." : "Logout"}</span>
+                <XIcon className="h-4 w-4" />
+              </button>
+              {logout.isError ? (
+                <p className="text-xs text-red-600">Failed to sign out. Please try again.</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <div className="flex min-h-screen flex-1 flex-col lg:ml-72">
+        <header className="border-b border-gray-100 bg-white/90 px-4 py-4 shadow-sm backdrop-blur sm:px-6 lg:px-10">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-500">Hello, {firstName}</p>
+              <h1 className="text-2xl font-semibold text-gray-900">Incident Operations</h1>
+              <p className="text-sm text-gray-500">
+                Monitor incidents, manage responders, and automate communications.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {session?.role ? (
+                <span className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600">
+                  {session.role}
+                </span>
+              ) : null}
+              {canCreate ? (
+                <button
+                  type="button"
+                  onClick={onNewIncident}
+                  className="inline-flex items-center rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  + New incident
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="inline-flex items-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 lg:hidden"
+                onClick={() => setMobileMenuOpen(true)}
+              >
+                <Bars3Icon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-10">
+          <section>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard label="Total incidents" value={stats.total} />
+              <StatCard label="Active incidents" value={stats.active} />
+              <StatCard label="Critical incidents" value={stats.critical} />
+              <StatCard label="Resolved" value={stats.resolved} />
+            </div>
+          </section>
+          <section className="space-y-8">{children}</section>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+type StatCardProps = {
+  label: string;
+  value: number;
+};
+
+function StatCard({ label, value }: StatCardProps) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="mt-1 text-3xl font-semibold text-gray-900">{value}</p>
+    </div>
   );
 }
 

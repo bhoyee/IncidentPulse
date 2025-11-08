@@ -341,6 +341,11 @@ const uiScreens = [
       "Invite teammates, manage roles, enforce SSO, and review access history from a unified roster."
   },
   {
+    title: "Webhooks & Integrations",
+    description:
+      "Left-rail admin console that surfaces alert and recovery endpoints, sample cURL snippets, secret handling guidance, and Slack or Telegram notification settings alongside quick links to documentation and the public status page."
+  },
+  {
     title: "Public Status Page",
     description:
       "Branded, cache-friendly status site with subscriptions, scheduled maintenance, and historical transparency."
@@ -359,7 +364,7 @@ const faqItems = [
       "The public page only shows incidents marked as customer-impacting or scheduled maintenance. Confirm incidents have published updates and that cache invalidation has completed."
   },
   {
-    question: "How do I enable Slack or Teams notifications?",
+    question: "How do I enable Slack or Telegram notifications?",
     answer:
       "Admins can connect Slack or Teams under System Settings → Integrations. Provide the webhook URL, select channels, and enable incident triggers for creation, updates, and resolution."
   },
@@ -1008,7 +1013,9 @@ export default function DocumentationPage() {
 
 
                   <p className="mt-4 text-xs text-slate-600">
-                    Treat the HMAC secret like any other credential: rotate it from Render if compromised and share it with integrators through a secure channel (password vault, secret manager). The dashboard intentionally avoids displaying the secret to prevent leakage.
+                    Treat the HMAC secret like any other credential: rotate it from Render if compromised and share it with integrators through a secure channel (password vault, secret manager). Open the dashboard&rsquo;s{" "}
+                    <span className="font-semibold text-slate-800">Webhooks &amp; Integrations</span> tab to copy the alert and recovery endpoints, grab ready-to-run cURL/Postman snippets, and wire up Slack or Telegram notifications. The panel reiterates
+                    which secrets live in Render but intentionally never exposes the raw values to prevent leakage.
                   </p>
 
                 </div>
