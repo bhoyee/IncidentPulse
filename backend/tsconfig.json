@@ -10,6 +10,7 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "types": ["node", "jest"],
+    "lib": ["ES2021", "DOM"],
     "baseUrl": "./src"
   },
   "include": ["src/**/*.ts", "prisma/**/*.ts", "tests/**/*.ts"]

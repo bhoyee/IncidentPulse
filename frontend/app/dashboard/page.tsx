@@ -9,6 +9,7 @@ import { IncidentsTable } from "@components/IncidentsTable";
 import { IncidentDrawer } from "@components/IncidentDrawer";
 import { NewIncidentForm } from "@components/NewIncidentForm";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
+import { IntegrationsPanel } from "@components/IntegrationsPanel";
 import { useIncidents } from "@hooks/useIncidents";
 import { useSession } from "@hooks/useSession";
 import {
@@ -16,6 +17,11 @@ import {
   type TeamUser,
   type TeamUsersResponse
 } from "@hooks/useTeamUsers";
+import {
+  useIntegrationSettings,
+  useUpdateIntegrationSettings,
+  type IntegrationSettings
+} from "@hooks/useIntegrationSettings";
 import type { Incident, IncidentSeverity, IncidentStatus } from "@lib/types";
 import { TeamManagementPanel } from "@components/TeamManagementPanel";
 
@@ -55,7 +61,9 @@ function DashboardPageContent() {
   const [assigneeFilter, setAssigneeFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
   const [teamPage, setTeamPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "password">("incidents");
+  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "password" | "webhooks">(
+    "incidents"
+  );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
@@ -76,6 +84,10 @@ function DashboardPageContent() {
   const webhookBase = (apiBase || "https://your-backend.example.com").replace(/\/$/, "");
   const alertEndpoint = `${webhookBase}/webhooks/incidents`;
   const recoveryEndpoint = `${webhookBase}/webhooks/incidents/recovery`;
+  const integrationSettingsQuery = useIntegrationSettings(
+    Boolean(isAdmin && activeTab === "webhooks")
+  );
+  const updateIntegrationSettings = useUpdateIntegrationSettings();
 
   useEffect(() => {
     if (!isAdmin) {
@@ -197,17 +209,21 @@ function DashboardPageContent() {
     setEditFormData({});
   };
 
-  const saveEditing = async (userId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    try {
-      await mockUpdateUser(userId, editFormData);
-      setEditingUser(null);
-      setEditFormData({});
-      // Refresh the team users data
-      teamUsersQuery.refetch();
-    } catch (error) {
-      console.error('Failed to update user:', error);
-    }
+const saveEditing = async (userId: string, e?: React.MouseEvent) => {
+  e?.stopPropagation();
+  try {
+    await mockUpdateUser(userId, editFormData);
+    setEditingUser(null);
+    setEditFormData({});
+    // Refresh the team users data
+    teamUsersQuery.refetch();
+  } catch (error) {
+    console.error('Failed to update user:', error);
+  }
+};
+
+  const handleIntegrationSettingsSave = async (values: Partial<IntegrationSettings>) => {
+    await updateIntegrationSettings.mutateAsync(values);
   };
 
   const handleDeleteUser = async (userId: string, e?: React.MouseEvent) => {
@@ -299,15 +315,27 @@ function DashboardPageContent() {
                           ? "border-blue-500 text-gray-900"
                           : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                       }`}
-                    >
-                      Team Management
-                    </button>
-                  )}
-                  {canChangePassword && (
-                    <button
-                      onClick={() => setActiveTab("password")}
-                      className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                        activeTab === "password"
+                  >
+                    Team Management
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setActiveTab("webhooks")}
+                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                      activeTab === "webhooks"
+                        ? "border-blue-500 text-gray-900"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    Webhooks
+                  </button>
+                )}
+                {canChangePassword && (
+                  <button
+                    onClick={() => setActiveTab("password")}
+                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                      activeTab === "password"
                           ? "border-blue-500 text-gray-900"
                           : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                       }`}
@@ -390,6 +418,21 @@ function DashboardPageContent() {
                     }`}
                   >
                     Team Management
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("webhooks");
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${
+                      activeTab === "webhooks"
+                        ? "bg-blue-50 text-blue-700 border-l-4 border-blue-700"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                  >
+                    Webhooks
                   </button>
                 )}
                 {canChangePassword && (
@@ -629,9 +672,9 @@ function DashboardPageContent() {
                     </div>
                   </div>
                 </div>
-              ) : activeTab === "team" ? (
-                /* Team Management Tab - Mobile Optimized */
-                <div className="p-4 sm:p-6">
+                    ) : activeTab === "team" ? (
+                      /* Team Management Tab - Mobile Optimized */
+                      <div className="p-4 sm:p-6">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
                     <div>
                       <h2 className="text-xl font-semibold text-gray-900">Team Management</h2>
@@ -657,6 +700,86 @@ function DashboardPageContent() {
                     {teamUsers.length === 0 ? (
                       <div className="text-center py-8 text-gray-500">
                         No team members found
+                      </div>
+                    ) : activeTab === "webhooks" ? (
+                      <div className="bg-white rounded-lg shadow border border-gray-200">
+                        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
+                          <h2 className="text-lg font-semibold text-gray-900">Webhook Automation</h2>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Connect monitoring tools, then configure Slack and Telegram notifications for lifecycle events.
+                          </p>
+                        </div>
+                        <div className="p-4 sm:p-6 space-y-6">
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="rounded-lg border border-gray-200 p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <p className="text-xs uppercase tracking-wide text-gray-500">Alert endpoint</p>
+                                  <p className="text-sm font-semibold text-gray-900">Create or update incidents</p>
+                                </div>
+                                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                                  POST
+                                </span>
+                              </div>
+                              <code className="mt-3 block break-all rounded border border-gray-100 bg-gray-50 p-3 text-xs text-gray-800">
+                                {alertEndpoint}
+                              </code>
+                              <ul className="mt-3 space-y-1 text-xs text-gray-600">
+                                <li>Auth: <span className="font-mono">X-Signature</span> (HMAC SHA256) or <span className="font-mono">X-Webhook-Token</span></li>
+                                <li>Body: JSON with <span className="font-mono">service</span>, <span className="font-mono">severity</span>, <span className="font-mono">occurredAt</span>, <span className="font-mono">fingerprint</span></li>
+                              </ul>
+                            </div>
+                            <div className="rounded-lg border border-gray-200 p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <p className="text-xs uppercase tracking-wide text-gray-500">Recovery endpoint</p>
+                                  <p className="text-sm font-semibold text-gray-900">Resolve incidents automatically</p>
+                                </div>
+                                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                                  POST
+                                </span>
+                              </div>
+                              <code className="mt-3 block break-all rounded border border-gray-100 bg-gray-50 p-3 text-xs text-gray-800">
+                                {recoveryEndpoint}
+                              </code>
+                              <ul className="mt-3 space-y-1 text-xs text-gray-600">
+                                <li>Required: matching <span className="font-mono">fingerprint</span></li>
+                                <li>Optional: <span className="font-mono">occurredAt</span>, <span className="font-mono">meta.note</span></li>
+                              </ul>
+                            </div>
+                          </div>
+
+                          <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900 space-y-2">
+                            <p>
+                              Generate <code className="font-mono text-xs">WEBHOOK_HMAC_SECRET</code> once (e.g.
+                              <code className="ml-1 font-mono text-xs">openssl rand -hex 32</code>), store it in Render, and share it via your secrets manager.
+                              Configure <code className="font-mono text-xs">WEBHOOK_SHARED_TOKEN</code> for trusted scripts and monitor activity via <code className="font-mono text-xs">GET /metrics/webhook</code>.
+                            </p>
+                          </div>
+
+                          {isAdmin ? (
+                            <IntegrationsPanel
+                              settings={integrationSettingsQuery.data}
+                              isLoading={integrationSettingsQuery.isLoading}
+                              isSaving={updateIntegrationSettings.isPending}
+                              onSave={handleIntegrationSettingsSave}
+                            />
+                          ) : (
+                            <p className="text-sm text-gray-600">
+                              Contact an administrator if you need Slack or Telegram notifications enabled.
+                            </p>
+                          )}
+
+                          <div className="flex justify-end">
+                            <Link
+                              href="/docs#webhooks"
+                              className="inline-flex items-center text-sm font-semibold text-blue-600 hover:text-blue-700"
+                            >
+                              Webhook docs
+                              <ChevronRightIcon className="ml-1.5 h-4 w-4" />
+                            </Link>
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       teamUsers.map((user) => (

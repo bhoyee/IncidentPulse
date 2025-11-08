@@ -93,3 +93,12 @@ model StatusCache {
   updatedAt  DateTime    @updatedAt
   createdAt  DateTime    @default(now())
 }
+
+model IntegrationSettings {
+  id               String   @id @default("global-integrations")
+  slackWebhookUrl  String?
+  telegramBotToken String?
+  telegramChatId   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

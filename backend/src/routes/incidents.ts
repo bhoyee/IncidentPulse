@@ -12,7 +12,8 @@ import {
   loadActiveAdmins,
   notifyAdminsOfIncident,
   notifyAssigneeOfAssignment,
-  notifyAssigneeOfResolution
+  notifyAssigneeOfResolution,
+  notifyIncidentIntegrations
 } from "../lib/incident-notifier";
 
 const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -187,9 +188,11 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         const assignedBy =
           request.user.name ?? request.user.email ?? "Administrator";
         await notifyAssigneeOfAssignment(fastify.log, incident, assignedBy);
+        await notifyIncidentIntegrations(fastify.log, incident, "assigned", { assignedBy });
       }
 
       await notifyAdminsOfIncident(fastify.log, incident, admins);
+      await notifyIncidentIntegrations(fastify.log, incident, "created");
 
       return reply.status(201).send({
         error: false,
@@ -371,12 +374,14 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       if (statusChangedToResolved) {
         const resolutionTime = incident.resolvedAt ?? now;
         await notifyAssigneeOfResolution(fastify.log, incident, resolutionTime);
+        await notifyIncidentIntegrations(fastify.log, incident, "resolved", { resolutionTime });
       }
 
       if (assignmentChanged) {
         const assignedBy =
           request.user.name ?? request.user.email ?? "Administrator";
         await notifyAssigneeOfAssignment(fastify.log, incident, assignedBy);
+        await notifyIncidentIntegrations(fastify.log, incident, "assigned", { assignedBy });
       }
 
       return reply.send({

@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { sendMail } from "./mailer";
 import { env } from "../env";
+import { getIntegrationSettings } from "./integration-settings";
 
 export const incidentNotificationInclude = {
   assignedTo: {
@@ -194,3 +195,139 @@ export async function notifyAssigneeOfResolution(
     );
   }
 }
+
+type IntegrationEvent = "created" | "assigned" | "resolved";
+
+type IntegrationMetadata = {
+  assignedBy?: string;
+  resolutionTime?: Date;
+};
+
+export async function notifyIncidentIntegrations(
+  logger: FastifyBaseLogger,
+  incident: IncidentNotificationContext,
+  event: IntegrationEvent,
+  metadata: IntegrationMetadata = {}
+): Promise<void> {
+  const settings = await getIntegrationSettings();
+  if (!settings) {
+    return;
+  }
+
+  await Promise.allSettled([
+    sendSlackNotification(logger, settings.slackWebhookUrl, incident, event, metadata),
+    sendTelegramNotification(
+      logger,
+      settings.telegramBotToken,
+      settings.telegramChatId,
+      incident,
+      event,
+      metadata
+    )
+  ]);
+}
+
+async function sendSlackNotification(
+  logger: FastifyBaseLogger,
+  webhookUrl: string | null | undefined,
+  incident: IncidentNotificationContext,
+  event: IntegrationEvent,
+  metadata: IntegrationMetadata
+): Promise<void> {
+  if (!webhookUrl) {
+    return;
+  }
+
+  const link = `${env.FRONTEND_URL}/dashboard?incidentId=${incident.id}`;
+  const title = `[${incident.severity.toUpperCase()}] ${incident.title}`;
+  const statusLine = `Status: ${incident.status}`;
+  const body = buildIntegrationMessage(event, incident, metadata);
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: `*${title}*\n${statusLine}\n${body}\n<${link}|Open in IncidentPulse>`
+      })
+    });
+
+    if (!response.ok) {
+      logger.error(
+        { status: response.status, incidentId: incident.id },
+        "Slack notification failed"
+      );
+    }
+  } catch (error) {
+    logger.error({ err: error, incidentId: incident.id }, "Slack notification threw error");
+  }
+}
+
+async function sendTelegramNotification(
+  logger: FastifyBaseLogger,
+  botToken: string | null | undefined,
+  chatId: string | null | undefined,
+  incident: IncidentNotificationContext,
+  event: IntegrationEvent,
+  metadata: IntegrationMetadata
+): Promise<void> {
+  if (!botToken || !chatId) {
+    return;
+  }
+
+  const link = `${env.FRONTEND_URL}/dashboard?incidentId=${incident.id}`;
+  const title = `[${incident.severity.toUpperCase()}] ${incident.title}`;
+  const statusLine = `Status: ${incident.status}`;
+  const body = buildIntegrationMessage(event, incident, metadata);
+
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${botToken}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `${title}\n${statusLine}\n${body}\n${link}`
+        })
+      }
+    );
+
+    if (!response.ok) {
+      logger.error(
+        { status: response.status, incidentId: incident.id },
+        "Telegram notification failed"
+      );
+    }
+  } catch (error) {
+    logger.error({ err: error, incidentId: incident.id }, "Telegram notification threw error");
+  }
+}
+
+function buildIntegrationMessage(
+  event: IntegrationEvent,
+  incident: IncidentNotificationContext,
+  metadata: IntegrationMetadata
+): string {
+  const reporter =
+    incident.createdBy?.name ?? incident.createdBy?.email ?? "Unknown reporter";
+
+  switch (event) {
+    case "created":
+      return `Reported by: ${reporter}`;
+    case "assigned":
+      if (incident.assignedTo) {
+        return `Assigned to ${incident.assignedTo.name ?? incident.assignedTo.email} (by ${
+          metadata.assignedBy ?? "System"
+        })`;
+      }
+      return `Assignment cleared (by ${metadata.assignedBy ?? "System"})`;
+    case "resolved":
+      return `Resolved at ${metadata.resolutionTime?.toISOString() ?? "now"} by ${
+        incident.assignedTo?.name ?? incident.assignedTo?.email ?? "Responder"
+      }`;
+    default:
+      return "";
+  }
+}
+

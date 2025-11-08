@@ -1032,6 +1032,9 @@ export default function DocumentationPage() {
                     Admins are notified on creation, repeat alerts append timeline updates, and all interactions are included in audit logs.
                   </li>
                   <li>
+                    Configure Slack and Telegram notifications from the dashboard&apos;s Webhooks tab once your HMAC secret is in place.
+                  </li>
+                  <li>
                     Need a refresher? Visit <Link href="/docs#webhooks" className="text-blue-600 underline">/docs#webhooks</Link> for Postman scripts, cURL examples, and troubleshooting tips.
                   </li>
                 </ul>
