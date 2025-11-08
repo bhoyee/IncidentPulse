@@ -32,9 +32,9 @@ export async function getIntegrationSettings(force = false): Promise<Integration
 }
 
 type IntegrationSettingsInput = {
-  slackWebhookUrl?: string | null;
-  telegramBotToken?: string | null;
-  telegramChatId?: string | null;
+  slackWebhookUrl?: string | null | undefined;
+  telegramBotToken?: string | null | undefined;
+  telegramChatId?: string | null | undefined;
 };
 
 export async function saveIntegrationSettings(

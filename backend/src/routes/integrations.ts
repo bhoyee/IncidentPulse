@@ -24,7 +24,7 @@ const updateSchema = z.object({
     .or(z.literal(""))
 });
 
-const sanitizeInput = (value: string | undefined | ""): string | null => {
+const sanitizeInput = (value: string | undefined | ""): string | null | undefined => {
   if (value === undefined) {
     return undefined;
   }
