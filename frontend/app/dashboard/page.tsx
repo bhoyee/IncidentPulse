@@ -88,6 +88,7 @@ function DashboardPageContent() {
     Boolean(isAdmin && activeTab === "webhooks")
   );
   const updateIntegrationSettings = useUpdateIntegrationSettings();
+  const isWebhooksTab = activeTab === "webhooks";
 
   useEffect(() => {
     if (!isAdmin) {
@@ -701,7 +702,7 @@ const saveEditing = async (userId: string, e?: React.MouseEvent) => {
                       <div className="text-center py-8 text-gray-500">
                         No team members found
                       </div>
-                    ) : activeTab === "webhooks" ? (
+                    ) : isWebhooksTab ? (
                       <div className="bg-white rounded-lg shadow border border-gray-200">
                         <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
                           <h2 className="text-lg font-semibold text-gray-900">Webhook Automation</h2>
