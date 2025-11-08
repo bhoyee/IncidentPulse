@@ -2,57 +2,305 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDownIcon, Bars3Icon, XMarkIcon, ChevronRightIcon, PencilIcon, TrashIcon, KeyIcon, XMarkIcon as XIcon } from "@heroicons/react/24/solid";
+import { isAxiosError } from "axios";
+import {
+  ChevronDownIcon,
+  Bars3Icon,
+  XMarkIcon,
+  PlusIcon,
+  MagnifyingGlassIcon,
+  PencilSquareIcon,
+  TrashIcon
+} from "@heroicons/react/24/solid";
 import { AuthGuard } from "@components/AuthGuard";
-import { IncidentsTable } from "@components/IncidentsTable";
 import { IncidentDrawer } from "@components/IncidentDrawer";
-import { NewIncidentForm } from "@components/NewIncidentForm";
-import { ChangePasswordCard } from "@components/ChangePasswordCard";
-import { IntegrationsPanel } from "@components/IntegrationsPanel";
-import { useIncidents } from "@hooks/useIncidents";
 import { useSession } from "@hooks/useSession";
-import type { SessionUser } from "@hooks/useSession";
-import { useLogout } from "@hooks/useLogout";
+import { useIncidents, useInvalidateIncidents } from "@hooks/useIncidents";
 import {
   useTeamUsers,
-  type TeamUser,
-  type TeamUsersResponse
+  useCreateTeamUser,
+  useUpdateTeamUser,
+  useDeleteTeamUser,
+  type TeamUser
 } from "@hooks/useTeamUsers";
-import {
-  useIntegrationSettings,
-  useUpdateIntegrationSettings,
-  type IntegrationSettings
-} from "@hooks/useIntegrationSettings";
+import { apiClient } from "@lib/api-client";
 import type { Incident, IncidentSeverity, IncidentStatus } from "@lib/types";
-import { TeamManagementPanel } from "@components/TeamManagementPanel";
 
-type DashboardTab = "incidents" | "team" | "password" | "webhooks";
+interface NewTeamMemberPayload {
+  name: string;
+  email: string;
+  role: TeamUser["role"];
+  teamRoles: string[];
+  sendInvite: boolean;
+}
 
-const statusFilters: IncidentStatus[] = ["open", "investigating", "monitoring", "resolved"];
-const severityFilters: IncidentSeverity[] = ["low", "medium", "high", "critical"];
-const EMPTY_INCIDENTS: Incident[] = [];
-const EMPTY_TEAM_USERS: TeamUser[] = [];
-const DEMO_ACCOUNT_EMAILS = new Set([
-  "admin@demo.incidentpulse.com",
-  "operator@demo.incidentpulse.com"
-]);
-
-// Mock functions for CRUD operations - replace with your actual implementations
-const mockUpdateUser = async (userId: string, updates: Partial<TeamUser>) => {
-  console.log('Updating user:', userId, updates);
-  return Promise.resolve();
+type IntegrationSettingsState = {
+  slackWebhookUrl: string;
+  telegramBotToken: string;
+  telegramChatId: string;
+  jiraIntegrationActive: boolean;
 };
 
-const mockDeleteUser = async (userId: string) => {
-  console.log('Deleting user:', userId);
-  return Promise.resolve();
+type InviteSummary = {
+  name: string;
+  email: string;
+  password: string | null;
+  emailStatus: string | null;
+  emailError: string | null;
 };
 
-const mockResetPassword = async (userId: string) => {
-  console.log('Resetting password for user:', userId);
-  return Promise.resolve();
+
+const ChangePasswordCard = () => {
+  return (
+    <form className="space-y-4">
+      <div>
+        <label className="text-sm font-medium text-gray-300">Current Password</label>
+        <input 
+          type="password" 
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1" 
+        />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-300">New Password</label>
+        <input 
+          type="password" 
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1" 
+        />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-300">Confirm New Password</label>
+        <input 
+          type="password" 
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1" 
+        />
+      </div>
+      <button type="submit" className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition">
+        Update Password
+      </button>
+    </form>
+  );
+};
+
+const NewIncidentForm = ({
+  disabled,
+  onSuccess
+}: {
+  disabled: boolean;
+  onSuccess: () => void;
+}) => {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [severity, setSeverity] = useState<IncidentSeverity>("medium");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const invalidateIncidents = useInvalidateIncidents();
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim() || !description.trim()) {
+      setError("Title and description are required.");
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      await apiClient.post("/incidents", {
+        title: title.trim(),
+        description: description.trim(),
+        severity
+      });
+      await invalidateIncidents();
+      setTitle("");
+      setDescription("");
+      setSeverity("medium");
+      onSuccess();
+    } catch (err) {
+      let message = "Failed to create incident.";
+      if (isAxiosError(err)) {
+        message = err.response?.data?.message ?? err.message;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="text-sm font-medium text-gray-300">Title</label>
+        <input 
+          type="text" 
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1" 
+          required
+        />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-300">Description</label>
+        <textarea 
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1" 
+          rows={3}
+        />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-300">Severity</label>
+        <select 
+          value={severity}
+          onChange={(e) => setSeverity(e.target.value as IncidentSeverity)}
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1"
+        >
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+      {error ? (
+        <p className="text-sm text-red-400">{error}</p>
+      ) : null}
+      <button
+        type="submit"
+        disabled={disabled || isSubmitting}
+        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50"
+      >
+        {isSubmitting ? "Creating..." : "Create Incident"}
+      </button>
+    </form>
+  );
+};
+
+const AddTeamMemberForm = ({
+  disabled,
+  onSubmit,
+}: {
+  disabled: boolean;
+  onSubmit: (payload: NewTeamMemberPayload) => void;
+}) => {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<TeamUser["role"]>("operator");
+  const [teamRolesInput, setTeamRolesInput] = useState("Incident Response, On-Call");
+  const [sendInvite, setSendInvite] = useState(true);
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!name.trim() || !email.trim()) {
+      return;
+    }
+
+    const parsedRoles = teamRolesInput
+      .split(",")
+      .map((roleItem) => roleItem.trim())
+      .filter(Boolean);
+
+    onSubmit({
+      name: name.trim(),
+      email: email.trim(),
+      role,
+      teamRoles: parsedRoles.length ? parsedRoles : ["Incident Response"],
+      sendInvite,
+    });
+
+    setName("");
+    setEmail("");
+    setRole("operator");
+    setTeamRolesInput("Incident Response, On-Call");
+    setSendInvite(true);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block text-sm font-medium text-gray-300">
+          Full Name
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Alex Johnson"
+            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            disabled={disabled}
+            required
+          />
+        </label>
+
+        <label className="block text-sm font-medium text-gray-300">
+          Work Email
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="alex@yourteam.com"
+            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            disabled={disabled}
+            required
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block text-sm font-medium text-gray-300">
+          Platform Role
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value as TeamUser["role"])}
+            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            disabled={disabled}
+          >
+            <option value="admin">Admin</option>
+            <option value="operator">Operator</option>
+            <option value="viewer">Viewer</option>
+          </select>
+        </label>
+
+        <label className="block text-sm font-medium text-gray-300">
+          Team Roles
+          <input
+            type="text"
+            value={teamRolesInput}
+            onChange={(e) => setTeamRolesInput(e.target.value)}
+            placeholder="Incident Response, Platform"
+            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            disabled={disabled}
+          />
+          <span className="mt-1 block text-xs text-gray-400">
+            Separate multiple roles with commas.
+          </span>
+        </label>
+      </div>
+
+      <label className="flex items-start gap-3 rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+        <input
+          type="checkbox"
+          checked={sendInvite}
+          onChange={(e) => setSendInvite(e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500"
+          disabled={disabled}
+        />
+        <span className="text-sm text-gray-300">
+          Email this teammate setup instructions and the incident response playbook.
+        </span>
+      </label>
+
+      <button
+        type="submit"
+        disabled={disabled}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <PlusIcon className="h-4 w-4" />
+        Send Invite
+      </button>
+    </form>
+  );
 };
 
 function DashboardPageContent() {
@@ -62,122 +310,88 @@ function DashboardPageContent() {
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<IncidentStatus | undefined>();
   const [severityFilter, setSeverityFilter] = useState<IncidentSeverity | undefined>();
-  const [teamRoleFilter, setTeamRoleFilter] = useState<string | undefined>();
-  const [assigneeFilter, setAssigneeFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
-  const [teamPage, setTeamPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<DashboardTab>("incidents");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "password" | "webhooks">("incidents");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
-  const [expandedUser, setExpandedUser] = useState<string | null>(null);
-  const [editingUser, setEditingUser] = useState<string | null>(null);
-  const [editFormData, setEditFormData] = useState<Partial<TeamUser>>({});
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
-  const teamPageSize = 25;
+  const [isSavingIntegrations, setIsSavingIntegrations] = useState(false);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [inviteSummary, setInviteSummary] = useState<InviteSummary | null>(null);
+  const [memberError, setMemberError] = useState<string | null>(null);
+  const [isEditMemberOpen, setIsEditMemberOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<TeamUser | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    role: "operator" as TeamUser["role"],
+    teamRolesInput: "",
+    isActive: true
+  });
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettingsState>({
+    slackWebhookUrl: "",
+    telegramBotToken: "",
+    telegramChatId: "",
+    jiraIntegrationActive: false
+  });
 
   const { data: session } = useSession();
-  const logout = useLogout();
+  const createTeamUser = useCreateTeamUser();
+  const updateTeamUser = useUpdateTeamUser();
+  const deleteTeamUser = useDeleteTeamUser();
+  const isSavingMember = createTeamUser.isPending;
+  const isUpdatingMember = updateTeamUser.isPending;
+
   const isAdmin = session?.role === "admin";
-  const isOperator = session?.role === "operator";
-  const canCreate = Boolean(isAdmin || isOperator);
-  const isDemoAccount = session?.email
-    ? DEMO_ACCOUNT_EMAILS.has(session.email.toLowerCase())
-    : false;
-  const canChangePassword = Boolean((isAdmin || isOperator) && !isDemoAccount);
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "";
-  const webhookBase = (apiBase || "https://your-backend.example.com").replace(/\/$/, "");
-  const alertEndpoint = `${webhookBase}/webhooks/incidents`;
-  const recoveryEndpoint = `${webhookBase}/webhooks/incidents/recovery`;
-  const integrationSettingsQuery = useIntegrationSettings(
-    Boolean(isAdmin && activeTab === "webhooks")
-  );
-  const updateIntegrationSettings = useUpdateIntegrationSettings();
-
-  useEffect(() => {
-    if (!isAdmin) {
-      setTeamSearch("");
-      setTeamPage(1);
-    }
-  }, [isAdmin]);
-
-  const teamUsersQuery = useTeamUsers(Boolean(isAdmin), {
-    search: teamSearch.trim().length >= 2 ? teamSearch.trim() : undefined,
-    page: teamPage,
-    pageSize: teamPageSize
-  });
-  const teamUsersResponse = teamUsersQuery.data as TeamUsersResponse | undefined;
-  const teamUsers = teamUsersResponse?.data ?? EMPTY_TEAM_USERS;
-  const teamUsersMeta = teamUsersResponse?.meta;
-
-  useEffect(() => {
-    if (!isAdmin || !teamUsersMeta) {
-      return;
-    }
-    const maxPage = Math.max(teamUsersMeta.totalPages, 1);
-    if (teamPage > maxPage) {
-      setTeamPage(maxPage);
-    }
-  }, [isAdmin, teamUsersMeta, teamPage]);
+  const canCreate = Boolean(session && session.role !== "viewer");
+  const firstName = session?.name?.split(" ")[0] || "Team";
+  const alertEndpoint = "https://your-backend.example.com/webhooks/incidents";
+  const recoveryEndpoint = "https://your-backend.example.com/webhooks/incidents/recovery";
 
   const incidentFilters = useMemo(
     () => ({
       status: statusFilter,
-      severity: severityFilter,
-      teamRole: teamRoleFilter,
-      assignedTo: isAdmin ? assigneeFilter : undefined
+      severity: severityFilter
     }),
-    [statusFilter, severityFilter, teamRoleFilter, assigneeFilter, isAdmin]
+    [statusFilter, severityFilter]
   );
 
-  const incidentsQuery = useIncidents(incidentFilters);
-  const incidents = incidentsQuery.data?.data ?? EMPTY_INCIDENTS;
-  const assigneeOptions = useMemo(() => {
-    return teamUsers.filter((user) => user.isActive);
-  }, [teamUsers]);
+  const { data: incidentsResponse } = useIncidents(incidentFilters);
+  const incidents = incidentsResponse?.data ?? [];
+
+  const teamUsersQuery = useTeamUsers(Boolean(isAdmin), {
+    search: teamSearch.trim().length >= 2 ? teamSearch.trim() : undefined,
+    page: 1,
+    pageSize: 50
+  });
+  const teamUsers = teamUsersQuery.data?.data ?? [];
+  const isTeamLoading = teamUsersQuery.isLoading && teamUsers.length === 0;
+  const isTeamRefetching = teamUsersQuery.isFetching && !teamUsersQuery.isLoading;
 
   useEffect(() => {
-    if (incidentIdFromQuery) {
-      setSelectedIncidentId(incidentIdFromQuery);
-    } else {
-      setSelectedIncidentId(null);
-    }
+    if (incidentIdFromQuery) setSelectedIncidentId(incidentIdFromQuery);
+    else setSelectedIncidentId(null);
   }, [incidentIdFromQuery]);
 
-  const filterChips = useMemo(() => {
-    const chips: Array<{ label: string; onClear: () => void }> = [];
-    if (statusFilter) {
-      chips.push({
-        label: `Status: ${statusFilter}`,
-        onClear: () => setStatusFilter(undefined)
-      });
-    }
-    if (severityFilter) {
-      chips.push({
-        label: `Severity: ${severityFilter}`,
-        onClear: () => setSeverityFilter(undefined)
-      });
-    }
-    if (teamRoleFilter) {
-      chips.push({
-        label: `Team role: ${teamRoleFilter}`,
-        onClear: () => setTeamRoleFilter(undefined)
-      });
-    }
-    if (assigneeFilter) {
-      const assigneeName =
-        assigneeOptions.find((user) => user.id === assigneeFilter)?.name ?? "Assignee";
-      chips.push({
-        label: `Assigned to: ${assigneeName}`,
-        onClear: () => setAssigneeFilter(undefined)
-      });
-    }
-    return chips;
-  }, [statusFilter, severityFilter, teamRoleFilter, assigneeFilter, assigneeOptions]);
+  if (!session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-900 text-gray-400">
+        Loading workspace...
+      </div>
+    );
+  }
 
-  // Calculate stats
   const criticalIncidents = incidents.filter(i => i.severity === 'critical').length;
   const activeIncidents = incidents.filter(i => i.status !== 'resolved').length;
   const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
+
+  const statMappings = [
+    { label: "Active Incidents", value: activeIncidents, colorClass: "bg-yellow-800/30 text-yellow-300", icon: "ACT" },
+    { label: "Critical Severity", value: criticalIncidents, colorClass: "bg-red-800/30 text-red-300", icon: "CRIT" },
+    { label: "Total Incidents", value: incidents.length, colorClass: "bg-blue-800/30 text-blue-300", icon: "ALL" },
+    { label: "Resolved Incidents", value: resolvedIncidents, colorClass: "bg-green-800/30 text-green-300", icon: "DONE" },
+  ];
 
   const handleIncidentSelect = (incident: Incident) => {
     setSelectedIncidentId(incident.id);
@@ -189,856 +403,950 @@ function DashboardPageContent() {
     router.replace("/dashboard", { scroll: false });
   };
 
-  const toggleUserExpansion = (userId: string) => {
-    setExpandedUser(expandedUser === userId ? null : userId);
-    setEditingUser(null);
-    setEditFormData({});
+  const navigation = [
+    {
+      id: "incidents",
+      name: "Incidents",
+      description: "Live incident feed",
+      icon: "INC",
+      current: activeTab === "incidents",
+      onClick: () => setActiveTab("incidents")
+    },
+    ...(isAdmin
+      ? [
+          {
+            id: "team",
+            name: "Team Management",
+            description: "Manage roles & assignments",
+            icon: "TEAM",
+            current: activeTab === "team",
+            onClick: () => setActiveTab("team")
+          }
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            id: "webhooks",
+            name: "Automation",
+            description: "Webhooks & notifications",
+            icon: "AUTO",
+            current: activeTab === "webhooks",
+            onClick: () => setActiveTab("webhooks")
+          }
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            id: "password",
+            name: "Security",
+            description: "Update password",
+            icon: "SEC",
+            current: activeTab === "password",
+            onClick: () => setActiveTab("password")
+          }
+        ]
+      : []),
+  ];
+
+  const updateIntegrationSetting = <K extends keyof IntegrationSettingsState>(
+    key: K,
+    value: IntegrationSettingsState[K]
+  ) => {
+    setIntegrationSettings((previous) => ({ ...previous, [key]: value }));
   };
 
-  const startEditing = (user: TeamUser, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setEditingUser(user.id);
-    setEditFormData({
+  const saveIntegrations = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingIntegrations(true);
+    setTimeout(() => {
+      setIsSavingIntegrations(false);
+    }, 1500);
+  };
+
+  const handleCreateTeamMember = async (payload: NewTeamMemberPayload) => {
+    if (!payload.name || !payload.email) {
+      return;
+    }
+
+    const normalizedRoles = payload.teamRoles.length ? payload.teamRoles : ["Incident Response"];
+    setMemberError(null);
+
+    try {
+      const response = await createTeamUser.mutateAsync({
+        name: payload.name,
+        email: payload.email,
+        role: payload.role as "admin" | "operator" | "viewer",
+        teamRoles: normalizedRoles,
+        isActive: true
+      });
+
+      setInviteSummary({
+        name: response.data.name,
+        email: response.data.email,
+        password: response.meta?.initialPassword ?? null,
+        emailStatus: response.meta?.emailStatus ?? null,
+        emailError: response.meta?.emailError ?? null
+      });
+      setIsAddMemberOpen(false);
+    } catch (error) {
+      let message = "Failed to create teammate.";
+      if (isAxiosError(error)) {
+        message = error.response?.data?.message ?? error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      setMemberError(message);
+    }
+  };
+
+  const openEditModal = (user: TeamUser) => {
+    setEditingUser(user);
+    setEditForm({
       name: user.name,
       email: user.email,
       role: user.role,
-      teamRoles: [...user.teamRoles],
+      teamRolesInput: user.teamRoles.join(", "),
       isActive: user.isActive
     });
+    setEditError(null);
+    setIsEditMemberOpen(true);
   };
 
-  const cancelEditing = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setEditingUser(null);
-    setEditFormData({});
-  };
+  const handleUpdateTeamMember = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingUser) return;
 
-const saveEditing = async (userId: string, e?: React.MouseEvent) => {
-  e?.stopPropagation();
-  try {
-    await mockUpdateUser(userId, editFormData);
-    setEditingUser(null);
-    setEditFormData({});
-    // Refresh the team users data
-    teamUsersQuery.refetch();
-  } catch (error) {
-    console.error('Failed to update user:', error);
-  }
-};
+    const parsedRoles = editForm.teamRolesInput
+      .split(",")
+      .map((role) => role.trim())
+      .filter(Boolean);
 
-  const handleIntegrationSettingsSave = async (values: Partial<IntegrationSettings>) => {
-    await updateIntegrationSettings.mutateAsync(values);
-  };
+    setEditError(null);
 
-  const handleDeleteUser = async (userId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      setIsDeleting(userId);
-      try {
-        await mockDeleteUser(userId);
-        // Refresh the team users data
-        teamUsersQuery.refetch();
-      } catch (error) {
-        console.error('Failed to delete user:', error);
-      } finally {
-        setIsDeleting(null);
+    try {
+      await updateTeamUser.mutateAsync({
+        id: editingUser.id,
+        payload: {
+          name: editForm.name.trim(),
+          email: editForm.email.trim(),
+          role: editForm.role,
+          teamRoles: parsedRoles,
+          isActive: editForm.isActive
+        }
+      });
+      closeEditModal();
+    } catch (error) {
+      let message = "Failed to update teammate.";
+      if (isAxiosError(error)) {
+        message = error.response?.data?.message ?? error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
       }
+      setEditError(message);
     }
   };
 
-  const handleResetPassword = async (userId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (window.confirm('Are you sure you want to reset this user\'s password? They will receive an email with instructions to set a new password.')) {
-      try {
-        await mockResetPassword(userId);
-        alert('Password reset email has been sent to the user.');
-      } catch (error) {
-        console.error('Failed to reset password:', error);
+  const closeEditModal = () => {
+    setIsEditMemberOpen(false);
+    setEditingUser(null);
+    setEditError(null);
+  };
+
+  const handleDeleteUser = async (user: TeamUser) => {
+    if (deletingUserId) return;
+    const confirmed = window.confirm(`Delete ${user.name}'s account? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setDeletingUserId(user.id);
+    try {
+      await deleteTeamUser.mutateAsync(user.id);
+    } catch (error) {
+      let message = "Failed to delete teammate.";
+      if (isAxiosError(error)) {
+        message = error.response?.data?.message ?? error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
       }
+      window.alert(message);
+    } finally {
+      setDeletingUserId(null);
     }
   };
 
-  const handleInputChange = (field: string, value: string | boolean) => {
-    setEditFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleTeamRoleChange = (role: string, checked: boolean) => {
-    setEditFormData(prev => {
-      const currentRoles = prev.teamRoles || [];
-      const newRoles = checked 
-        ? [...currentRoles, role]
-        : currentRoles.filter(r => r !== role);
-      
-      return {
-        ...prev,
-        teamRoles: newRoles
-      };
-    });
-  };
-
-  // Available roles for the role selector
-  const availableRoles = ['admin', 'operator', 'viewer'];
-  const availableTeamRoles = ['Frontend', 'Backend', 'DevOps', 'Security', 'Support', 'Manager'];
-  const firstName = session?.name?.split(" ")[0] ?? "there";
-
-  const baseSidebarItems: Array<{
-    id: DashboardTab;
-    label: string;
-    description: string;
-    adminOnly?: boolean;
-    requiresPassword?: boolean;
-  }> = [
-    { id: "incidents", label: "Incidents", description: "Live incident feed" },
-    { id: "team", label: "Team", description: "Manage roles & assignments", adminOnly: true },
-    { id: "webhooks", label: "Automation", description: "Webhooks & notifications", adminOnly: true },
-    { id: "password", label: "Security", description: "Update password", requiresPassword: true }
+  const filterChips = [
+    ...(statusFilter ? [{ label: `Status: ${statusFilter}`, onClear: () => setStatusFilter(undefined) }] : []),
+    ...(severityFilter ? [{ label: `Severity: ${severityFilter}`, onClear: () => setSeverityFilter(undefined) }] : [])
   ];
 
-  const sidebarNavItems = baseSidebarItems.filter((item) => {
-    if (item.adminOnly && !isAdmin) return false;
-    if (item.requiresPassword && !canChangePassword) return false;
+  const filteredIncidents = incidents.filter(incident => {
+    if (statusFilter && incident.status !== statusFilter) return false;
+    if (severityFilter && incident.severity !== severityFilter) return false;
     return true;
   });
 
+  const filteredTeamUsers = teamUsers.filter(user => 
+    user.name.toLowerCase().includes(teamSearch.toLowerCase()) || 
+    user.email.toLowerCase().includes(teamSearch.toLowerCase())
+  );
+
   return (
     <AuthGuard>
+      <div className="min-h-screen bg-gray-900 flex font-sans">
+        <div className="bg-gray-900 border-r border-gray-700 w-64 hidden lg:block flex-shrink-0 pt-6">
+          <div className="px-6 mb-8">
+            <div className="text-xl font-extrabold tracking-tight text-blue-400">
+              Incident<span className="text-gray-50">Pulse</span>
+            </div>
+          </div>
+          <nav className="px-4 space-y-2">
+            {navigation.map((item) => (
+              <button
+                key={item.id}
+                onClick={item.onClick}
+                className={`w-full text-left py-3 px-3 rounded-xl transition duration-200 flex items-center group ${
+                  item.current
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/40'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <span className={`mr-3 w-5 h-5 font-bold flex items-center justify-center ${
+                  item.current ? 'text-white' : 'text-gray-500 group-hover:text-blue-400'
+                }`}>
+                  {item.icon}
+                </span>
+                <div>
+                  <span className="text-sm font-semibold block">{item.name}</span>
+                  <span className={`text-xs ${item.current ? 'text-blue-200' : 'text-gray-500'}`}>
+                    {item.description}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </nav>
+        </div>
 
-      <DashboardShell
-        session={session}
-        canCreate={canCreate}
-        onNewIncident={() => setIsNewIncidentOpen(true)}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={(open) => setMobileMenuOpen(open)}
-        sidebarNavItems={sidebarNavItems}
-        stats={{
-          total: incidents.length,
-          active: activeIncidents,
-          critical: criticalIncidents,
-          resolved: resolvedIncidents
-        }}
-        firstName={firstName}
-        logout={logout}
-      >
-        {activeTab === "incidents" && (
-          <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">Incident management</h2>
-                <p className="text-sm text-gray-600">
-                  Track investigations, assignments, and customer messaging in one view.
-                </p>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="bg-gray-900 border-b border-gray-700 sticky top-0 z-40">
+            <div className="px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+              <div className="flex items-center">
+                <button
+                  className="lg:hidden p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800"
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  <Bars3Icon className="h-6 w-6" />
+                </button>
+                <h1 className="text-2xl font-bold text-white ml-4 hidden lg:block">
+                  Dashboard / <span className="text-blue-400 capitalize">{activeTab}</span>
+                </h1>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <FilterSelect
-                  label="Status"
-                  value={statusFilter}
-                  options={statusFilters}
-                  onChange={(status) => setStatusFilter(status)}
-                />
-                <FilterSelect
-                  label="Severity"
-                  value={severityFilter}
-                  options={severityFilters}
-                  onChange={(severity) => setSeverityFilter(severity)}
-                />
-                <FilterSelect
-                  label="Team role"
-                  value={teamRoleFilter}
-                  options={availableTeamRoles as readonly string[]}
-                  onChange={(role) => setTeamRoleFilter(role)}
-                />
-                <div className="flex min-w-[180px] flex-col">
-                  <label className="mb-1 text-xs font-medium text-gray-500">Assignee</label>
-                  <div className="relative">
-                    <select
-                      value={assigneeFilter ?? ""}
-                      onChange={(event) => setAssigneeFilter(event.target.value || undefined)}
-                      className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2 pr-8 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="">All assignees</option>
-                      {assigneeOptions.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+
+              <div className="flex items-center space-x-4">
+                {canCreate && activeTab === 'incidents' && (
+                  <button
+                    onClick={() => setIsNewIncidentOpen(true)}
+                    className="inline-flex items-center text-sm font-semibold py-2 px-4 rounded-full transition duration-150 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/50"
+                  >
+                    <span className="w-4 h-4 mr-2 font-bold">➕</span>+ New Incident
+                  </button>
+                )}
+
+                <div className="relative group">
+                  <div className="p-2 flex items-center space-x-2 cursor-pointer rounded-full hover:bg-gray-800 transition duration-150">
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold text-white uppercase">
+                      {firstName.charAt(0)}
+                    </div>
+                    <ChevronDownIcon className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <div className="absolute right-0 mt-2 w-48 rounded-lg shadow-xl bg-gray-800 border border-gray-700 hidden group-hover:block z-10">
+                    <div className="px-4 py-3 text-sm text-gray-300 border-b border-gray-700">
+                      Signed in as <div className="font-medium text-white truncate">{session.email}</div>
+                    </div>
+                    <a href="#" className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Profile Settings</a>
+                    <button onClick={() => alert("Logging out")} className="w-full text-left block px-4 py-2 text-sm text-red-400 hover:bg-gray-700">
+                      Sign out
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            {isAdmin ? (
-              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
-                Automate intake with secure webhooks and send Slack or Telegram alerts from the Integrations tab.
+          {sidebarOpen && (
+            <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setSidebarOpen(false)}>
+              <div className="absolute inset-0 bg-black opacity-75"></div>
+              <div className="bg-gray-900 border-r border-gray-700 w-64 h-full absolute top-0 left-0 pt-6" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 mb-8">
+                  <div className="text-xl font-extrabold tracking-tight text-blue-400">
+                    Incident<span className="text-gray-50">Pulse</span>
+                  </div>
+                </div>
+                <nav className="px-4 space-y-2">
+                  {navigation.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => { item.onClick(); setSidebarOpen(false); }}
+                      className={`w-full text-left py-3 px-3 rounded-xl transition duration-200 flex items-center group ${
+                        item.current
+                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/40'
+                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      }`}
+                    >
+                      <span className={`mr-3 w-5 h-5 font-bold flex items-center justify-center ${
+                        item.current ? 'text-white' : 'text-gray-500 group-hover:text-blue-400'
+                      }`}>
+                        {item.icon}
+                      </span>
+                      <div>
+                        <span className="text-sm font-semibold block">{item.name}</span>
+                        <span className={`text-xs ${item.current ? 'text-blue-200' : 'text-gray-500'}`}>
+                          {item.description}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </nav>
+                <button
+                  className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
               </div>
-            ) : null}
+            </div>
+          )}
 
-            {filterChips.length > 0 ? (
-              <div className="mt-4 flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-gray-50 p-4">
-                <span className="text-sm text-gray-500">Active filters:</span>
-                {filterChips.map((chip) => (
-                  <button
-                    key={chip.label}
-                    type="button"
-                    onClick={chip.onClear}
-                    className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800 transition hover:bg-blue-200"
-                  >
-                    {chip.label}
-                    <span className="ml-1.5 text-blue-600">x</span>
-                  </button>
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-8">
+            {activeTab === 'incidents' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {statMappings.map(stat => (
+                  <div key={stat.label} className="bg-gray-800 border border-gray-700 rounded-xl p-5 flex items-start justify-between shadow-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-400 mb-1">{stat.label}</p>
+                      <p className="text-3xl font-bold text-gray-50">{stat.value}</p>
+                    </div>
+                    <div className={`p-3 rounded-xl ${stat.colorClass}`}>
+                      <span className="text-xl">{stat.icon}</span>
+                    </div>
+                  </div>
                 ))}
               </div>
-            ) : null}
+            )}
 
-            <div className="mt-6 overflow-x-auto">
-              <div className="min-w-full inline-block align-middle">
-                <div className="overflow-hidden rounded-xl border border-gray-100 shadow">
-                  <IncidentsTable
-                    incidents={incidents}
-                    onSelect={handleIncidentSelect}
-                    currentUserId={session?.id ?? ""}
-                    isAdmin={Boolean(isAdmin)}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+            {activeTab === 'incidents' && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-gray-700 pb-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Incident Management</h2>
+                    <p className="text-sm text-gray-400">Track investigations, assignments, and customer messaging in one centralized view.</p>
+                  </div>
 
-        {activeTab === "team" && isAdmin && (
-          <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">Team management</h2>
-                <p className="text-sm text-gray-600">Invite responders, manage roles, and keep audit trails clean.</p>
-              </div>
-              <div>
-                <input
-                  type="text"
-                  placeholder="Search team members..."
-                  value={teamSearch}
-                  onChange={(event) => setTeamSearch(event.target.value)}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 lg:w-64"
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 space-y-4 md:hidden">
-              {teamUsers.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-                  No team members found.
-                </div>
-              ) : (
-                teamUsers.map((user) => (
-                  <div
-                    key={user.id}
-                    className={`rounded-2xl border p-4 transition ${
-                      expandedUser === user.id ? "border-blue-300 shadow" : "border-gray-200 shadow-sm"
-                    }`}
-                    onClick={() => toggleUserExpansion(user.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">{user.name}</p>
-                        <p className="text-xs text-gray-500">{user.email}</p>
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex min-w-[150px] flex-col">
+                      <label className="mb-1 text-xs font-medium text-gray-400">Status</label>
+                      <div className="relative">
+                        <select
+                          onChange={(e) => setStatusFilter(e.target.value as IncidentStatus || undefined)}
+                          value={statusFilter || ''}
+                          className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 pr-8 text-sm text-gray-200 shadow-sm transition duration-150 ease-in-out focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="">All Status</option>
+                          <option value="open">Open</option>
+                          <option value="investigating">Investigating</option>
+                          <option value="monitoring">Monitoring</option>
+                          <option value="resolved">Resolved</option>
+                        </select>
+                        <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                       </div>
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">
-                        {user.role}
-                      </span>
                     </div>
-                    {expandedUser === user.id ? (
-                      <div className="mt-4 space-y-4 border-t border-gray-200 pt-4 text-sm text-gray-700">
-                        {editingUser === user.id ? (
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-1 gap-4">
-                              <label className="space-y-1 text-sm font-medium text-gray-700">
-                                Name
-                                <input
-                                  type="text"
-                                  value={editFormData.name || ""}
-                                  onChange={(event) => handleInputChange("name", event.target.value)}
-                                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </label>
-                              <label className="space-y-1 text-sm font-medium text-gray-700">
-                                Email
-                                <input
-                                  type="email"
-                                  value={editFormData.email || ""}
-                                  onChange={(event) => handleInputChange("email", event.target.value)}
-                                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </label>
-                              <label className="space-y-1 text-sm font-medium text-gray-700">
-                                Role
-                                <select
-                                  value={editFormData.role || user.role}
-                                  onChange={(event) => handleInputChange("role", event.target.value)}
-                                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                  {availableRoles.map((role) => (
-                                    <option key={role} value={role}>
-                                      {role.charAt(0).toUpperCase() + role.slice(1)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(editFormData.isActive ?? user.isActive)}
-                                  onChange={(event) => handleInputChange("isActive", event.target.checked)}
-                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                Active account
-                              </label>
-                            </div>
 
-                            <div>
-                              <p className="text-xs font-semibold uppercase text-gray-500">Team roles</p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {availableTeamRoles.map((role) => {
-                                  const checked = (editFormData.teamRoles || user.teamRoles).includes(role);
-                                  return (
-                                    <label
-                                      key={role}
-                                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
-                                        checked ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600"
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={(event) => handleTeamRoleChange(role, event.target.checked)}
-                                        className="mr-2 h-3 w-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                      />
-                                      {role}
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            </div>
+                    <div className="flex min-w-[150px] flex-col">
+                      <label className="mb-1 text-xs font-medium text-gray-400">Severity</label>
+                      <div className="relative">
+                        <select
+                          onChange={(e) => setSeverityFilter(e.target.value as IncidentSeverity || undefined)}
+                          value={severityFilter || ''}
+                          className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 pr-8 text-sm text-gray-200 shadow-sm transition duration-150 ease-in-out focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="">All Severity</option>
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                          <option value="critical">Critical</option>
+                        </select>
+                        <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-                            <div className="flex flex-wrap justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={(event) => cancelEditing(event)}
-                                className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600"
+                {isAdmin && (
+                  <div className="rounded-xl border border-blue-500/50 bg-blue-900/40 p-4 text-sm text-blue-300">
+                    Automate intake with secure webhooks and send Slack or Telegram alerts from the <strong>Automation</strong> tab.
+                  </div>
+                )}
+
+                {filterChips.length > 0 && (
+                  <div className="flex flex-wrap gap-2 rounded-xl border border-gray-700 bg-gray-800/50 p-4">
+                    <span className="text-sm font-semibold text-gray-400">Active Filters:</span>
+                    {filterChips.map((chip, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={chip.onClear}
+                        className="inline-flex items-center rounded-full bg-blue-600/20 px-3 py-1 text-xs font-medium text-blue-300 transition hover:bg-blue-600/30"
+                      >
+                        {chip.label}
+                        <span className="ml-1.5 w-3 h-3 text-blue-300">✕</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <div className="min-w-full inline-block align-middle">
+                    <div className="overflow-hidden rounded-xl border border-gray-700 shadow-xl">
+                      <table className="min-w-full divide-y divide-gray-700">
+                        <thead className="bg-gray-800">
+                          <tr>
+                            {['Title', 'Severity', 'Status', 'Assigned To', 'Created'].map(header => (
+                              <th key={header} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="bg-gray-900 divide-y divide-gray-800">
+                          {filteredIncidents.length === 0 ? (
+                            <tr><td colSpan={5} className="px-6 py-4 text-center text-gray-500">No incidents matching filters.</td></tr>
+                          ) : (
+                            filteredIncidents.map(incident => (
+                              <tr 
+                                key={incident.id} 
+                                onClick={() => handleIncidentSelect(incident)} 
+                                className="hover:bg-gray-800/70 cursor-pointer transition duration-150"
                               >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => saveEditing(user.id, event)}
-                                className="inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
-                              >
-                                Save changes
-                              </button>
-                            </div>
-                          </div>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                                  {incident.title}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`inline-flex items-center px-3 py-0.5 rounded-full text-xs font-medium uppercase border ${
+                                    incident.severity === 'critical' ? 'bg-red-800/50 text-red-300 border-red-500' :
+                                    incident.severity === 'high' ? 'bg-orange-800/50 text-orange-300 border-orange-500' :
+                                    incident.severity === 'medium' ? 'bg-yellow-800/50 text-yellow-300 border-yellow-500' :
+                                    'bg-green-800/50 text-green-300 border-green-500'
+                                  }`}>
+                                    {incident.severity}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                  <span className={`capitalize font-semibold ${
+                                    incident.status === 'open' || incident.status === 'investigating' ? 'text-red-400' :
+                                    incident.status === 'monitoring' ? 'text-yellow-400' : 'text-green-400'
+                                  }`}>
+                                    {incident.status}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                  {incident.assignedTo?.name ?? 'Unassigned'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {new Date(incident.createdAt).toLocaleDateString('en-US', { 
+                                    year: 'numeric', 
+                                    month: 'short', 
+                                    day: 'numeric' 
+                                  })}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'team' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 shadow-lg">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-gray-700 pb-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Team Management</h2>
+                    <p className="text-sm text-gray-400">Invite responders, manage roles, and keep audit trails clean.</p>
+                  </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="relative flex-1">
+                        <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                        placeholder="Search team members..."
+                        value={teamSearch}
+                        onChange={(e) => setTeamSearch(e.target.value)}
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 pl-9 pr-3 py-2 text-sm text-gray-200 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:min-w-[220px]"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMemberError(null);
+                          setIsAddMemberOpen(true);
+                        }}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-500 bg-blue-600/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                        Add Team Member
+                      </button>
+                      {isTeamRefetching ? (
+                        <p className="text-xs text-gray-500">Syncing roster…</p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                {inviteSummary && (
+                  <div className="mt-4 rounded-xl border border-blue-500/30 bg-blue-900/30 p-4 text-sm text-blue-100">
+                    <p className="text-base font-semibold text-white">
+                      {inviteSummary.name} was invited successfully.
+                    </p>
+                    <p className="mt-1">
+                      Email: <span className="font-mono text-blue-200">{inviteSummary.email}</span>
+                    </p>
+                    {inviteSummary.password ? (
+                      <p className="mt-1">
+                        Temporary password:{" "}
+                        <code className="rounded bg-blue-800/60 px-2 py-0.5 text-blue-100">
+                          {inviteSummary.password}
+                        </code>
+                      </p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-blue-300">
+                      Email status:{" "}
+                      <span className="font-semibold text-white">
+                        {inviteSummary.emailStatus ?? "queued"}
+                      </span>
+                      {inviteSummary.emailError ? (
+                        <span className="ml-2 text-red-200">
+                          ({inviteSummary.emailError})
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                )}
+
+                <div className="mt-6">
+                  <div className="overflow-x-auto rounded-xl border border-gray-700 shadow-xl">
+                    <table className="min-w-full divide-y divide-gray-700">
+                      <thead className="bg-gray-800">
+                        <tr>
+                          {['Name', 'Email', 'Role', 'Team Roles', 'Status', 'Last Active', 'Actions'].map(header => (
+                            <th key={header} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                              {header}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-gray-900 divide-y divide-gray-800">
+                        {isTeamLoading ? (
+                          <tr>
+                            <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                              Loading team directory...
+                            </td>
+                          </tr>
+                        ) : filteredTeamUsers.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                              No team members found.
+                            </td>
+                          </tr>
                         ) : (
-                          <>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <p className="text-xs uppercase text-gray-400">Status</p>
-                                <p className="font-semibold text-gray-900">
-                                  {user.isActive ? "Active" : "Suspended"}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-xs uppercase text-gray-400">Role</p>
-                                <p className="font-semibold text-gray-900 capitalize">{user.role}</p>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-xs uppercase text-gray-400">Team roles</p>
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {user.teamRoles.length === 0 ? (
-                                  <span className="text-xs text-gray-500">None assigned</span>
-                                ) : (
-                                  user.teamRoles.map((role) => (
-                                    <span key={role} className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                          filteredTeamUsers.map(user => (
+                            <tr key={user.id} className="hover:bg-gray-800/70 transition duration-150">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.name}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{user.email}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-400 capitalize">
+                                {user.role}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                <div className="flex flex-wrap gap-1">
+                                  {user.teamRoles.map(role => (
+                                    <span key={role} className="rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-300">
                                       {role}
                                     </span>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 text-xs text-gray-500">
-                              <div>
-                                <p className="uppercase tracking-wide text-gray-400">Last active</p>
-                                <p className="text-gray-900 text-sm">
-                                  {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleDateString() : "Never"}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="uppercase tracking-wide text-gray-400">Created</p>
-                                <p className="text-gray-900 text-sm">
-                                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Unknown"}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2 border-t pt-3">
-                              <button
-                                type="button"
-                                onClick={(event) => startEditing(user, event)}
-                                className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600"
-                              >
-                                <PencilIcon className="mr-1 h-4 w-4" />
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => handleResetPassword(user.id, event)}
-                                className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600"
-                              >
-                                <KeyIcon className="mr-1 h-4 w-4" />
-                                Reset
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => handleDeleteUser(user.id, event)}
-                                disabled={isDeleting === user.id}
-                                className="inline-flex items-center rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                <TrashIcon className="mr-1 h-4 w-4" />
-                                {isDeleting === user.id ? "Deleting..." : "Delete"}
-                              </button>
-                            </div>
-                          </>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex items-center px-3 py-0.5 rounded-full text-xs font-medium ${
+                                  user.isActive ? 'bg-green-600/30 text-green-300' : 'bg-red-600/30 text-red-300'
+                                }`}>
+                                  {user.isActive ? 'Active' : 'Suspended'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                }) : 'Never'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div className="flex flex-wrap gap-2 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditModal(user)}
+                                    className="inline-flex items-center gap-1 rounded-md border border-blue-500/40 px-3 py-1 text-xs font-semibold text-blue-300 transition hover:border-blue-400 hover:text-white"
+                                  >
+                                    <PencilSquareIcon className="h-4 w-4" />
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={deletingUserId === user.id}
+                                    onClick={() => handleDeleteUser(user)}
+                                    className="inline-flex items-center gap-1 rounded-md border border-red-500/40 px-3 py-1 text-xs font-semibold text-red-300 transition hover:border-red-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                    {deletingUserId === user.id ? "Removing..." : "Delete"}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
                         )}
-                      </div>
-                    ) : null}
+                      </tbody>
+                    </table>
                   </div>
-                ))
-              )}
-            </div>
-
-            <div className="hidden md:block">
-              <TeamManagementPanel
-                users={teamUsers}
-                meta={teamUsersMeta}
-                isLoading={teamUsersQuery.isLoading}
-                isRefetching={teamUsersQuery.isFetching}
-                search={teamSearch}
-                onSearchChange={setTeamSearch}
-                page={teamPage}
-                onPageChange={setTeamPage}
-                pageSize={teamPageSize}
-              />
-            </div>
-          </div>
-        )}
-
-        {activeTab === "webhooks" && isAdmin && (
-          <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-sm space-y-6">
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-6 space-y-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-blue-800">Automation</p>
-                  <h2 className="text-xl font-semibold text-blue-950">Webhooks & integrations</h2>
-                  <p className="text-sm text-blue-900">
-                    Create or resolve incidents from monitoring tools and broadcast lifecycle updates to Slack or Telegram.
-                  </p>
-                </div>
-                <Link
-                  href="/docs#webhooks"
-                  className="inline-flex items-center text-sm font-semibold text-blue-800 underline"
-                >
-                  Open documentation
-                  <ChevronRightIcon className="ml-1.5 h-4 w-4" />
-                </Link>
-              </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Alert endpoint</p>
-                  <code className="mt-2 block break-all rounded-xl border border-blue-200 bg-white px-3 py-2 font-mono text-xs text-blue-900">
-                    {alertEndpoint}
-                  </code>
-                  <p className="mt-2 text-xs text-blue-800">
-                    Sign requests with <span className="font-mono">X-Signature</span> (HMAC-SHA256) or include the fallback <span className="font-mono">X-Webhook-Token</span> header.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Recovery endpoint</p>
-                  <code className="mt-2 block break-all rounded-xl border border-blue-200 bg-white px-3 py-2 font-mono text-xs text-blue-900">
-                    {recoveryEndpoint}
-                  </code>
-                  <p className="mt-2 text-xs text-blue-800">
-                    Send the matching <span className="font-mono">fingerprint</span> to resolve incidents and notify subscribers.
-                  </p>
                 </div>
               </div>
-              <div className="grid gap-4 text-xs text-blue-900 lg:grid-cols-2">
-                <div>
-                  Required headers: <span className="font-mono">X-Signature</span> or <span className="font-mono">X-Webhook-Token</span>. Include <span className="font-mono">X-Idempotency-Key</span> to dedupe retries.
+            )}
+
+            {activeTab === 'webhooks' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-8 shadow-lg">
+                <div className="rounded-xl border border-blue-500/50 bg-blue-900/40 p-6 space-y-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-blue-300">Automation</p>
+                      <h2 className="text-2xl font-bold text-white">Webhooks & Integrations</h2>
+                      <p className="text-sm text-blue-300">
+                        Create or resolve incidents from monitoring tools and broadcast lifecycle updates to services.
+                      </p>
+                    </div>
+                    <Link
+                      href="/docs#webhooks"
+                      className="inline-flex items-center text-sm font-semibold text-blue-300 hover:text-white transition duration-200"
+                    >
+                      Open Documentation
+                      <span className="ml-1.5 h-4 w-4 font-bold">↗</span>
+                    </Link>
+                  </div>
+                  <div className="grid gap-6 lg:grid-cols-2 pt-4 border-t border-blue-700/50">
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-wide text-blue-400 mb-2">Alert Endpoint</p>
+                      <code className="mt-2 block break-all rounded-lg border border-blue-700 bg-gray-900 px-4 py-3 font-mono text-xs text-green-400 shadow-inner">
+                        {alertEndpoint}
+                      </code>
+                      <p className="mt-2 text-xs text-blue-400">
+                        Use this endpoint to <strong>create or update</strong> incidents from your monitoring systems.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-wide text-blue-400 mb-2">Recovery Endpoint</p>
+                      <code className="mt-2 block break-all rounded-lg border border-blue-700 bg-gray-900 px-4 py-3 font-mono text-xs text-green-400 shadow-inner">
+                        {recoveryEndpoint}
+                      </code>
+                      <p className="mt-2 text-xs text-blue-400">
+                        Send the matching <code className="font-mono text-white">fingerprint</code> to <strong>resolve</strong> incidents automatically.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  Dedupe window 10 minutes · rate limit 60 req/min · metrics via <span className="font-mono">GET /metrics/webhook</span>.
+
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-sm space-y-4 shadow-lg">
+                    <h3 className="text-xl font-semibold text-white">Integration Secrets</h3>
+                    <p className="text-gray-400">Manage API keys and authentication tokens for external services.</p>
+                    <form onSubmit={saveIntegrations} className="space-y-4">
+                      <label className="block">
+                        <span className="text-sm font-medium text-gray-300">Slack Webhook URL</span>
+                        <input
+                          type="url"
+                          value={integrationSettings.slackWebhookUrl}
+                          onChange={(e) => updateIntegrationSetting('slackWebhookUrl', e.target.value)}
+                          placeholder="https://hooks.slack.com/services/..."
+                          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-medium text-gray-300">Telegram Bot Token</span>
+                        <input
+                          type="text"
+                          value={integrationSettings.telegramBotToken}
+                          onChange={(e) => updateIntegrationSetting('telegramBotToken', e.target.value)}
+                          placeholder="123456:ABC-DEF123456..."
+                          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1"
+                        />
+                      </label>
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={integrationSettings.jiraIntegrationActive}
+                            onChange={(e) => updateIntegrationSetting('jiraIntegrationActive', e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-600 text-blue-500 focus:ring-blue-500 bg-gray-700"
+                          />
+                          <span className="text-sm text-gray-300">Activate JIRA Integration</span>
+                        </label>
+                        <button
+                          type="submit"
+                          disabled={isSavingIntegrations}
+                          className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50"
+                        >
+                          {isSavingIntegrations ? 'Saving...' : 'Save Integrations'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  <div className="bg-gray-800 border border-dashed border-gray-700 rounded-xl p-6 text-sm shadow-lg">
+                    <h3 className="text-xl font-semibold text-gray-300">Future Integrations</h3>
+                    <p className="mt-2 text-gray-500">
+                      We&apos;re planning support for PagerDuty and Opsgenie alerts soon. Check the documentation for updates!
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-800">
-                <h3 className="text-base font-semibold text-gray-900">Secrets to configure</h3>
-                <ul className="mt-3 space-y-2 text-sm">
-                  <li>
-                    <span className="font-mono text-xs">WEBHOOK_HMAC_SECRET</span>  generate once (for example <code className="font-mono text-xs">openssl rand -hex 32</code>) and store it in Render &gt; Environment.
-                  </li>
-                  <li>
-                    <span className="font-mono text-xs">WEBHOOK_SHARED_TOKEN</span>  optional fallback header for trusted internal scripts.
-                  </li>
-                  <li>
-                    <span className="font-mono text-xs">WEBHOOK_SYSTEM_USER_ID</span>  operator id used when the platform appends automated updates.
-                  </li>
-                </ul>
-                <p className="mt-3 text-xs text-gray-500">
-                  Secrets are never displayed in the dashboard. Copy the values directly from Render when onboarding new tooling.
+            {activeTab === 'password' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl max-w-lg mx-auto p-6 lg:p-8 space-y-6 shadow-lg">
+                <h2 className="text-2xl font-bold text-white">Update Password</h2>
+                <p className="text-sm text-gray-400">
+                  Ensure your account is secure by regularly updating your password.
                 </p>
+                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4 shadow-lg">
+                  <h3 className="text-xl font-semibold text-white">Change Password</h3>
+                  <ChangePasswordCard />
+                </div>
               </div>
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-800">
-                <h3 className="text-base font-semibold text-gray-900">Sample alert payload</h3>
-                <pre className="mt-3 overflow-x-auto rounded-xl bg-gray-900/90 p-3 font-mono text-xs text-gray-50">
-{`curl -X POST ${alertEndpoint} \
-  -H "Content-Type: application/json" \
-  -H "X-Signature: <hex-hmac>" \
-  -d '{"service":"checkout-api","environment":"production","eventType":"error_spike","severity":"high","fingerprint":"checkout|production|error_spike"}'`}
-                </pre>
-                <p className="mt-2 text-xs text-gray-500">
-                  Include <span className="font-mono">occurredAt</span> (UTC ISO string) to control dedupe timing and SLA calculations.
-                </p>
-              </div>
-            </div>
+            )}
+          </main>
+        </div>
 
-            <div className="rounded-2xl border border-gray-100 bg-white">
-              <IntegrationsPanel
-                settings={integrationSettingsQuery.data}
-                isLoading={integrationSettingsQuery.isLoading}
-                onSave={handleIntegrationSettingsSave}
-                isSaving={updateIntegrationSettings.isPending}
-              />
-            </div>
-          </div>
-        )}
-
-        {activeTab === "password" && canChangePassword && (
-          <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-sm">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="text-xl font-semibold text-gray-900">Security</h2>
-              <p className="text-sm text-gray-600">Keep your operator account secure with a strong password.</p>
-              <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                <ChangePasswordCard className="bg-white" />
-              </div>
-            </div>
-          </div>
-        )}
-      </DashboardShell>
-        {/* Incident Drawer for viewing/editing */}
         <IncidentDrawer
           incidentId={selectedIncidentId ?? undefined}
           open={Boolean(selectedIncidentId)}
           onClose={handleIncidentDrawerClose}
           currentUser={{
-            id: session?.id ?? "",
-            role: session?.role ?? "viewer"
+            id: session.id,
+            role: session.role
           }}
           teamUsers={teamUsers}
         />
 
-        {/* Modal for creating incidents */}
-        {isNewIncidentOpen && (
-          <div className="fixed inset-0 overflow-y-auto z-50">
-            <div className="flex items-end justify-center min-h-full pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-              {/* Background overlay */}
-              <div 
-                className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-                onClick={() => setIsNewIncidentOpen(false)}
-              ></div>
+        {isAddMemberOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-2xl rounded-2xl border border-gray-700 bg-gray-900 p-8 shadow-2xl">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-2xl font-semibold text-white">Invite a New Team Member</h3>
+                  <p className="text-sm text-gray-400">
+                    Create secure operator accounts without leaving the console.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setMemberError(null);
+                    setIsAddMemberOpen(false);
+                  }}
+                  className="text-gray-400 transition hover:text-white"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
 
-              {/* Modal panel */}
-              <div className="relative inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-                <div className="absolute top-0 right-0 pt-4 pr-4">
-                  <button
-                    type="button"
-                    className="bg-white rounded-md text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    onClick={() => setIsNewIncidentOpen(false)}
-                  >
-                    <span className="sr-only">Close</span>
-                    <XMarkIcon className="h-6 w-6" />
-                  </button>
-                </div>
-                
-                <div className="sm:flex sm:items-start">
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                      Create New Incident
-                    </h3>
-                    <NewIncidentForm
-                      disabled={!canCreate}
-                      canAssign={Boolean(isAdmin)}
-                      assignees={teamUsers}
-                      onSuccess={() => setIsNewIncidentOpen(false)}
-                    />
+              <div className="mt-6">
+                {memberError ? (
+                  <div className="mb-4 rounded-lg border border-red-500/40 bg-red-900/30 px-4 py-3 text-sm text-red-200">
+                    {memberError}
                   </div>
-                </div>
+                ) : null}
+                <AddTeamMemberForm
+                  disabled={isSavingMember}
+                  onSubmit={handleCreateTeamMember}
+                />
+                {isSavingMember && (
+                  <p className="mt-4 text-center text-sm text-gray-400">
+                    Provisioning access&hellip;
+                  </p>
+                )}
               </div>
             </div>
           </div>
         )}
+
+        {isEditMemberOpen && editingUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-2xl rounded-2xl border border-gray-700 bg-gray-900 p-8 shadow-2xl">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-2xl font-semibold text-white">Update {editingUser.name}</h3>
+                  <p className="text-sm text-gray-400">
+                    Adjust permissions or status instantly.
+                  </p>
+                </div>
+                <button
+                  onClick={closeEditModal}
+                  className="text-gray-400 transition hover:text-white"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateTeamMember} className="mt-6 space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Full Name
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, name: e.target.value }))
+                      }
+                      required
+                      className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-gray-300">
+                    Work Email
+                    <input
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, email: e.target.value }))
+                      }
+                      required
+                      className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Platform Role
+                    <select
+                      value={editForm.role}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          role: e.target.value as TeamUser["role"]
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="operator">Operator</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  </label>
+
+                  <label className="block text-sm font-medium text-gray-300">
+                    Team Roles
+                    <input
+                      type="text"
+                      value={editForm.teamRolesInput}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, teamRolesInput: e.target.value }))
+                      }
+                      placeholder="Incident Response, Platform"
+                      className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <span className="mt-1 block text-xs text-gray-400">
+                      Separate multiple roles with commas.
+                    </span>
+                  </label>
+                </div>
+
+                <label className="flex items-start gap-3 rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={editForm.isActive}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({ ...prev, isActive: e.target.checked }))
+                    }
+                    className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-gray-200">
+                      Active account
+                    </span>
+                    <p className="text-xs text-gray-400">
+                      Uncheck to immediately suspend access.
+                    </p>
+                  </div>
+                </label>
+
+                {editError ? (
+                  <p className="text-sm text-red-400">{editError}</p>
+                ) : null}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeEditModal}
+                    className="inline-flex items-center justify-center rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-200 hover:border-gray-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingMember}
+                    className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isUpdatingMember ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {isNewIncidentOpen && (
+          <div className="fixed inset-0 z-50 bg-black bg-opacity-70 flex items-center justify-center p-4">
+            <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md p-8 shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-white">Create New Incident</h3>
+                <button 
+                  onClick={() => setIsNewIncidentOpen(false)} 
+                  className="text-gray-400 hover:text-white"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              <NewIncidentForm
+                disabled={!canCreate}
+                onSuccess={() => setIsNewIncidentOpen(false)}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </AuthGuard>
   );
 }
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading dashboard...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
+        <div className="flex items-center">
+          <div className="h-8 w-8 rounded-full border-4 border-gray-700 border-t-blue-600 animate-spin mr-3" />
+          <span className="text-base text-gray-400 font-medium">Loading dashboard...</span>
+        </div>
+      </div>
+    }>
       <DashboardPageContent />
     </Suspense>
   );
 }
 
-type StatsSummary = {
-  total: number;
-  active: number;
-  critical: number;
-  resolved: number;
-};
-
-type DashboardShellProps = {
-  session?: SessionUser | null;
-  canCreate: boolean;
-  onNewIncident: () => void;
-  activeTab: DashboardTab;
-  onTabChange: (tab: DashboardTab) => void;
-  mobileMenuOpen: boolean;
-  setMobileMenuOpen: (open: boolean) => void;
-  sidebarNavItems: Array<{ id: DashboardTab; label: string; description: string }>;
-  stats: StatsSummary;
-  firstName: string;
-  logout: ReturnType<typeof useLogout>;
-  children: ReactNode;
-};
-
-function DashboardShell({
-  session,
-  canCreate,
-  onNewIncident,
-  activeTab,
-  onTabChange,
-  mobileMenuOpen,
-  setMobileMenuOpen,
-  sidebarNavItems,
-  stats,
-  firstName,
-  logout,
-  children
-}: DashboardShellProps) {
-  const handleNavClick = (tab: DashboardTab) => {
-    onTabChange(tab);
-    setMobileMenuOpen(false);
-  };
-
-  return (
-    <div className="flex min-h-screen bg-gray-50">
-      {mobileMenuOpen ? (
-        <div
-          className="fixed inset-0 z-40 bg-gray-900/40 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      ) : null}
-
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 transform bg-white shadow-xl transition-transform lg:static lg:translate-x-0 ${
-          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-sm font-semibold text-white">
-              IP
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-400">IncidentPulse</p>
-              <p className="text-lg font-semibold text-gray-900">Control Center</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="inline-flex rounded-lg p-2 text-gray-500 transition hover:bg-gray-50 lg:hidden"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <XMarkIcon className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="flex h-[calc(100%-5rem)] flex-col">
-          <div className="px-6 pt-6">
-            <p className="text-xs uppercase tracking-wide text-gray-400">Workspace</p>
-            <div className="mt-3 space-y-2">
-              {sidebarNavItems.map((item) => {
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleNavClick(item.id)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                      isActive
-                        ? "border-blue-500 bg-blue-50 text-blue-900"
-                        : "border-transparent text-gray-600 hover:border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span>{item.label}</span>
-                      {item.id === "incidents" ? (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            isActive ? "bg-white/80 text-blue-700" : "bg-gray-100 text-gray-600"
-                          }`}
-                        >
-                          {stats.active}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs font-normal text-gray-500">{item.description}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mt-auto border-t border-gray-100 px-6 py-6 text-sm text-gray-600">
-            <div className="space-y-2">
-              <Link
-                href="/docs"
-                className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 transition hover:border-blue-500 hover:text-blue-600"
-              >
-                <span>Documentation</span>
-                <ChevronRightIcon className="h-4 w-4" />
-              </Link>
-              <Link
-                href="/status"
-                className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 transition hover:border-blue-500 hover:text-blue-600"
-              >
-                <span>Status Page</span>
-                <ChevronRightIcon className="h-4 w-4" />
-              </Link>
-              <button
-                type="button"
-                onClick={() => logout.mutate()}
-                disabled={logout.isPending}
-                className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-3 py-2 font-semibold text-gray-700 transition hover:border-red-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span>{logout.isPending ? "Signing out..." : "Logout"}</span>
-                <XIcon className="h-4 w-4" />
-              </button>
-              {logout.isError ? (
-                <p className="text-xs text-red-600">Failed to sign out. Please try again.</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <div className="flex min-h-screen flex-1 flex-col lg:ml-72">
-        <header className="border-b border-gray-100 bg-white/90 px-4 py-4 shadow-sm backdrop-blur sm:px-6 lg:px-10">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-500">Hello, {firstName}</p>
-              <h1 className="text-2xl font-semibold text-gray-900">Incident Operations</h1>
-              <p className="text-sm text-gray-500">
-                Monitor incidents, manage responders, and automate communications.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {session?.role ? (
-                <span className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600">
-                  {session.role}
-                </span>
-              ) : null}
-              {canCreate ? (
-                <button
-                  type="button"
-                  onClick={onNewIncident}
-                  className="inline-flex items-center rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                >
-                  + New incident
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="inline-flex items-center rounded-full border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 lg:hidden"
-                onClick={() => setMobileMenuOpen(true)}
-              >
-                <Bars3Icon className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-10">
-          <section>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard label="Total incidents" value={stats.total} />
-              <StatCard label="Active incidents" value={stats.active} />
-              <StatCard label="Critical incidents" value={stats.critical} />
-              <StatCard label="Resolved" value={stats.resolved} />
-            </div>
-          </section>
-          <section className="space-y-8">{children}</section>
-        </main>
-      </div>
-    </div>
-  );
-}
-
-type StatCardProps = {
-  label: string;
-  value: number;
-};
-
-function StatCard({ label, value }: StatCardProps) {
-  return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="mt-1 text-3xl font-semibold text-gray-900">{value}</p>
-    </div>
-  );
-}
-
-type FilterSelectProps<T extends string> = {
-  label: string;
-  value?: T;
-  options: readonly T[];
-  onChange: (value: T | undefined) => void;
-};
-
-function FilterSelect<T extends string>({ label, value, options, onChange }: FilterSelectProps<T>) {
-  return (
-    <div className="flex flex-col min-w-[120px]">
-      <label className="text-xs font-medium text-gray-500 mb-1">{label}</label>
-      <div className="relative">
-        <select
-          value={value ?? ""}
-          onChange={(event) => onChange(event.target.value ? (event.target.value as T) : undefined)}
-          className="appearance-none rounded-md border border-gray-300 bg-white px-3 py-2 pr-8 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 w-full"
-        >
-          <option value="">All {label}</option>
-          {options.map((option) => (
-            <option key={option} value={option}>
-              {option.charAt(0).toUpperCase() + option.slice(1)}
-            </option>
-          ))}
-        </select>
-        <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-      </div>
-    </div>
-  );
-}

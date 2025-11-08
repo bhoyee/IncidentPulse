@@ -18,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.className}>
-      <body className="min-h-screen bg-slate-50">
+      <body className="min-h-screen bg-[#0f1729] text-slate-100">
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>
