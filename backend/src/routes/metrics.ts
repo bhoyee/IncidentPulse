@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
 import { prisma } from "../lib/db";
-import type { Prisma } from "@prisma/client";
 import { refreshStatusCache } from "../lib/status";
 import { getWebhookMetrics } from "../lib/webhook-metrics";
 
