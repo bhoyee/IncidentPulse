@@ -30,6 +30,7 @@ import { AuthGuard } from "@components/AuthGuard";
 import { IncidentDrawer } from "@components/IncidentDrawer";
 import { IntegrationsPanel } from "@components/IntegrationsPanel";
 import { ServiceManagementPanel } from "@components/ServiceManagementPanel";
+import { Pagination } from "@components/Pagination";
 import { useSession } from "@hooks/useSession";
 import { useIncidents, useInvalidateIncidents } from "@hooks/useIncidents";
 import {
@@ -557,6 +558,8 @@ function DashboardPageContent() {
   const [severityFilter, setSeverityFilter] = useState<IncidentSeverity | undefined>();
   const [serviceFilter, setServiceFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
+  const [teamPage, setTeamPage] = useState(1);
+  const TEAM_PAGE_SIZE = 10;
   const [activeTab, setActiveTab] = useState<"incidents" | "team" | "maintenance" | "analytics" | "webhooks" | "profile" | "password">("incidents");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
@@ -627,6 +630,14 @@ function DashboardPageContent() {
     }),
     [statusFilter, severityFilter, serviceFilter]
   );
+
+  useEffect(() => {
+    setIncidentPage(1);
+  }, [statusFilter, severityFilter, serviceFilter]);
+
+  useEffect(() => {
+    setTeamPage(1);
+  }, [teamSearch]);
 
   useEffect(() => {
     if (!session || typeof window === "undefined") {
@@ -779,8 +790,14 @@ function DashboardPageContent() {
     }
   };
 
-  const { data: incidentsResponse } = useIncidents(incidentFilters);
+  const [incidentPage, setIncidentPage] = useState(1);
+  const INCIDENT_PAGE_SIZE = 10;
+  const { data: incidentsResponse } = useIncidents(incidentFilters, {
+    page: incidentPage,
+    pageSize: INCIDENT_PAGE_SIZE
+  });
   const incidents = incidentsResponse?.data ?? [];
+  const incidentMeta = incidentsResponse?.meta;
   const maintenanceReference = new Date();
   const activeMaintenanceEvents = maintenanceEvents.filter((event) => {
     const start = new Date(event.startsAt);
@@ -812,10 +829,11 @@ function DashboardPageContent() {
 
   const teamUsersQuery = useTeamUsers(Boolean(isAdmin), {
     search: teamSearch.trim().length >= 2 ? teamSearch.trim() : undefined,
-    page: 1,
-    pageSize: 50
+    page: teamPage,
+    pageSize: TEAM_PAGE_SIZE
   });
   const teamUsers = teamUsersQuery.data?.data ?? [];
+  const teamMeta = teamUsersQuery.data?.meta;
   const isTeamLoading = teamUsersQuery.isLoading && teamUsers.length === 0;
   const isTeamRefetching = teamUsersQuery.isFetching && !teamUsersQuery.isLoading;
 
@@ -1058,10 +1076,7 @@ function DashboardPageContent() {
     return true;
   });
 
-  const filteredTeamUsers = teamUsers.filter(user => 
-    user.name.toLowerCase().includes(teamSearch.toLowerCase()) || 
-    user.email.toLowerCase().includes(teamSearch.toLowerCase())
-  );
+  const filteredTeamUsers = teamUsers;
 
   return (
     <AuthGuard>
@@ -1393,6 +1408,16 @@ function DashboardPageContent() {
                     </div>
                   </div>
                 </div>
+                {incidentMeta ? (
+                  <div className="mt-6">
+                    <Pagination
+                      page={incidentMeta.page}
+                      pageSize={incidentMeta.pageSize}
+                      total={incidentMeta.total}
+                      onPageChange={(nextPage) => setIncidentPage(nextPage)}
+                    />
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -1541,9 +1566,19 @@ function DashboardPageContent() {
                             </tr>
                           ))
                         )}
-                      </tbody>
-                    </table>
-                  </div>
+                        </tbody>
+                      </table>
+                      </div>
+                  {teamMeta ? (
+                    <div className="mt-6">
+                      <Pagination
+                        page={teamMeta.page}
+                        pageSize={teamMeta.pageSize}
+                        total={teamMeta.total}
+                        onPageChange={(nextPage) => setTeamPage(nextPage)}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}

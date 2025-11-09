@@ -61,11 +61,19 @@ export type IncidentFilters = {
   serviceId?: string;
 };
 
-export function useIncidents(filters?: IncidentFilters) {
-  const query = useMemo(() => ["incidents", filters] as const, [filters]);
+export type IncidentPagination = {
+  page?: number;
+  pageSize?: number;
+};
+
+export function useIncidents(filters?: IncidentFilters, pagination?: IncidentPagination) {
+  const query = useMemo(
+    () => ["incidents", filters, pagination?.page, pagination?.pageSize] as const,
+    [filters, pagination?.page, pagination?.pageSize]
+  );
   return useQuery({
     queryKey: query,
-    queryFn: () => fetchIncidents(filters),
+    queryFn: () => fetchIncidents(filters, pagination),
     placeholderData: (previousData) => previousData,
     refetchInterval: 15_000,
     refetchIntervalInBackground: true,
@@ -75,7 +83,7 @@ export function useIncidents(filters?: IncidentFilters) {
   });
 }
 
-async function fetchIncidents(filters?: IncidentFilters) {
+async function fetchIncidents(filters?: IncidentFilters, pagination?: IncidentPagination) {
   const response = await apiClient.get<IncidentListResponse>("/incidents", {
     params: {
       status: filters?.status,
@@ -84,7 +92,8 @@ async function fetchIncidents(filters?: IncidentFilters) {
       teamRole: filters?.teamRole,
       assignedTo: filters?.assignedTo,
       serviceId: filters?.serviceId,
-      pageSize: 50
+      page: pagination?.page,
+      pageSize: pagination?.pageSize
     }
   });
 
