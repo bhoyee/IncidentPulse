@@ -91,7 +91,7 @@ const maintenanceBaseSchema = z.object({
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime(),
   appliesToAll: z.boolean().optional(),
-  serviceId: z.string().uuid().nullable().optional()
+  serviceId: z.string().min(1).nullable().optional()
 });
 
 export const createMaintenanceSchema = maintenanceBaseSchema.superRefine((data, ctx) => {
@@ -135,5 +135,5 @@ export const updateMaintenanceSchema = maintenanceBaseSchema
 export const maintenanceQuerySchema = z.object({
   status: z.enum(["scheduled", "in_progress", "completed", "canceled"]).optional(),
   window: z.enum(["upcoming", "past", "all"]).optional(),
-  serviceId: z.string().uuid().optional()
+  serviceId: z.string().min(1).optional()
 });

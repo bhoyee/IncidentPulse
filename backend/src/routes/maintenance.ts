@@ -72,9 +72,14 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsedBody = createMaintenanceSchema.safeParse(request.body);
       if (!parsedBody.success) {
+        const flattened = parsedBody.error.flatten();
+        const messages = [
+          ...flattened.formErrors,
+          ...Object.values(flattened.fieldErrors ?? {}).flat()
+        ].filter(Boolean);
         return reply.status(400).send({
           error: true,
-          message: parsedBody.error.flatten().formErrors.join(", ") || "Invalid maintenance payload"
+          message: messages.length > 0 ? messages.join(", ") : "Invalid maintenance payload"
         });
       }
 
@@ -108,9 +113,14 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       const params = request.params as { id: string };
       const parsedBody = updateMaintenanceSchema.safeParse(request.body);
       if (!parsedBody.success) {
+        const flattened = parsedBody.error.flatten();
+        const messages = [
+          ...flattened.formErrors,
+          ...Object.values(flattened.fieldErrors ?? {}).flat()
+        ].filter(Boolean);
         return reply.status(400).send({
           error: true,
-          message: parsedBody.error.flatten().formErrors.join(", ") || "Invalid maintenance payload"
+          message: messages.length > 0 ? messages.join(", ") : "Invalid maintenance payload"
         });
       }
 

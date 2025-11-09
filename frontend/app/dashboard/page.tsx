@@ -640,33 +640,53 @@ function DashboardPageContent() {
       setMaintenanceError("End time must be after the start.");
       return;
     }
-    if (!maintenanceForm.appliesToAll && !maintenanceForm.serviceId) {
+    const selectedService = serviceOptions.find(
+      (service) => service.id === maintenanceForm.serviceId
+    );
+
+    if (!maintenanceForm.appliesToAll && !selectedService) {
       setMaintenanceError("Select a service or mark the window as global.");
       return;
     }
 
-    setMaintenanceError(null);
-    await createMaintenanceEvent.mutateAsync({
-      title: maintenanceForm.title.trim(),
-      description: maintenanceForm.description?.trim() || undefined,
-      startsAt: startsAt.toISOString(),
-      endsAt: endsAt.toISOString(),
-      appliesToAll: maintenanceForm.appliesToAll,
-      serviceId: maintenanceForm.appliesToAll ? null : maintenanceForm.serviceId || null
-    });
+    try {
+      setMaintenanceError(null);
+      await createMaintenanceEvent.mutateAsync({
+        title: maintenanceForm.title.trim(),
+        description: maintenanceForm.description?.trim() || undefined,
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        appliesToAll: maintenanceForm.appliesToAll,
+        serviceId: maintenanceForm.appliesToAll ? null : selectedService?.id ?? null
+      });
 
-    setMaintenanceForm({
-      title: "",
-      description: "",
-      start: "",
-      end: "",
-      appliesToAll: true,
-      serviceId: ""
-    });
+      setMaintenanceForm({
+        title: "",
+        description: "",
+        start: "",
+        end: "",
+        appliesToAll: true,
+        serviceId: ""
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        setMaintenanceError(error.message);
+      } else {
+        setMaintenanceError("Failed to schedule maintenance. Please try again.");
+      }
+    }
   };
 
   const handleCancelMaintenance = async (id: string) => {
-    await cancelMaintenanceEvent.mutateAsync(id);
+    try {
+      await cancelMaintenanceEvent.mutateAsync(id);
+    } catch (error) {
+      if (error instanceof Error) {
+        setMaintenanceError(error.message);
+      } else {
+        setMaintenanceError("Unable to cancel maintenance. Please retry.");
+      }
+    }
   };
 
   const dismissPasswordReminder = () => {
