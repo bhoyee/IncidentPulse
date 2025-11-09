@@ -23,6 +23,13 @@ export const incidentNotificationInclude = {
       role: true,
       teamRoles: true
     }
+  },
+  service: {
+    select: {
+      id: true,
+      name: true,
+      slug: true
+    }
   }
 } satisfies Prisma.IncidentInclude;
 
@@ -68,6 +75,7 @@ export async function notifyAdminsOfIncident(
   const adminEmails = recipients.map((admin) => admin.email);
   const reporterName =
     incident.createdBy?.name ?? incident.createdBy?.email ?? "Unknown reporter";
+  const serviceName = incident.service?.name ?? "Unassigned service";
   const description = incident.description?.trim();
   const incidentUrl = `${env.FRONTEND_URL}/dashboard?incidentId=${incident.id}`;
 
@@ -75,6 +83,7 @@ export async function notifyAdminsOfIncident(
     "A new incident was reported and requires review.",
     "",
     `Title: ${incident.title}`,
+    `Service: ${serviceName}`,
     `Severity: ${incident.severity}`,
     `Status: ${incident.status}`,
     `Reported by: ${reporterName}`,
@@ -116,9 +125,11 @@ export async function notifyAssigneeOfAssignment(
   }
 
   const description = incident.description?.trim();
+  const serviceName = incident.service?.name ?? "Unassigned service";
   const textLines = [
     `You have been assigned to incident "${incident.title}".`,
     "",
+    `Service: ${serviceName}`,
     `Severity: ${incident.severity}`,
     `Status: ${incident.status}`,
     "",
@@ -311,21 +322,24 @@ function buildIntegrationMessage(
 ): string {
   const reporter =
     incident.createdBy?.name ?? incident.createdBy?.email ?? "Unknown reporter";
+  const serviceName = incident.service?.name ?? "Unassigned service";
 
   switch (event) {
     case "created":
-      return `Reported by: ${reporter}`;
+      return `Service: ${serviceName}\nReported by: ${reporter}`;
     case "assigned":
       if (incident.assignedTo) {
-        return `Assigned to ${incident.assignedTo.name ?? incident.assignedTo.email} (by ${
-          metadata.assignedBy ?? "System"
-        })`;
+        return `Service: ${serviceName}\nAssigned to ${
+          incident.assignedTo.name ?? incident.assignedTo.email
+        } (by ${metadata.assignedBy ?? "System"})`;
       }
-      return `Assignment cleared (by ${metadata.assignedBy ?? "System"})`;
+      return `Service: ${serviceName}\nAssignment cleared (by ${
+        metadata.assignedBy ?? "System"
+      })`;
     case "resolved":
-      return `Resolved at ${metadata.resolutionTime?.toISOString() ?? "now"} by ${
-        incident.assignedTo?.name ?? incident.assignedTo?.email ?? "Responder"
-      }`;
+      return `Service: ${serviceName}\nResolved at ${
+        metadata.resolutionTime?.toISOString() ?? "now"
+      } by ${incident.assignedTo?.name ?? incident.assignedTo?.email ?? "Responder"}`;
     default:
       return "";
   }

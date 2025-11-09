@@ -3,6 +3,8 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../lib/db";
 import { env } from "../env";
+import { resolveServiceIdOrDefault } from "../lib/services";
+import { slugify } from "../lib/slug";
 import {
   incidentNotificationInclude,
   loadActiveAdmins,
@@ -15,7 +17,8 @@ import { incrementWebhookMetric } from "../lib/webhook-metrics";
 type Severity = "low" | "medium" | "high" | "critical";
 
 type NormalizedWebhookPayload = {
-  service: string;
+  serviceName: string;
+  serviceSlug: string;
   environment: string;
   eventType: string;
   message: string;
@@ -207,6 +210,7 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
         normalized.severity === "high" || normalized.severity === "critical"
           ? "investigating"
           : "open";
+      const service = await resolveServiceIdOrDefault(normalized.serviceSlug);
 
       const incident = await prisma.incident.create({
         data: {
@@ -216,7 +220,8 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
           description: normalized.message,
           categories,
           impactScope: normalized.environment,
-          createdById: automationActorId
+          createdById: automationActorId,
+          serviceId: service.id
         },
         include: incidentNotificationInclude
       });
@@ -475,16 +480,22 @@ function storeIdempotencyRecord(
 }
 
 function normalizePayload(payload: z.infer<typeof webhookPayloadSchema>): NormalizedWebhookPayload {
-  const service = payload.service.trim().toLowerCase();
+  const serviceName = payload.service.trim();
+  const serviceSlug = slugify(serviceName);
   const environment = payload.environment.trim().toLowerCase();
   const eventType = payload.eventType.trim();
   const message = payload.message.trim();
   const occurredAt = new Date(payload.occurredAt);
 
-  const fingerprint = (payload.fingerprint ?? `${service}|${environment}|${eventType}`).trim().toLowerCase();
+  const fingerprint = (
+    payload.fingerprint ?? `${serviceSlug}|${environment}|${eventType}`
+  )
+    .trim()
+    .toLowerCase();
 
   return {
-    service,
+    serviceName: serviceName || "Unspecified service",
+    serviceSlug,
     environment,
     eventType,
     message,
@@ -528,7 +539,7 @@ function fingerprintCategoryLabel(fingerprint: string): string {
 function buildIncidentCategories(payload: NormalizedWebhookPayload): string[] {
   return [
     "auto:webhook",
-    `service:${payload.service}`,
+    `service:${payload.serviceSlug}`,
     `env:${payload.environment}`,
     `event:${payload.eventType}`,
     fingerprintCategoryLabel(payload.fingerprint)
@@ -536,7 +547,7 @@ function buildIncidentCategories(payload: NormalizedWebhookPayload): string[] {
 }
 
 function buildIncidentTitle(payload: NormalizedWebhookPayload): string {
-  const serviceLabel = payload.service.replace(/[-_]/g, " ");
+  const serviceLabel = payload.serviceName || payload.serviceSlug.replace(/[-_]/g, " ");
   return `[${payload.environment}] ${capitalizeWords(serviceLabel)} ${payload.eventType}`;
 }
 
@@ -546,8 +557,8 @@ function buildUpdateMessage(
 ): string {
   const lines = [
     kind === "create"
-      ? `Automated incident created from ${payload.service} (${payload.eventType}).`
-      : `Repeat alert received for ${payload.service} (${payload.eventType}).`,
+      ? `Automated incident created from ${payload.serviceName} (${payload.eventType}).`
+      : `Repeat alert received for ${payload.serviceName} (${payload.eventType}).`,
     `Severity: ${payload.severity}`,
     `Environment: ${payload.environment}`,
     `Occurred at: ${payload.occurredAt.toISOString()}`,

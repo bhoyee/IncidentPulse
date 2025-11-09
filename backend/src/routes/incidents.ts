@@ -29,7 +29,16 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const { page, pageSize, status, severity, search, teamRole, assignedTo } = parseQuery.data;
+      const {
+        page,
+        pageSize,
+        status,
+        severity,
+        search,
+        teamRole,
+        assignedTo,
+        serviceId
+      } = parseQuery.data;
 
       const filters: Prisma.IncidentWhereInput[] = [];
 
@@ -85,6 +94,10 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         filters.push({ assignedToId: assignedTo });
       }
 
+      if (serviceId) {
+        filters.push({ serviceId });
+      }
+
       if (request.user.role === "operator") {
         filters.push({
           OR: [{ createdById: request.user.id }, { assignedToId: request.user.id }]
@@ -117,6 +130,13 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
                 email: true,
                 role: true,
                 teamRoles: true
+              }
+            },
+            service: {
+              select: {
+                id: true,
+                name: true,
+                slug: true
               }
             }
           }
@@ -173,6 +193,17 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
 
+      const service = await prisma.service.findUnique({
+        where: { id: incidentPayload.serviceId }
+      });
+
+      if (!service) {
+        return reply.status(400).send({
+          error: true,
+          message: "Service not found"
+        });
+      }
+
       const incident = await prisma.incident.create({
         data: {
           ...incidentPayload,
@@ -224,6 +255,14 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
               name: true,
               email: true,
               teamRoles: true
+            }
+          },
+          service: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              description: true
             }
           },
           updates: {
@@ -309,7 +348,13 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const { assignedToId, categories, impactScope, ...updatePayload } = parsedBody.data;
+      const {
+        assignedToId,
+        categories,
+        impactScope,
+        serviceId: incomingServiceId,
+        ...updatePayload
+      } = parsedBody.data;
 
       let resolvedAssignedToId: string | null | undefined = undefined;
 
@@ -322,6 +367,14 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(403).send({
           error: true,
           message: "Only admins can assign incidents"
+        });
+      }
+
+      const hasServiceKey = Object.prototype.hasOwnProperty.call(parsedBody.data, "serviceId");
+      if (hasServiceKey && request.user.role !== "admin") {
+        return reply.status(403).send({
+          error: true,
+          message: "Only admins can change service ownership"
         });
       }
 
@@ -342,6 +395,30 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
             }
           }
         }
+      }
+
+      let nextServiceId: string | undefined;
+      if (hasServiceKey) {
+        if (!incomingServiceId) {
+          return reply.status(400).send({
+            error: true,
+            message: "Service is required"
+          });
+        }
+
+        const service = await prisma.service.findUnique({
+          where: { id: incomingServiceId },
+          select: { id: true }
+        });
+
+        if (!service) {
+          return reply.status(400).send({
+            error: true,
+            message: "Service not found"
+          });
+        }
+
+        nextServiceId = service.id;
       }
 
       const now = new Date();
@@ -366,6 +443,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           ...(hasAssignedToKey
             ? { assignedToId: resolvedAssignedToId ?? null }
             : {}),
+          ...(hasServiceKey && nextServiceId ? { serviceId: nextServiceId } : {}),
           ...(shouldSetResolvedAt ? { resolvedAt: now } : {})
         },
         include: incidentNotificationInclude

@@ -15,6 +15,7 @@ import metricsRoutes from "./routes/metrics";
 import teamRoutes from "./routes/team";
 import integrationsRoutes from "./routes/integrations";
 import webhooksRoutes from "./routes/webhooks";
+import servicesRoutes from "./routes/services";
 
 export function buildApp() {
   const fastify = Fastify({
@@ -93,6 +94,7 @@ export function buildApp() {
   fastify.register(publicRoutes, { prefix: "/public" });
   fastify.register(metricsRoutes, { prefix: "/metrics" });
   fastify.register(teamRoutes, { prefix: "/team" });
+  fastify.register(servicesRoutes, { prefix: "/services" });
   fastify.register(integrationsRoutes, { prefix: "/integrations" });
   fastify.register(webhooksRoutes, { prefix: "/webhooks" });
 

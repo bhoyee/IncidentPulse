@@ -109,6 +109,16 @@ const featureCards: Array<{
     icon: GlobeAltIcon
   },
   {
+    title: "Service Catalog",
+    description:
+      "Model each customer-facing surface—website, APIs, data stores—and monitor them independently.",
+    highlights: [
+      "Admins define services with friendly names and descriptions; operators tag incidents to impacted services.",
+      "Public status pages render per-service health states so customers instantly know what is degraded."
+    ],
+    icon: ServerStackIcon
+  },
+  {
     title: "Team Roles & Assignments",
     description:
       "Clarify ownership by assigning incident commanders, communications leads, and subject experts.",

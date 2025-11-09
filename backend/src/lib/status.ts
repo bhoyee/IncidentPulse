@@ -7,6 +7,20 @@ export type PublicIncident = {
   severity: Incident["severity"];
   status: Incident["status"];
   startedAt: Date;
+  service: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+};
+
+export type ServiceStatusSnapshot = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  state: StatusSnapshot["state"];
+  activeIncidentCount: number;
 };
 
 export type StatusSnapshot = {
@@ -15,6 +29,7 @@ export type StatusSnapshot = {
   payload: {
     overall_state: "operational" | "partial_outage" | "major_outage";
     active_incidents: PublicIncident[];
+    services: ServiceStatusSnapshot[];
     last_24h: {
       uptime_percent: number;
       incident_count: number;
@@ -28,14 +43,24 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
   const now = new Date();
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-  const [activeIncidents, incidentsLast24hCount] = await Promise.all([
+  const [activeIncidents, incidentsLast24hCount, services] = await Promise.all([
     prisma.incident.findMany({
       where: {
         status: {
           not: "resolved"
         }
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      include: {
+        service: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true
+          }
+        }
+      }
     }),
     prisma.incident.count({
       where: {
@@ -43,6 +68,9 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
           gte: since
         }
       }
+    }),
+    prisma.service.findMany({
+      orderBy: { name: "asc" }
     })
   ]);
 
@@ -51,8 +79,33 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
     title: incident.title,
     severity: incident.severity,
     status: incident.status,
-    startedAt: incident.createdAt
+    startedAt: incident.createdAt,
+    service: {
+      id: incident.service.id,
+      name: incident.service.name,
+      slug: incident.service.slug
+    }
   }));
+
+  const incidentsByService = activeIncidents.reduce<Record<string, Incident[]>>((acc, incident) => {
+    const list = acc[incident.serviceId] ?? [];
+    list.push(incident);
+    acc[incident.serviceId] = list;
+    return acc;
+  }, {});
+
+  const serviceSnapshots: ServiceStatusSnapshot[] = services.map((service) => {
+    const serviceIncidents = incidentsByService[service.id] ?? [];
+    const state = determineOverallState(serviceIncidents);
+    return {
+      id: service.id,
+      name: service.name,
+      slug: service.slug,
+      description: service.description,
+      state,
+      activeIncidentCount: serviceIncidents.length
+    };
+  });
 
   const overallState = determineOverallState(activeIncidents);
   const uptime24h = calculateUptime(activeIncidents);
@@ -63,6 +116,7 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
     payload: {
       overall_state: overallState,
       active_incidents: activePublicIncidents,
+      services: serviceSnapshots,
       last_24h: {
         uptime_percent: uptime24h,
         incident_count: incidentsLast24hCount
@@ -160,9 +214,14 @@ export async function fetchFreshStatus(prisma: PrismaClient = defaultPrisma): Pr
     return refreshStatusCache(prisma);
   }
 
+  const payload = cache.payload as Record<string, unknown>;
+  if (!("services" in payload)) {
+    return refreshStatusCache(prisma);
+  }
+
   return {
     state: cache.state,
     uptime24h: cache.uptime24h,
-    payload: cache.payload as unknown as StatusSnapshot["payload"]
+    payload: payload as StatusSnapshot["payload"]
   };
 }

@@ -9,6 +9,7 @@ type Props = {
 };
 
 export function PublicIncidentCard({ incident }: Props) {
+  const serviceName = incident.service?.name ?? "Service";
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between">
@@ -16,7 +17,10 @@ export function PublicIncidentCard({ incident }: Props) {
         <SeverityBadge severity={incident.severity} />
       </div>
       <div className="mt-2 text-xs text-slate-500">
-        Started {formatRelative(incident.startedAt)} - Status:{" "}
+        Service: <span className="font-medium text-slate-700">{serviceName}</span>
+      </div>
+      <div className="mt-1 text-xs text-slate-500">
+        Started {formatRelative(incident.startedAt)} &mdash; Status:{" "}
         <span className="capitalize">{incident.status}</span>
       </div>
     </div>

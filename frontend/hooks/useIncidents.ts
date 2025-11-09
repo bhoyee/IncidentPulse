@@ -51,6 +51,7 @@ export type IncidentFilters = {
   search?: string;
   teamRole?: string;
   assignedTo?: string;
+  serviceId?: string;
 };
 
 export function useIncidents(filters?: IncidentFilters) {
@@ -75,6 +76,7 @@ async function fetchIncidents(filters?: IncidentFilters) {
       search: filters?.search,
       teamRole: filters?.teamRole,
       assignedTo: filters?.assignedTo,
+      serviceId: filters?.serviceId,
       pageSize: 50
     }
   });

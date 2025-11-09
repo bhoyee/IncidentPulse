@@ -4,11 +4,19 @@ import { format } from "date-fns";
 import { useStatus } from "@hooks/useStatus";
 import { StatusBanner } from "@components/StatusBanner";
 import { PublicIncidentCard } from "@components/PublicIncidentCard";
+import type { StatusSnapshot } from "@lib/types";
+
+const serviceTone: Record<StatusSnapshot["overall_state"], string> = {
+  operational: "text-emerald-700 bg-emerald-50 border-emerald-100",
+  partial_outage: "text-amber-700 bg-amber-50 border-amber-100",
+  major_outage: "text-red-700 bg-red-50 border-red-100"
+};
 
 export default function StatusPage() {
   const { data, isLoading } = useStatus();
 
   const snapshot = data?.data;
+  const services = snapshot?.services ?? [];
   const uptime = data?.meta.uptime24h ?? snapshot?.last_24h.uptime_percent ?? 100;
   const lastUpdated = data ? format(new Date(), "PPpp") : null;
 
@@ -28,6 +36,34 @@ export default function StatusPage() {
       ) : (
         <>
           <StatusBanner state={snapshot.overall_state} />
+
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Service availability</h2>
+              <p className="text-xs text-slate-500">
+                {services.length} tracked services
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {services.map((service) => (
+                <div
+                  key={service.id}
+                  className={`rounded-lg border p-4 shadow-sm ${serviceTone[service.state]}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">{service.name}</p>
+                    <span className="text-xs uppercase tracking-wide">{service.state.replace("_", " ")}</span>
+                  </div>
+                  {service.description ? (
+                    <p className="mt-1 text-xs opacity-80">{service.description}</p>
+                  ) : null}
+                  <p className="mt-2 text-xs opacity-80">
+                    Active incidents: {service.activeIncidentCount}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

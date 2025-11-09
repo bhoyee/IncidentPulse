@@ -11,6 +11,7 @@ import { formatDate, formatRelative } from "@lib/format";
 import type { IncidentSeverity, IncidentStatus } from "@lib/types";
 import { SeverityBadge } from "./SeverityBadge";
 import type { TeamUser } from "@hooks/useTeamUsers";
+import type { ServiceRecord } from "@hooks/useServices";
 
 type Props = {
   incidentId?: string;
@@ -21,6 +22,7 @@ type Props = {
     role: "admin" | "operator" | "viewer";
   };
   teamUsers?: TeamUser[];
+  services?: ServiceRecord[];
 };
 
 type UpdatePayload = {
@@ -42,9 +44,17 @@ type PatchIncidentPayload = Partial<{
   assignedToId: string | null;
   categories: string[];
   impactScope: string | null;
+  serviceId: string;
 }>;
 
-export function IncidentDrawer({ incidentId, open, onClose, currentUser, teamUsers = [] }: Props) {
+export function IncidentDrawer({
+  incidentId,
+  open,
+  onClose,
+  currentUser,
+  teamUsers = [],
+  services = []
+}: Props) {
   const { data, isLoading } = useIncidentDetail(incidentId);
   const invalidateIncidents = useInvalidateIncidents();
   const queryClient = useQueryClient();
@@ -59,12 +69,14 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
     description: string;
     categoriesText: string;
     impactScope: string;
+    serviceId: string;
   }>({
     title: "",
     severity: "medium",
     description: "",
     categoriesText: "",
-    impactScope: ""
+    impactScope: "",
+    serviceId: ""
   });
   const deleteIncident = useDeleteIncident();
 
@@ -128,7 +140,8 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
       severity: incident.severity,
       description: incident.description,
       categoriesText: (incident.categories ?? []).join(", "),
-      impactScope: incident.impactScope ?? ""
+      impactScope: incident.impactScope ?? "",
+      serviceId: incident.service?.id ?? ""
     });
   }, [incident, open]);
 
@@ -183,7 +196,8 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
         severity: incident.severity,
         description: incident.description,
         categoriesText: (incident.categories ?? []).join(", "),
-        impactScope: incident.impactScope ?? ""
+        impactScope: incident.impactScope ?? "",
+        serviceId: incident.service?.id ?? ""
       });
     }
     setIsEditingDetails(false);
@@ -215,6 +229,10 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
       categories,
       impactScope: editForm.impactScope.trim() ? editForm.impactScope.trim() : null
     };
+
+    if (isAdmin && editForm.serviceId) {
+      payload.serviceId = editForm.serviceId;
+    }
 
     setDetailError(null);
     updateIncidentMutation.mutate(payload, {
@@ -312,6 +330,11 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
                         <p className="mt-1 text-sm text-slate-500">
                           Created {incident ? formatRelative(incident.createdAt) : "Not available"}
                         </p>
+                        {incident?.service ? (
+                          <p className="text-xs text-slate-500">
+                            Service: <span className="font-semibold text-slate-800">{incident.service.name}</span>
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-2">
                         {incident ? <SeverityBadge severity={incident.severity} /> : null}
@@ -391,6 +414,27 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
                                 </label>
                               </div>
                               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Service
+                                <select
+                                  name="serviceId"
+                                  disabled={!isAdmin || updateIncidentMutation.isPending || services.length === 0}
+                                  value={editForm.serviceId}
+                                  onChange={handleDetailFieldChange}
+                                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {services.map((service) => (
+                                    <option key={service.id} value={service.id}>
+                                      {service.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {!isAdmin ? (
+                                  <span className="mt-1 block text-[10px] text-slate-500">
+                                    Only admins can change service ownership.
+                                  </span>
+                                ) : null}
+                              </label>
+                              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 Description
                                 <textarea
                                   name="description"
@@ -457,6 +501,9 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
                                 </span>
                               </div>
                               <div className="mt-2 text-xs text-slate-500">
+                                Service: {incident.service?.name ?? "Unassigned"}
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">
                                 Impact scope: {incident.impactScope ?? "Not specified"}
                               </div>
                               <div className="mt-1 text-xs text-slate-500">

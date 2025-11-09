@@ -11,7 +11,8 @@ export const createIncidentSchema = z.object({
   description: z.string().min(10).max(5000),
   assignedToId: z.string().uuid().optional(),
   categories: z.array(z.string().min(2).max(50)).max(5).optional(),
-  impactScope: z.string().min(3).max(200).optional()
+  impactScope: z.string().min(3).max(200).optional(),
+  serviceId: z.string().uuid()
 });
 
 export const updateIncidentSchema = z
@@ -22,7 +23,8 @@ export const updateIncidentSchema = z
     description: z.string().min(10).max(5000).optional(),
     assignedToId: z.string().uuid().nullable().optional(),
     categories: z.array(z.string().min(2).max(50)).max(5).optional(),
-    impactScope: z.string().min(3).max(200).nullable().optional()
+    impactScope: z.string().min(3).max(200).nullable().optional(),
+    serviceId: z.string().uuid().optional()
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided"
@@ -34,6 +36,7 @@ export const incidentQuerySchema = z.object({
   search: z.string().min(2).max(120).optional(),
   teamRole: z.string().min(2).max(50).optional(),
   assignedTo: z.string().uuid().optional(),
+  serviceId: z.string().uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20)
 });

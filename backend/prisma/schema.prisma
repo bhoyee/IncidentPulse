@@ -58,6 +58,8 @@ model Incident {
   createdBy       User             @relation("IncidentCreator", fields: [createdById], references: [id])
   assignedToId    String?
   assignedTo      User?            @relation("IncidentAssignee", fields: [assignedToId], references: [id])
+  serviceId       String
+  service         Service          @relation(fields: [serviceId], references: [id])
   firstResponseAt DateTime?
   resolvedAt      DateTime?
   updates         IncidentUpdate[]
@@ -71,6 +73,7 @@ model Incident {
   @@index([severity])
   @@index([createdAt])
   @@index([assignedToId])
+  @@index([serviceId])
 }
 
 model IncidentUpdate {
@@ -101,4 +104,14 @@ model IntegrationSettings {
   telegramChatId   String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+model Service {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?
+  incidents   Incident[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

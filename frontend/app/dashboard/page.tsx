@@ -16,6 +16,7 @@ import {
 import { AuthGuard } from "@components/AuthGuard";
 import { IncidentDrawer } from "@components/IncidentDrawer";
 import { IntegrationsPanel } from "@components/IntegrationsPanel";
+import { ServiceManagementPanel } from "@components/ServiceManagementPanel";
 import { useSession } from "@hooks/useSession";
 import { useIncidents, useInvalidateIncidents } from "@hooks/useIncidents";
 import {
@@ -30,6 +31,12 @@ import {
   useUpdateIntegrationSettings,
   type IntegrationSettings
 } from "@hooks/useIntegrationSettings";
+import {
+  useServices,
+  useCreateService,
+  useUpdateService,
+  useDeleteService
+} from "@hooks/useServices";
 import { apiClient } from "@lib/api-client";
 import type { Incident, IncidentSeverity, IncidentStatus } from "@lib/types";
 
@@ -47,6 +54,12 @@ type InviteSummary = {
   password: string | null;
   emailStatus: string | null;
   emailError: string | null;
+};
+
+type ServiceOption = {
+  id: string;
+  name: string;
+  slug: string;
 };
 
 
@@ -83,22 +96,35 @@ const ChangePasswordCard = () => {
 
 const NewIncidentForm = ({
   disabled,
-  onSuccess
+  onSuccess,
+  services
 }: {
   disabled: boolean;
   onSuccess: () => void;
+  services: ServiceOption[];
 }) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState<IncidentSeverity>("medium");
+  const [serviceId, setServiceId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const invalidateIncidents = useInvalidateIncidents();
+
+  useEffect(() => {
+    if (!serviceId && services.length > 0) {
+      setServiceId(services[0].id);
+    }
+  }, [services, serviceId]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!title.trim() || !description.trim()) {
       setError("Title and description are required.");
+      return;
+    }
+    if (!serviceId) {
+      setError("Select a service before creating an incident.");
       return;
     }
 
@@ -109,12 +135,14 @@ const NewIncidentForm = ({
       await apiClient.post("/incidents", {
         title: title.trim(),
         description: description.trim(),
-        severity
+        severity,
+        serviceId
       });
       await invalidateIncidents();
       setTitle("");
       setDescription("");
       setSeverity("medium");
+      setServiceId(services[0]?.id ?? "");
       onSuccess();
     } catch (err) {
       let message = "Failed to create incident.";
@@ -131,6 +159,26 @@ const NewIncidentForm = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="text-sm font-medium text-gray-300">Service</label>
+        <select
+          value={serviceId}
+          onChange={(e) => setServiceId(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1"
+          disabled={disabled || services.length === 0 || isSubmitting}
+        >
+          {services.map((service) => (
+            <option key={service.id} value={service.id}>
+              {service.name}
+            </option>
+          ))}
+        </select>
+        {services.length === 0 ? (
+          <p className="mt-1 text-xs text-red-400">
+            No services available. Ask an admin to add one on the Automation tab.
+          </p>
+        ) : null}
+      </div>
       <div>
         <label className="text-sm font-medium text-gray-300">Title</label>
         <input 
@@ -168,7 +216,7 @@ const NewIncidentForm = ({
       ) : null}
       <button
         type="submit"
-        disabled={disabled || isSubmitting}
+        disabled={disabled || isSubmitting || services.length === 0}
         className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50"
       >
         {isSubmitting ? "Creating..." : "Create Incident"}
@@ -309,6 +357,7 @@ function DashboardPageContent() {
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<IncidentStatus | undefined>();
   const [severityFilter, setSeverityFilter] = useState<IncidentSeverity | undefined>();
+  const [serviceFilter, setServiceFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"incidents" | "team" | "password" | "webhooks">("incidents");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -332,6 +381,10 @@ function DashboardPageContent() {
   const createTeamUser = useCreateTeamUser();
   const updateTeamUser = useUpdateTeamUser();
   const deleteTeamUser = useDeleteTeamUser();
+  const servicesQuery = useServices(Boolean(session));
+  const createService = useCreateService();
+  const updateService = useUpdateService();
+  const deleteService = useDeleteService();
   const isAdmin = session?.role === "admin";
   const canCreate = Boolean(session && session.role !== "viewer");
   const firstName = session?.name?.split(" ")[0] || "Team";
@@ -339,16 +392,41 @@ function DashboardPageContent() {
   const updateIntegrationSettings = useUpdateIntegrationSettings();
   const isSavingMember = createTeamUser.isPending;
   const isUpdatingMember = updateTeamUser.isPending;
+  const serviceRecords = servicesQuery.data ?? [];
+  const serviceOptions = serviceRecords.map((service) => ({
+    id: service.id,
+    name: service.name,
+    slug: service.slug
+  }));
+  const serviceMutationsPending =
+    createService.isPending || updateService.isPending || deleteService.isPending;
   const alertEndpoint = "https://your-backend.example.com/webhooks/incidents";
   const recoveryEndpoint = "https://your-backend.example.com/webhooks/incidents/recovery";
 
   const incidentFilters = useMemo(
     () => ({
       status: statusFilter,
-      severity: severityFilter
+      severity: severityFilter,
+      serviceId: serviceFilter
     }),
-    [statusFilter, severityFilter]
+    [statusFilter, severityFilter, serviceFilter]
   );
+
+  const handleSaveIntegrationSettings = async (payload: Partial<IntegrationSettings>) => {
+    await updateIntegrationSettings.mutateAsync(payload);
+  };
+
+  const handleCreateService = (payload: { name: string; description?: string | null }) =>
+    createService.mutateAsync(payload);
+
+  const handleUpdateService = (payload: {
+    id: string;
+    name?: string;
+    description?: string | null;
+    slug?: string;
+  }) => updateService.mutateAsync(payload);
+
+  const handleDeleteService = (id: string) => deleteService.mutateAsync(id);
 
   const { data: incidentsResponse } = useIncidents(incidentFilters);
   const incidents = incidentsResponse?.data ?? [];
@@ -479,12 +557,6 @@ function DashboardPageContent() {
     }
   };
 
-  const handleSaveIntegrationSettings = async (
-    payload: Partial<IntegrationSettings>
-  ) => {
-    await updateIntegrationSettings.mutateAsync(payload);
-  };
-
   const openEditModal = (user: TeamUser) => {
     setEditingUser(user);
     setEditForm({
@@ -561,12 +633,21 @@ function DashboardPageContent() {
 
   const filterChips = [
     ...(statusFilter ? [{ label: `Status: ${statusFilter}`, onClear: () => setStatusFilter(undefined) }] : []),
-    ...(severityFilter ? [{ label: `Severity: ${severityFilter}`, onClear: () => setSeverityFilter(undefined) }] : [])
+    ...(severityFilter ? [{ label: `Severity: ${severityFilter}`, onClear: () => setSeverityFilter(undefined) }] : []),
+    ...(serviceFilter
+      ? [{
+          label: `Service: ${
+            serviceOptions.find((service) => service.id === serviceFilter)?.name ?? "Service"
+          }`,
+          onClear: () => setServiceFilter(undefined)
+        }]
+      : [])
   ];
 
   const filteredIncidents = incidents.filter(incident => {
     if (statusFilter && incident.status !== statusFilter) return false;
     if (severityFilter && incident.severity !== severityFilter) return false;
+    if (serviceFilter && incident.serviceId !== serviceFilter) return false;
     return true;
   });
 
@@ -762,6 +843,25 @@ function DashboardPageContent() {
                         <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                       </div>
                     </div>
+
+                    <div className="flex min-w-[150px] flex-col">
+                      <label className="mb-1 text-xs font-medium text-gray-400">Service</label>
+                      <div className="relative">
+                        <select
+                          onChange={(e) => setServiceFilter(e.target.value || undefined)}
+                          value={serviceFilter || ""}
+                          className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 pr-8 text-sm text-gray-200 shadow-sm transition duration-150 ease-in-out focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="">All Services</option>
+                          {serviceOptions.map((service) => (
+                            <option key={service.id} value={service.id}>
+                              {service.name}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -794,7 +894,7 @@ function DashboardPageContent() {
                       <table className="min-w-full divide-y divide-gray-700">
                         <thead className="bg-gray-800">
                           <tr>
-                            {['Title', 'Severity', 'Status', 'Assigned To', 'Created'].map(header => (
+                            {['Title', 'Service', 'Severity', 'Status', 'Assigned To', 'Created'].map(header => (
                               <th key={header} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                                 {header}
                               </th>
@@ -803,7 +903,7 @@ function DashboardPageContent() {
                         </thead>
                         <tbody className="bg-gray-900 divide-y divide-gray-800">
                           {filteredIncidents.length === 0 ? (
-                            <tr><td colSpan={5} className="px-6 py-4 text-center text-gray-500">No incidents matching filters.</td></tr>
+                            <tr><td colSpan={6} className="px-6 py-4 text-center text-gray-500">No incidents matching filters.</td></tr>
                           ) : (
                             filteredIncidents.map(incident => (
                               <tr 
@@ -813,6 +913,9 @@ function DashboardPageContent() {
                               >
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                                   {incident.title}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                  {incident.service?.name ?? "—"}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <span className={`inline-flex items-center px-3 py-0.5 rounded-full text-xs font-medium uppercase border ${
@@ -1046,6 +1149,15 @@ function DashboardPageContent() {
                   </div>
                 </div>
 
+                <ServiceManagementPanel
+                  services={servicesQuery.data}
+                  isLoading={servicesQuery.isLoading}
+                  onCreate={handleCreateService}
+                  onUpdate={handleUpdateService}
+                  onDelete={handleDeleteService}
+                  isMutating={serviceMutationsPending}
+                />
+
                 <div className="rounded-xl border border-gray-700 bg-gray-900 shadow-inner">
                   <IntegrationsPanel
                     settings={integrationSettingsQuery.data}
@@ -1081,6 +1193,7 @@ function DashboardPageContent() {
             role: session.role
           }}
           teamUsers={teamUsers}
+          services={serviceRecords}
         />
 
         {isAddMemberOpen && (
@@ -1265,6 +1378,7 @@ function DashboardPageContent() {
               <NewIncidentForm
                 disabled={!canCreate}
                 onSuccess={() => setIsNewIncidentOpen(false)}
+                services={serviceOptions}
               />
             </div>
           </div>

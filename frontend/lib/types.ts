@@ -9,6 +9,7 @@ export type Incident = {
   description: string;
   createdById: string;
   assignedToId: string | null;
+  serviceId: string;
   createdAt: string;
   updatedAt: string;
   firstResponseAt: string | null;
@@ -29,6 +30,12 @@ export type Incident = {
     role: "admin" | "operator" | "viewer";
     teamRoles: string[];
   } | null;
+  service?: {
+    id: string;
+    name: string;
+    slug: string;
+    description?: string | null;
+  };
 };
 
 export type IncidentUpdate = {
@@ -48,6 +55,15 @@ export type MetricsResponse = {
   avgResolveMinutesToday: number;
 };
 
+export type ServiceStatus = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  state: "operational" | "partial_outage" | "major_outage";
+  activeIncidentCount: number;
+};
+
 export type StatusSnapshot = {
   overall_state: "operational" | "partial_outage" | "major_outage";
   active_incidents: Array<{
@@ -56,7 +72,13 @@ export type StatusSnapshot = {
     severity: IncidentSeverity;
     status: IncidentStatus;
     startedAt: string;
+    service: {
+      id: string;
+      name: string;
+      slug: string;
+    };
   }>;
+  services: ServiceStatus[];
   last_24h: {
     uptime_percent: number;
     incident_count: number;

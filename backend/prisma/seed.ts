@@ -10,6 +10,16 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(adminPassword, 12);
 
+  await prisma.service.upsert({
+    where: { slug: "platform" },
+    update: {},
+    create: {
+      name: "Platform",
+      slug: "platform",
+      description: "Default platform-wide service"
+    }
+  });
+
   await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
