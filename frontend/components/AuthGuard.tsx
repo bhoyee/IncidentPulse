@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -8,10 +9,10 @@ import { useSession } from "@hooks/useSession";
 type Props = {
   children: React.ReactNode;
   requireRole?: Array<"admin" | "operator" | "viewer">;
-  redirectTo?: string;
+  redirectTo?: Route;
 };
 
-export function AuthGuard({ children, requireRole, redirectTo = "/" }: Props) {
+export function AuthGuard({ children, requireRole, redirectTo = "/" as Route }: Props) {
   const router = useRouter();
   const { data, isLoading } = useSession();
 
