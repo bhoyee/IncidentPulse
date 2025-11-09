@@ -4,6 +4,8 @@ import cors from "@fastify/cors";
 import sensible from "@fastify/sensible";
 import rawBody from "fastify-raw-body";
 import fastifyJwt from "@fastify/jwt";
+import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
 import { env } from "./env";
 import { databaseHealthCheck } from "./lib/db";
 import { getSessionCookieName } from "./lib/auth";
@@ -16,8 +18,15 @@ import teamRoutes from "./routes/team";
 import integrationsRoutes from "./routes/integrations";
 import webhooksRoutes from "./routes/webhooks";
 import servicesRoutes from "./routes/services";
+import {
+  ensureUploadsRootSync,
+  MAX_ATTACHMENT_BYTES,
+  uploadsRoot
+} from "./lib/storage";
 
 export function buildApp() {
+  ensureUploadsRootSync();
+
   const fastify = Fastify({
     logger: {
       transport:
@@ -44,6 +53,12 @@ export function buildApp() {
     origin: env.FRONTEND_URL,
     credentials: true
   });
+  fastify.register(multipart, {
+    limits: {
+      fileSize: MAX_ATTACHMENT_BYTES,
+      files: 5
+    }
+  });
 
   fastify.register(fastifyJwt, {
     secret: env.JWT_SECRET,
@@ -51,6 +66,11 @@ export function buildApp() {
     sign: {
       expiresIn: "7d"
     }
+  });
+  fastify.register(fastifyStatic, {
+    root: uploadsRoot,
+    prefix: "/uploads/",
+    decorateReply: false
   });
 
   fastify.decorate("authenticate", async (request, reply) => {

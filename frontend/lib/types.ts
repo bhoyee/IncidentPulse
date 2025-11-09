@@ -1,6 +1,21 @@
 export type IncidentSeverity = "low" | "medium" | "high" | "critical";
 export type IncidentStatus = "open" | "investigating" | "monitoring" | "resolved";
 
+export type IncidentAttachment = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  updateId?: string | null;
+  url: string;
+  createdAt: string;
+  uploadedBy: {
+    id: string;
+    name: string;
+    email: string;
+  };
+};
+
 export type Incident = {
   id: string;
   title: string;
@@ -36,6 +51,7 @@ export type Incident = {
     slug: string;
     description?: string | null;
   };
+  attachments?: IncidentAttachment[];
 };
 
 export type IncidentUpdate = {
@@ -48,6 +64,7 @@ export type IncidentUpdate = {
   };
   message: string;
   createdAt: string;
+  attachments?: IncidentAttachment[];
 };
 
 export type MetricsResponse = {

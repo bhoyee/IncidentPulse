@@ -39,6 +39,13 @@ import {
   useDeleteService
 } from "@hooks/useServices";
 import { apiClient } from "@lib/api-client";
+import {
+  MAX_ATTACHMENTS_PER_BATCH,
+  MAX_ATTACHMENT_BYTES,
+  formatAttachmentSize,
+  uploadIncidentAttachment,
+  validateAttachmentSize
+} from "@lib/attachments";
 import type { Incident, IncidentSeverity, IncidentStatus } from "@lib/types";
 
 interface NewTeamMemberPayload {
@@ -112,13 +119,55 @@ const NewIncidentForm = ({
   const [serviceId, setServiceId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
   const invalidateIncidents = useInvalidateIncidents();
+  const attachmentLimit = MAX_ATTACHMENTS_PER_BATCH;
+  const attachmentSizeLimitMb = Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024));
 
   useEffect(() => {
     if (!serviceId && services.length > 0) {
       setServiceId(services[0].id);
     }
   }, [services, serviceId]);
+
+  const handleEvidenceSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length === 0) {
+      return;
+    }
+
+    let message: string | null = null;
+    const accepted: File[] = [];
+
+    for (const file of files) {
+      const validationError = validateAttachmentSize(file);
+      if (validationError) {
+        message = validationError;
+        break;
+      }
+      accepted.push(file);
+    }
+
+    const combined = [...evidenceFiles, ...accepted];
+    if (!message && combined.length > attachmentLimit) {
+      message = `You can attach up to ${attachmentLimit} files per incident.`;
+    }
+
+    if (message) {
+      setAttachmentError(message);
+    } else {
+      setAttachmentError(null);
+      setEvidenceFiles(combined.slice(0, attachmentLimit));
+    }
+
+    event.target.value = "";
+  };
+
+  const handleRemoveEvidence = (index: number) => {
+    setEvidenceFiles((prev) => prev.filter((_, idx) => idx !== index));
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -132,21 +181,55 @@ const NewIncidentForm = ({
     }
 
     setError(null);
+    setAttachmentError(null);
     setIsSubmitting(true);
 
+    let attachmentWarning: string | null = null;
+
     try {
-      await apiClient.post("/incidents", {
+      const response = await apiClient.post<{ error: boolean; data: Incident }>("/incidents", {
         title: title.trim(),
         description: description.trim(),
         severity,
         serviceId
       });
+      const createdIncident = response.data.data;
+
+      if (createdIncident?.id && evidenceFiles.length > 0) {
+        setIsUploadingEvidence(true);
+        try {
+          for (const file of evidenceFiles) {
+            await uploadIncidentAttachment(createdIncident.id, file);
+          }
+          setEvidenceFiles([]);
+        } catch (uploadError) {
+          attachmentWarning =
+            "Incident created, but one or more attachments failed to upload. Open the incident detail to add evidence from the timeline.";
+          if (isAxiosError(uploadError)) {
+            attachmentWarning = uploadError.response?.data?.message ?? attachmentWarning;
+          } else if (uploadError instanceof Error) {
+            attachmentWarning = uploadError.message;
+          }
+          setAttachmentError(attachmentWarning);
+        } finally {
+          setIsUploadingEvidence(false);
+        }
+      } else {
+        setEvidenceFiles([]);
+      }
+
       await invalidateIncidents();
       setTitle("");
       setDescription("");
       setSeverity("medium");
       setServiceId(services[0]?.id ?? "");
+      if (!attachmentWarning) {
+        setAttachmentError(null);
+      }
       onSuccess();
+      if (attachmentWarning) {
+        window.alert(attachmentWarning);
+      }
     } catch (err) {
       let message = "Failed to create incident.";
       if (isAxiosError(err)) {
@@ -157,6 +240,7 @@ const NewIncidentForm = ({
       setError(message);
     } finally {
       setIsSubmitting(false);
+      setIsUploadingEvidence(false);
     }
   };
 
@@ -214,15 +298,63 @@ const NewIncidentForm = ({
           <option value="critical">Critical</option>
         </select>
       </div>
+      <div className="rounded-lg border border-gray-800 bg-gray-950/60 px-4 py-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-100">Evidence (optional)</p>
+            <p className="text-xs text-gray-400">
+              Up to {attachmentLimit} files · {attachmentSizeLimitMb}MB each. Accepted types follow admin defaults.
+            </p>
+          </div>
+          <label
+            className="inline-flex cursor-pointer items-center justify-center rounded-md border border-dashed border-gray-600 px-3 py-1.5 text-xs font-semibold text-gray-200 transition hover:border-gray-400 hover:text-white"
+          >
+            <input
+              type="file"
+              multiple
+              className="sr-only"
+              onChange={handleEvidenceSelect}
+              disabled={isSubmitting || isUploadingEvidence || disabled}
+            />
+            {isUploadingEvidence ? "Uploading…" : "Upload files"}
+          </label>
+        </div>
+        {attachmentError ? (
+          <p className="mt-2 text-xs text-red-400">{attachmentError}</p>
+        ) : null}
+        {evidenceFiles.length > 0 ? (
+          <ul className="mt-3 space-y-2 text-sm text-gray-100">
+            {evidenceFiles.map((file, index) => (
+              <li
+                key={`${file.name}-${file.lastModified}-${index}`}
+                className="flex items-center justify-between rounded-md bg-gray-900/60 px-3 py-2 text-sm"
+              >
+                <div>
+                  <p className="font-medium">{file.name}</p>
+                  <p className="text-xs text-gray-400">{formatAttachmentSize(file.size)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveEvidence(index)}
+                  className="text-xs text-red-400 hover:text-red-300"
+                  disabled={isSubmitting || isUploadingEvidence}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
       {error ? (
         <p className="text-sm text-red-400">{error}</p>
       ) : null}
       <button
         type="submit"
-        disabled={disabled || isSubmitting || services.length === 0}
+        disabled={disabled || isSubmitting || isUploadingEvidence || services.length === 0}
         className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50"
       >
-        {isSubmitting ? "Creating..." : "Create Incident"}
+        {isSubmitting || isUploadingEvidence ? "Creating..." : "Create Incident"}
       </button>
     </form>
   );

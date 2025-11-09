@@ -43,6 +43,7 @@ model User {
   isActive     Boolean   @default(true)
   incidents    Incident[] @relation("IncidentCreator")
   updates      IncidentUpdate[]
+  attachments  IncidentAttachment[]
   assignments  Incident[] @relation("IncidentAssignee")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -63,6 +64,7 @@ model Incident {
   firstResponseAt DateTime?
   resolvedAt      DateTime?
   updates         IncidentUpdate[]
+  attachments     IncidentAttachment[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   categories      String[]         @default([])
@@ -84,6 +86,7 @@ model IncidentUpdate {
   author     User     @relation(fields: [authorId], references: [id])
   message    String
   createdAt  DateTime @default(now())
+  attachments IncidentAttachment[] @relation("UpdateAttachments")
 
   @@index([incidentId])
 }
@@ -114,4 +117,22 @@ model Service {
   incidents   Incident[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model IncidentAttachment {
+  id           String   @id @default(uuid())
+  incidentId   String
+  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  updateId     String?
+  update       IncidentUpdate? @relation("UpdateAttachments", fields: [updateId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  filename     String
+  mimeType     String
+  size         Int
+  path         String
+  createdAt    DateTime @default(now())
+
+  @@index([incidentId])
+  @@index([updateId])
 }

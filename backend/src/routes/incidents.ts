@@ -15,6 +15,41 @@ import {
   notifyAssigneeOfResolution,
   notifyIncidentIntegrations
 } from "../lib/incident-notifier";
+import {
+  buildAttachmentUrl,
+  persistIncidentAttachment,
+  removeAttachmentFile,
+  removeIncidentUploads
+} from "../lib/storage";
+
+const MAX_ATTACHMENTS_PER_UPDATE = 5;
+
+const attachmentInclude = {
+  uploadedBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true
+    }
+  }
+} satisfies Prisma.IncidentAttachmentInclude;
+
+type AttachmentWithUser = Prisma.IncidentAttachmentGetPayload<{
+  include: typeof attachmentInclude;
+}>;
+
+function serializeAttachment(attachment: AttachmentWithUser) {
+  return {
+    id: attachment.id,
+    filename: attachment.filename,
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+    createdAt: attachment.createdAt,
+    updateId: attachment.updateId,
+    url: buildAttachmentUrl(attachment.path),
+    uploadedBy: attachment.uploadedBy
+  };
+}
 
 const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -257,6 +292,10 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
               teamRoles: true
             }
           },
+          attachments: {
+            orderBy: { createdAt: "desc" },
+            include: attachmentInclude
+          },
           service: {
             select: {
               id: true,
@@ -274,6 +313,10 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
                   name: true,
                   email: true
                 }
+              },
+              attachments: {
+                orderBy: { createdAt: "asc" },
+                include: attachmentInclude
               }
             }
           }
@@ -298,9 +341,18 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
+      const responsePayload = {
+        ...incident,
+        attachments: incident.attachments.map(serializeAttachment),
+        updates: incident.updates.map((update) => ({
+          ...update,
+          attachments: update.attachments.map(serializeAttachment)
+        }))
+      };
+
       return reply.send({
         error: false,
-        data: incident
+        data: responsePayload
       });
     }
   );
@@ -470,6 +522,77 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   fastify.post(
+    "/:id/attachments",
+    { preHandler: [fastify.authenticate, fastify.authorize(["admin", "operator"])] },
+    async (request, reply) => {
+      const params = request.params as { id: string };
+      const incident = await prisma.incident.findUnique({
+        where: { id: params.id },
+        select: {
+          id: true,
+          createdById: true,
+          assignedToId: true
+        }
+      });
+
+      if (!incident) {
+        return reply.status(404).send({
+          error: true,
+          message: "Incident not found"
+        });
+      }
+
+      if (
+        request.user.role === "operator" &&
+        incident.createdById !== request.user.id &&
+        incident.assignedToId !== request.user.id
+      ) {
+        return reply.status(403).send({
+          error: true,
+          message: "Forbidden"
+        });
+      }
+
+      const file = await request.file();
+      if (!file) {
+        return reply.status(400).send({
+          error: true,
+          message: "Attachment file is required"
+        });
+      }
+
+      let storedMeta;
+      try {
+        storedMeta = await persistIncidentAttachment(file, params.id);
+      } catch (error) {
+        request.log.warn({ err: error }, "Failed to store attachment");
+        return reply.status(400).send({
+          error: true,
+          message:
+            error instanceof Error ? error.message : "Attachment could not be processed"
+        });
+      }
+
+      const attachment = await prisma.incidentAttachment.create({
+        data: {
+          incidentId: params.id,
+          uploadedById: request.user.id,
+          filename: storedMeta.originalFilename,
+          mimeType: storedMeta.mimeType,
+          size: storedMeta.size,
+          path: storedMeta.relativePath
+        },
+        include: attachmentInclude
+      });
+
+      return reply.status(201).send({
+        error: false,
+        data: serializeAttachment(attachment)
+      });
+    }
+  );
+
+  fastify.post(
     "/:id/update-log",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin", "operator"])] },
     async (request, reply) => {
@@ -482,6 +605,15 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           message: parsedBody.error.flatten().formErrors.join(", ") || "Invalid update message"
         });
       }
+
+       const { message, attachmentIds = [] } = parsedBody.data;
+
+       if (attachmentIds.length > MAX_ATTACHMENTS_PER_UPDATE) {
+         return reply.status(400).send({
+           error: true,
+           message: `You can attach up to ${MAX_ATTACHMENTS_PER_UPDATE} files per update`
+         });
+       }
 
       const incident = await prisma.incident.findUnique({
         where: { id: id.id },
@@ -512,30 +644,110 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
+      if (attachmentIds.length > 0) {
+        const attachments = await prisma.incidentAttachment.findMany({
+          where: {
+            id: { in: attachmentIds },
+            incidentId: id.id,
+            updateId: null,
+            uploadedById: request.user.id
+          },
+          select: { id: true }
+        });
+
+        if (attachments.length !== attachmentIds.length) {
+          return reply.status(400).send({
+            error: true,
+            message: "One or more attachments are invalid or already linked"
+          });
+        }
+      }
+
       const now = new Date();
 
-      const [update] = await prisma.$transaction([
-        prisma.incidentUpdate.create({
+      const update = await prisma.$transaction(async (tx) => {
+        const updateRecord = await tx.incidentUpdate.create({
           data: {
             incidentId: id.id,
             authorId: request.user.id,
-            message: parsedBody.data.message
+            message
           }
-        }),
-        prisma.incident.update({
-          where: { id: id.id },
-          data: incident.firstResponseAt
-            ? {}
-            : {
-                firstResponseAt: now
-              }
-        })
-      ]);
+        });
+
+        if (!incident.firstResponseAt) {
+          await tx.incident.update({
+            where: { id: id.id },
+            data: {
+              firstResponseAt: now
+            }
+          });
+        }
+
+        if (attachmentIds.length > 0) {
+          await tx.incidentAttachment.updateMany({
+            where: {
+              id: { in: attachmentIds }
+            },
+            data: {
+              updateId: updateRecord.id
+            }
+          });
+        }
+
+        return updateRecord;
+      });
 
       return reply.status(201).send({
         error: false,
         data: update
       });
+    }
+  );
+
+  fastify.delete(
+    "/:incidentId/attachments/:attachmentId",
+    { preHandler: [fastify.authenticate, fastify.authorize(["admin", "operator"])] },
+    async (request, reply) => {
+      const params = request.params as { incidentId: string; attachmentId: string };
+
+      const attachment = await prisma.incidentAttachment.findUnique({
+        where: { id: params.attachmentId },
+        select: {
+          id: true,
+          incidentId: true,
+          uploadedById: true,
+          updateId: true,
+          path: true
+        }
+      });
+
+      if (!attachment || attachment.incidentId !== params.incidentId) {
+        return reply.status(404).send({
+          error: true,
+          message: "Attachment not found"
+        });
+      }
+
+      if (attachment.updateId) {
+        return reply.status(400).send({
+          error: true,
+          message: "Attachment is already linked to an update"
+        });
+      }
+
+      if (request.user.role !== "admin" && attachment.uploadedById !== request.user.id) {
+        return reply.status(403).send({
+          error: true,
+          message: "You can only remove attachments you uploaded"
+        });
+      }
+
+      await prisma.incidentAttachment.delete({
+        where: { id: params.attachmentId }
+      });
+      await removeAttachmentFile(attachment.path);
+
+      return reply.status(204).send();
     }
   );
 
@@ -549,6 +761,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         await prisma.incident.delete({
           where: { id: params.id }
         });
+        await removeIncidentUploads(params.id);
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
           return reply.status(404).send({

@@ -15,6 +15,7 @@ import {
   BoltIcon,
   CpuChipIcon,
   ClipboardDocumentCheckIcon,
+  PaperClipIcon,
   CheckCircleIcon
 } from "@heroicons/react/24/outline";
 
@@ -139,6 +140,17 @@ const featureCards: Array<{
     icon: ChartBarIcon
   },
   {
+    title: "Evidence Attachments",
+    description:
+      "Give responders a single place to upload screenshots, HAR files, or log bundles alongside each timeline update.",
+    highlights: [
+      "Supports up to five files per update (10 MB each) stored inside the secure uploads directory defined by UPLOAD_DIR.",
+      "Incident creation form also accepts optional evidence so triage starts with screenshots, HAR files, or log snippets already attached.",
+      "Serve attachments through the backend /uploads gateway so reviewers can download or share artifacts without leaving the app."
+    ],
+    icon: PaperClipIcon
+  },
+  {
     title: "Public Status Page",
     description:
       "Deliver a trustworthy, branded status experience that reflects the latest internal truth.",
@@ -199,13 +211,15 @@ const setupGuide = {
     "cp frontend/.env.local.example frontend/.env.local && update API base URLs.",
     "cd frontend && npm install",
     "cd backend && npm install && npx prisma migrate dev",
+    "Set UPLOAD_DIR in backend/.env (defaults to uploads inside the backend folder) and ensure that directory exists so attachment uploads can be written.",
     "Run both apps: npm run dev inside frontend and backend directories."
   ],
   deployment: [
     "Push the repository to GitHub or GitLab with protected main branches.",
     "Connect Vercel to the repo, selecting the frontend directory, and configure environment variables (NEXT_PUBLIC_API_URL, AUTH_SECRET).",
     "Provision the backend on Render with build command npm install && npm run build and start command npm run start.",
-    "Set DATABASE_URL and auth secrets on Render, then run npx prisma migrate deploy.",
+    "Set DATABASE_URL, UPLOAD_DIR, and auth secrets on Render, then run npx prisma migrate deploy.",
+    "If Render needs persistent evidence storage, point UPLOAD_DIR to an attached disk or cloud storage mount.",
     "Configure custom domains for the public status page and marketing site."
   ]
 };
@@ -288,14 +302,45 @@ Content-Type: application/json
   "id": "inc_481",
   "state": "mitigated",
   "resolved_at": "2025-11-02T17:05:00.000Z",
-  "timeline": [
-    {
-      "at": "2025-11-02T16:45:00.000Z",
-      "body": "Applied hotfix to rollback release 2025.11.02",
-      "author": "Jordan Lee"
-    }
-  ]
+      "timeline": [
+        {
+          "at": "2025-11-02T16:45:00.000Z",
+          "body": "Applied hotfix to rollback release 2025.11.02",
+          "author": "Jordan Lee"
+        }
+      ]
 }`
+  },
+  {
+    method: "POST",
+    path: "/incidents/:id/attachments",
+    summary:
+      "Upload evidence files (screenshots, logs, HAR files) before posting an update. Limit five files per update, 10 MB each.",
+    request: `POST /incidents/inc_481/attachments
+Content-Type: multipart/form-data
+
+file: outage-dashboard.png`,
+    response: `201 Created
+Content-Type: application/json
+
+{
+  "error": false,
+  "data": {
+    "id": "att_901",
+    "filename": "outage-dashboard.png",
+    "mimeType": "image/png",
+    "size": 418204,
+    "url": "/uploads/incidents/inc_481/outage-dashboard.png"
+  }
+}`
+  },
+  {
+    method: "DELETE",
+    path: "/incidents/:incidentId/attachments/:attachmentId",
+    summary:
+      "Remove a staged attachment before it is bound to a timeline update. Only admins or the original uploader can delete it.",
+    request: `DELETE /incidents/inc_481/attachments/att_901`,
+    response: `204 No Content`
   }
 ];
 
@@ -372,6 +417,11 @@ const faqItems = [
     question: "Why is my status page blank?",
     answer:
       "The public page only shows incidents marked as customer-impacting or scheduled maintenance. Confirm incidents have published updates and that cache invalidation has completed."
+  },
+  {
+    question: "Where are evidence attachments stored?",
+    answer:
+      "The backend streams files into the directory referenced by UPLOAD_DIR (uploads/ by default, relative to the backend app) and serves them via the /uploads prefix. Point UPLOAD_DIR at persistent storage so artifacts survive restarts."
   },
   {
     question: "How do I enable Slack or Telegram notifications?",

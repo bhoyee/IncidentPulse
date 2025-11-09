@@ -3,7 +3,12 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@lib/api-client";
-import type { Incident, IncidentStatus, IncidentSeverity } from "@lib/types";
+import type {
+  Incident,
+  IncidentAttachment,
+  IncidentStatus,
+  IncidentSeverity
+} from "@lib/types";
 
 type IncidentListResponse = {
   error: boolean;
@@ -31,6 +36,7 @@ type SingleIncidentResponse = {
       email: string;
       teamRoles: string[];
     } | null;
+    attachments: IncidentAttachment[];
     updates: Array<{
       id: string;
       incidentId: string;
@@ -41,6 +47,7 @@ type SingleIncidentResponse = {
         name: string;
         email: string;
       };
+      attachments: IncidentAttachment[];
     }>;
   };
 };

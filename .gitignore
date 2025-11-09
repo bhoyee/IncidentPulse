@@ -12,4 +12,5 @@ frontend/test-results
 backend/node_modules
 frontend/node_modules
 backend/dist
+backend/uploads
 *.log

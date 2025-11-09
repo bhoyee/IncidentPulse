@@ -42,7 +42,8 @@ export const incidentQuerySchema = z.object({
 });
 
 export const incidentUpdateLogSchema = z.object({
-  message: z.string().min(3).max(2000)
+  message: z.string().min(3).max(2000),
+  attachmentIds: z.array(z.string().uuid()).max(5).optional()
 });
 
 export const teamUsersQuerySchema = z.object({

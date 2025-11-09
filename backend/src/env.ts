@@ -6,6 +6,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   FRONTEND_URL: z.string().url(),
   COOKIE_DOMAIN: z.string().min(1),
+  UPLOAD_DIR: z.string().min(1).default("uploads"),
   RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
   SMTP_FROM_ADDRESS: z.string().email("SMTP_FROM_ADDRESS must be a valid email"),
   SMTP_FROM_NAME: z.string().min(1, "SMTP_FROM_NAME is required"),
