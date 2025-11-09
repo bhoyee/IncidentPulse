@@ -15,6 +15,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { AuthGuard } from "@components/AuthGuard";
 import { IncidentDrawer } from "@components/IncidentDrawer";
+import { IntegrationsPanel } from "@components/IntegrationsPanel";
 import { useSession } from "@hooks/useSession";
 import { useIncidents, useInvalidateIncidents } from "@hooks/useIncidents";
 import {
@@ -24,6 +25,11 @@ import {
   useDeleteTeamUser,
   type TeamUser
 } from "@hooks/useTeamUsers";
+import {
+  useIntegrationSettings,
+  useUpdateIntegrationSettings,
+  type IntegrationSettings
+} from "@hooks/useIntegrationSettings";
 import { apiClient } from "@lib/api-client";
 import type { Incident, IncidentSeverity, IncidentStatus } from "@lib/types";
 
@@ -34,13 +40,6 @@ interface NewTeamMemberPayload {
   teamRoles: string[];
   sendInvite: boolean;
 }
-
-type IntegrationSettingsState = {
-  slackWebhookUrl: string;
-  telegramBotToken: string;
-  telegramChatId: string;
-  jiraIntegrationActive: boolean;
-};
 
 type InviteSummary = {
   name: string;
@@ -314,7 +313,6 @@ function DashboardPageContent() {
   const [activeTab, setActiveTab] = useState<"incidents" | "team" | "password" | "webhooks">("incidents");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
-  const [isSavingIntegrations, setIsSavingIntegrations] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [inviteSummary, setInviteSummary] = useState<InviteSummary | null>(null);
   const [memberError, setMemberError] = useState<string | null>(null);
@@ -329,23 +327,18 @@ function DashboardPageContent() {
     isActive: true
   });
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
-  const [integrationSettings, setIntegrationSettings] = useState<IntegrationSettingsState>({
-    slackWebhookUrl: "",
-    telegramBotToken: "",
-    telegramChatId: "",
-    jiraIntegrationActive: false
-  });
 
   const { data: session } = useSession();
   const createTeamUser = useCreateTeamUser();
   const updateTeamUser = useUpdateTeamUser();
   const deleteTeamUser = useDeleteTeamUser();
-  const isSavingMember = createTeamUser.isPending;
-  const isUpdatingMember = updateTeamUser.isPending;
-
   const isAdmin = session?.role === "admin";
   const canCreate = Boolean(session && session.role !== "viewer");
   const firstName = session?.name?.split(" ")[0] || "Team";
+  const integrationSettingsQuery = useIntegrationSettings(Boolean(isAdmin));
+  const updateIntegrationSettings = useUpdateIntegrationSettings();
+  const isSavingMember = createTeamUser.isPending;
+  const isUpdatingMember = updateTeamUser.isPending;
   const alertEndpoint = "https://your-backend.example.com/webhooks/incidents";
   const recoveryEndpoint = "https://your-backend.example.com/webhooks/incidents/recovery";
 
@@ -450,21 +443,6 @@ function DashboardPageContent() {
       : []),
   ];
 
-  const updateIntegrationSetting = <K extends keyof IntegrationSettingsState>(
-    key: K,
-    value: IntegrationSettingsState[K]
-  ) => {
-    setIntegrationSettings((previous) => ({ ...previous, [key]: value }));
-  };
-
-  const saveIntegrations = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSavingIntegrations(true);
-    setTimeout(() => {
-      setIsSavingIntegrations(false);
-    }, 1500);
-  };
-
   const handleCreateTeamMember = async (payload: NewTeamMemberPayload) => {
     if (!payload.name || !payload.email) {
       return;
@@ -499,6 +477,12 @@ function DashboardPageContent() {
       }
       setMemberError(message);
     }
+  };
+
+  const handleSaveIntegrationSettings = async (
+    payload: Partial<IntegrationSettings>
+  ) => {
+    await updateIntegrationSettings.mutateAsync(payload);
   };
 
   const openEditModal = (user: TeamUser) => {
@@ -1062,58 +1046,13 @@ function DashboardPageContent() {
                   </div>
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-sm space-y-4 shadow-lg">
-                    <h3 className="text-xl font-semibold text-white">Integration Secrets</h3>
-                    <p className="text-gray-400">Manage API keys and authentication tokens for external services.</p>
-                    <form onSubmit={saveIntegrations} className="space-y-4">
-                      <label className="block">
-                        <span className="text-sm font-medium text-gray-300">Slack Webhook URL</span>
-                        <input
-                          type="url"
-                          value={integrationSettings.slackWebhookUrl}
-                          onChange={(e) => updateIntegrationSetting('slackWebhookUrl', e.target.value)}
-                          placeholder="https://hooks.slack.com/services/..."
-                          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="text-sm font-medium text-gray-300">Telegram Bot Token</span>
-                        <input
-                          type="text"
-                          value={integrationSettings.telegramBotToken}
-                          onChange={(e) => updateIntegrationSetting('telegramBotToken', e.target.value)}
-                          placeholder="123456:ABC-DEF123456..."
-                          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1"
-                        />
-                      </label>
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={integrationSettings.jiraIntegrationActive}
-                            onChange={(e) => updateIntegrationSetting('jiraIntegrationActive', e.target.checked)}
-                            className="h-4 w-4 rounded border-gray-600 text-blue-500 focus:ring-blue-500 bg-gray-700"
-                          />
-                          <span className="text-sm text-gray-300">Activate JIRA Integration</span>
-                        </label>
-                        <button
-                          type="submit"
-                          disabled={isSavingIntegrations}
-                          className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50"
-                        >
-                          {isSavingIntegrations ? 'Saving...' : 'Save Integrations'}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-
-                  <div className="bg-gray-800 border border-dashed border-gray-700 rounded-xl p-6 text-sm shadow-lg">
-                    <h3 className="text-xl font-semibold text-gray-300">Future Integrations</h3>
-                    <p className="mt-2 text-gray-500">
-                      We&apos;re planning support for PagerDuty and Opsgenie alerts soon. Check the documentation for updates!
-                    </p>
-                  </div>
+                <div className="rounded-xl border border-gray-700 bg-gray-900 shadow-inner">
+                  <IntegrationsPanel
+                    settings={integrationSettingsQuery.data}
+                    isLoading={integrationSettingsQuery.isLoading}
+                    onSave={handleSaveIntegrationSettings}
+                    isSaving={updateIntegrationSettings.isPending}
+                  />
                 </div>
               </div>
             )}
