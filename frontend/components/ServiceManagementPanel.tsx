@@ -16,6 +16,7 @@ const DEFAULT_FORM = {
   name: "",
   description: ""
 };
+const PAGE_SIZE = 5;
 
 export function ServiceManagementPanel({
   services,
@@ -29,6 +30,8 @@ export function ServiceManagementPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const sortedServices = useMemo(() => {
     if (!services) {
@@ -36,6 +39,24 @@ export function ServiceManagementPanel({
     }
     return [...services].sort((a, b) => a.name.localeCompare(b.name));
   }, [services]);
+
+  const filteredServices = useMemo(() => {
+    if (!search.trim()) {
+      return sortedServices;
+    }
+    const query = search.trim().toLowerCase();
+    return sortedServices.filter((service) => {
+      const haystack = `${service.name} ${service.slug} ${service.description ?? ""}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [sortedServices, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredServices.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedServices = filteredServices.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -170,46 +191,102 @@ export function ServiceManagementPanel({
       </form>
 
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700">
-          {isLoading ? "Loading services…" : `${sortedServices.length} services`}
+        <div className="border-b border-gray-200 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm font-semibold text-gray-700">
+            {isLoading ? "Loading services…" : `${filteredServices.length} services`}
+          </div>
+          <input
+            type="text"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Search services"
+            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
         </div>
-        <div className="divide-y divide-gray-100">
-          {sortedServices.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-gray-500">No services yet.</p>
-          ) : (
-            sortedServices.map((service) => (
-              <div key={service.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{service.name}</p>
-                  <p className="text-xs text-gray-500">
-                    /{service.slug} • Active incidents: {service.activeIncidentCount}
-                  </p>
-                  {service.description ? (
-                    <p className="text-xs text-gray-500">{service.description}</p>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleEdit(service)}
-                    className="rounded-md border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                    disabled={submitting}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(service)}
-                    className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
-                    disabled={submitting || service.slug === "platform"}
-                  >
-                    Delete
-                  </button>
-                </div>
+        {filteredServices.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-gray-500">
+            {isLoading ? "No services yet." : "No services match that search."}
+          </p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100 text-sm text-gray-700">
+                <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Name</th>
+                    <th className="px-4 py-3 text-left">Slug</th>
+                    <th className="px-4 py-3 text-left">Description</th>
+                    <th className="px-4 py-3 text-center">Active incidents</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {pagedServices.map((service) => (
+                    <tr key={service.id} className="bg-white">
+                      <td className="px-4 py-3 font-medium text-gray-900">{service.name}</td>
+                      <td className="px-4 py-3 text-gray-500">/{service.slug}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {service.description ?? <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-600">
+                        {service.activeIncidentCount}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(service)}
+                            className="rounded-md border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                            disabled={submitting}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(service)}
+                            className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            disabled={submitting || service.slug === "platform"}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-col items-center gap-2 border-t border-gray-100 px-4 py-3 text-xs text-gray-500 sm:flex-row sm:justify-between">
+              <p>
+                Showing {pagedServices.length} of {filteredServices.length}
+              </p>
+              <div className="flex items-center gap-2 text-sm">
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {currentPage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next
+                </button>
               </div>
-            ))
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
