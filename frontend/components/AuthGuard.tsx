@@ -1,15 +1,25 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "@hooks/useSession";
 
 type Props = {
   children: React.ReactNode;
   requireRole?: Array<"admin" | "operator" | "viewer">;
+  redirectTo?: string;
 };
 
-export function AuthGuard({ children, requireRole }: Props) {
+export function AuthGuard({ children, requireRole, redirectTo = "/" }: Props) {
+  const router = useRouter();
   const { data, isLoading } = useSession();
+
+  useEffect(() => {
+    if (!isLoading && !data) {
+      router.replace(redirectTo);
+    }
+  }, [data, isLoading, redirectTo, router]);
 
   if (isLoading) {
     return (

@@ -11,7 +11,8 @@ import {
   PlusIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
-  TrashIcon
+  TrashIcon,
+  ArrowRightOnRectangleIcon
 } from "@heroicons/react/24/solid";
 import { AuthGuard } from "@components/AuthGuard";
 import { IncidentDrawer } from "@components/IncidentDrawer";
@@ -62,6 +63,8 @@ type ServiceOption = {
   slug: string;
 };
 
+
+const PASSWORD_PROMPT_KEY = "incidentpulse.passwordPrompt.dismissed";
 
 const ChangePasswordCard = () => {
   return (
@@ -359,7 +362,7 @@ function DashboardPageContent() {
   const [severityFilter, setSeverityFilter] = useState<IncidentSeverity | undefined>();
   const [serviceFilter, setServiceFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "password" | "webhooks">("incidents");
+  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "profile" | "password" | "webhooks">("incidents");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -376,6 +379,8 @@ function DashboardPageContent() {
     isActive: true
   });
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [showPasswordReminder, setShowPasswordReminder] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const { data: session } = useSession();
   const createTeamUser = useCreateTeamUser();
@@ -400,6 +405,8 @@ function DashboardPageContent() {
   }));
   const serviceMutationsPending =
     createService.isPending || updateService.isPending || deleteService.isPending;
+  const teamRolesDisplay = session?.teamRoles?.length ? session.teamRoles.join(", ") : "None assigned";
+  const roleLabel = session ? session.role.charAt(0).toUpperCase() + session.role.slice(1) : "";
   const alertEndpoint = "https://your-backend.example.com/webhooks/incidents";
   const recoveryEndpoint = "https://your-backend.example.com/webhooks/incidents/recovery";
 
@@ -411,6 +418,16 @@ function DashboardPageContent() {
     }),
     [statusFilter, severityFilter, serviceFilter]
   );
+
+  useEffect(() => {
+    if (!session || typeof window === "undefined") {
+      return;
+    }
+    const dismissed = window.localStorage.getItem(PASSWORD_PROMPT_KEY);
+    if (!dismissed) {
+      setShowPasswordReminder(true);
+    }
+  }, [session]);
 
   const handleSaveIntegrationSettings = async (payload: Partial<IntegrationSettings>) => {
     await updateIntegrationSettings.mutateAsync(payload);
@@ -427,6 +444,38 @@ function DashboardPageContent() {
   }) => updateService.mutateAsync(payload);
 
   const handleDeleteService = (id: string) => deleteService.mutateAsync(id);
+
+  const dismissPasswordReminder = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(PASSWORD_PROMPT_KEY, "1");
+    }
+    setShowPasswordReminder(false);
+  };
+
+  const goToChangePassword = () => {
+    dismissPasswordReminder();
+    setActiveTab("password");
+  };
+
+  const handleOpenProfile = () => {
+    setShowPasswordReminder(false);
+    setActiveTab("profile");
+  };
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await apiClient.post("/auth/logout");
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(PASSWORD_PROMPT_KEY);
+      }
+      router.replace("/login");
+    } catch (error) {
+      console.error("Logout failed", error);
+      setIsLoggingOut(false);
+    }
+  };
 
   const { data: incidentsResponse } = useIncidents(incidentFilters);
   const incidents = incidentsResponse?.data ?? [];
@@ -507,18 +556,22 @@ function DashboardPageContent() {
           }
         ]
       : []),
-    ...(isAdmin
-      ? [
-          {
-            id: "password",
-            name: "Security",
-            description: "Update password",
-            icon: "SEC",
-            current: activeTab === "password",
-            onClick: () => setActiveTab("password")
-          }
-        ]
-      : []),
+    {
+      id: "profile",
+      name: "Profile",
+      description: "Your account",
+      icon: "USER",
+      current: activeTab === "profile",
+      onClick: () => setActiveTab("profile")
+    },
+    {
+      id: "password",
+      name: "Security",
+      description: "Update password",
+      icon: "SEC",
+      current: activeTab === "password",
+      onClick: () => setActiveTab("password")
+    }
   ];
 
   const handleCreateTeamMember = async (payload: NewTeamMemberPayload) => {
@@ -659,13 +712,13 @@ function DashboardPageContent() {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-gray-900 flex font-sans">
-        <div className="bg-gray-900 border-r border-gray-700 w-64 hidden lg:block flex-shrink-0 pt-6">
+        <div className="bg-gray-900 border-r border-gray-700 w-64 hidden lg:flex flex-shrink-0 flex-col pt-6">
           <div className="px-6 mb-8">
             <div className="text-xl font-extrabold tracking-tight text-blue-400">
               Incident<span className="text-gray-50">Pulse</span>
             </div>
           </div>
-          <nav className="px-4 space-y-2">
+          <nav className="px-4 space-y-2 flex-1">
             {navigation.map((item) => (
               <button
                 key={item.id}
@@ -690,6 +743,17 @@ function DashboardPageContent() {
               </button>
             ))}
           </nav>
+          <div className="px-4 pb-6">
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-700 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-gray-800 hover:text-white disabled:opacity-60"
+            >
+              <ArrowRightOnRectangleIcon className="h-4 w-4" />
+              {isLoggingOut ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -728,9 +792,20 @@ function DashboardPageContent() {
                     <div className="px-4 py-3 text-sm text-gray-300 border-b border-gray-700">
                       Signed in as <div className="font-medium text-white truncate">{session.email}</div>
                     </div>
-                    <a href="#" className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Profile Settings</a>
-                    <button onClick={() => alert("Logging out")} className="w-full text-left block px-4 py-2 text-sm text-red-400 hover:bg-gray-700">
-                      Sign out
+                    <button
+                      type="button"
+                      onClick={handleOpenProfile}
+                      className="w-full text-left block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                    >
+                      Profile Settings
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      disabled={isLoggingOut}
+                      className="w-full text-left block px-4 py-2 text-sm text-red-400 hover:bg-gray-700 disabled:opacity-60"
+                    >
+                      {isLoggingOut ? "Signing out…" : "Sign out"}
                     </button>
                   </div>
                 </div>
@@ -741,13 +816,13 @@ function DashboardPageContent() {
           {sidebarOpen && (
             <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setSidebarOpen(false)}>
               <div className="absolute inset-0 bg-black opacity-75"></div>
-              <div className="bg-gray-900 border-r border-gray-700 w-64 h-full absolute top-0 left-0 pt-6" onClick={(e) => e.stopPropagation()}>
+              <div className="bg-gray-900 border-r border-gray-700 w-64 h-full absolute top-0 left-0 pt-6 flex flex-col" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 mb-8">
                   <div className="text-xl font-extrabold tracking-tight text-blue-400">
                     Incident<span className="text-gray-50">Pulse</span>
                   </div>
                 </div>
-                <nav className="px-4 space-y-2">
+                <nav className="px-4 space-y-2 flex-1 overflow-y-auto">
                   {navigation.map((item) => (
                     <button
                       key={item.id}
@@ -772,6 +847,17 @@ function DashboardPageContent() {
                     </button>
                   ))}
                 </nav>
+                <div className="px-4 pt-4 pb-6 border-t border-gray-800">
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-700 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-gray-800 hover:text-white disabled:opacity-60"
+                  >
+                    <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                    {isLoggingOut ? "Signing out…" : "Sign out"}
+                  </button>
+                </div>
                 <button
                   className="absolute top-4 right-4 text-gray-400 hover:text-white"
                   onClick={() => setSidebarOpen(false)}
@@ -1169,7 +1255,34 @@ function DashboardPageContent() {
               </div>
             )}
 
-            {activeTab === 'password' && isAdmin && (
+            {activeTab === 'profile' && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl max-w-3xl mx-auto p-6 lg:p-8 space-y-6 shadow-lg">
+                <h2 className="text-2xl font-bold text-white">Profile</h2>
+                <p className="text-sm text-gray-400">
+                  View your account details. Contact an administrator if something looks incorrect.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border border-gray-700 bg-gray-900 p-4">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Full name</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{session?.name ?? "—"}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-700 bg-gray-900 p-4">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Email</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{session?.email ?? "—"}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-700 bg-gray-900 p-4">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Role</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{roleLabel}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-700 bg-gray-900 p-4">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Team roles</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{teamRolesDisplay}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'password' && (
               <div className="bg-gray-800 border border-gray-700 rounded-xl max-w-lg mx-auto p-6 lg:p-8 space-y-6 shadow-lg">
                 <h2 className="text-2xl font-bold text-white">Update Password</h2>
                 <p className="text-sm text-gray-400">
@@ -1183,6 +1296,34 @@ function DashboardPageContent() {
             )}
           </main>
         </div>
+
+        {showPasswordReminder && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-md rounded-2xl border border-indigo-200 bg-white p-6 shadow-2xl">
+              <h3 className="text-xl font-semibold text-slate-900">Secure your account</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                This looks like your first visit. Update your password now to keep your workspace
+                safe.
+              </p>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={dismissPasswordReminder}
+                  className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Not now
+                </button>
+                <button
+                  type="button"
+                  onClick={goToChangePassword}
+                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+                >
+                  Change password
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <IncidentDrawer
           incidentId={selectedIncidentId ?? undefined}

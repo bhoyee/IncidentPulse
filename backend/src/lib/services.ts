@@ -31,6 +31,7 @@ export async function ensureUniqueSlug(
   let candidate = base;
   let counter = 1;
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     const existing = await prisma.service.findFirst({
       where: {
