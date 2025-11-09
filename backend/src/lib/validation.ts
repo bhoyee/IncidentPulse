@@ -137,3 +137,27 @@ export const maintenanceQuerySchema = z.object({
   window: z.enum(["upcoming", "past", "all"]).optional(),
   serviceId: z.string().min(1).optional()
 });
+
+const auditActionValues = [
+  "user_login",
+  "user_created",
+  "user_updated",
+  "user_deleted",
+  "incident_created",
+  "incident_updated",
+  "incident_resolved",
+  "incident_investigating",
+  "incident_monitoring",
+  "incident_deleted",
+  "maintenance_created",
+  "maintenance_updated",
+  "maintenance_canceled"
+] as const;
+
+export const auditLogQuerySchema = z.object({
+  action: z.enum(auditActionValues).optional(),
+  targetType: z.string().min(2).max(50).optional(),
+  search: z.string().min(2).max(120).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25)
+});

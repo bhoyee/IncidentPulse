@@ -19,6 +19,7 @@ import integrationsRoutes from "./routes/integrations";
 import webhooksRoutes from "./routes/webhooks";
 import servicesRoutes from "./routes/services";
 import maintenanceRoutes from "./routes/maintenance";
+import auditRoutes from "./routes/audit";
 import {
   ensureUploadsRootSync,
   MAX_ATTACHMENT_BYTES,
@@ -119,6 +120,7 @@ export function buildApp() {
   fastify.register(integrationsRoutes, { prefix: "/integrations" });
   fastify.register(webhooksRoutes, { prefix: "/webhooks" });
   fastify.register(maintenanceRoutes, { prefix: "/maintenance" });
+  fastify.register(auditRoutes, { prefix: "/audit" });
 
   registerIncidentEscalationWatcher(fastify);
 

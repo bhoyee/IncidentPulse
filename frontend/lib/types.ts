@@ -101,6 +101,18 @@ export type MaintenanceEvent = {
   } | null;
 };
 
+export type AuditLog = {
+  id: string;
+  action: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  actorName: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
 export type StatusSnapshot = {
   overall_state: "operational" | "partial_outage" | "major_outage";
   active_incidents: Array<{

@@ -6,6 +6,7 @@ import { hashPassword, toSafeUser } from "../lib/auth";
 import { createUserSchema, teamUsersQuerySchema, updateUserSchema } from "../lib/validation";
 import { sendMail } from "../lib/mailer";
 import { env } from "../env";
+import { recordAuditLog } from "../lib/audit";
 
 const teamRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -201,6 +202,19 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
           }
         }
 
+        await recordAuditLog({
+          action: "user_created",
+          actorId: request.user.id,
+          actorEmail: request.user.email,
+          actorName: request.user.name,
+          targetType: "user",
+          targetId: user.id,
+          metadata: {
+            email: user.email,
+            role: user.role
+          }
+        });
+
         return reply.status(201).send({
           error: false,
           data: toSafeUser(user),
@@ -273,6 +287,19 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
           }
         });
 
+        await recordAuditLog({
+          action: "user_updated",
+          actorId: request.user.id,
+          actorEmail: request.user.email,
+          actorName: request.user.name,
+          targetType: "user",
+          targetId: user.id,
+          metadata: {
+            role: user.role,
+            isActive: user.isActive
+          }
+        });
+
         return reply.send({
           error: false,
           data: toSafeUser(user)
@@ -311,6 +338,22 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
+      const targetUser = await prisma.user.findUnique({
+        where: { id: params.id },
+        select: {
+          id: true,
+          email: true,
+          name: true
+        }
+      });
+
+      if (!targetUser) {
+        return reply.status(404).send({
+          error: true,
+          message: "User not found"
+        });
+      }
+
       try {
         await prisma.user.delete({
           where: { id: params.id }
@@ -333,6 +376,16 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
         }
         throw error;
       }
+
+      await recordAuditLog({
+        action: "user_deleted",
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        targetType: "user",
+        targetId: targetUser.id,
+        metadata: { email: targetUser.email }
+      });
 
       return reply.status(204).send();
     }

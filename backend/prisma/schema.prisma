@@ -40,6 +40,22 @@ enum MaintenanceStatus {
   canceled
 }
 
+enum AuditAction {
+  user_login
+  user_created
+  user_updated
+  user_deleted
+  incident_created
+  incident_updated
+  incident_resolved
+  incident_investigating
+  incident_monitoring
+  incident_deleted
+  maintenance_created
+  maintenance_updated
+  maintenance_canceled
+}
+
 model User {
   id           String    @id @default(uuid())
   name         String
@@ -53,6 +69,7 @@ model User {
   attachments  IncidentAttachment[]
   assignments  Incident[] @relation("IncidentAssignee")
   maintenanceEvents MaintenanceEvent[] @relation("MaintenanceCreatedBy")
+  auditLogs    AuditLog[] @relation("AuditActor")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
@@ -148,6 +165,23 @@ model MaintenanceEvent {
   @@index([startsAt])
   @@index([endsAt])
   @@index([status])
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  action      AuditAction
+  actorId     String?
+  actor       User?       @relation("AuditActor", fields: [actorId], references: [id])
+  actorEmail  String?
+  actorName   String?
+  targetType  String?
+  targetId    String?
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([targetType, targetId])
 }
 
 model IncidentAttachment {

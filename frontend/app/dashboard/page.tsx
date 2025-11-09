@@ -57,6 +57,7 @@ import {
   useCancelMaintenanceEvent
 } from "@hooks/useMaintenance";
 import { useAnalytics } from "@hooks/useAnalytics";
+import { useAuditLogs } from "@hooks/useAuditLogs";
 import { apiClient } from "@lib/api-client";
 import {
   MAX_ATTACHMENTS_PER_BATCH,
@@ -166,6 +167,25 @@ function EmptyState({ message }: { message: string }) {
       {message}
     </div>
   );
+}
+
+function formatAuditAction(action: string): string {
+  const map: Record<string, string> = {
+    user_login: "User login",
+    user_created: "User created",
+    user_updated: "User updated",
+    user_deleted: "User deleted",
+    incident_created: "Incident created",
+    incident_updated: "Incident updated",
+    incident_resolved: "Incident resolved",
+    incident_investigating: "Incident investigating",
+    incident_monitoring: "Incident monitoring",
+    incident_deleted: "Incident deleted",
+    maintenance_created: "Maintenance created",
+    maintenance_updated: "Maintenance updated",
+    maintenance_canceled: "Maintenance canceled"
+  };
+  return map[action] ?? action;
 }
 
 const NewIncidentForm = ({
@@ -560,7 +580,27 @@ function DashboardPageContent() {
   const [teamSearch, setTeamSearch] = useState("");
   const [teamPage, setTeamPage] = useState(1);
   const TEAM_PAGE_SIZE = 10;
-  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "maintenance" | "analytics" | "webhooks" | "profile" | "password">("incidents");
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState("");
+  const [auditPage, setAuditPage] = useState(1);
+  const AUDIT_PAGE_SIZE = 20;
+  const auditActionOptions = [
+    { value: "", label: "All actions" },
+    { value: "user_login", label: "User login" },
+    { value: "user_created", label: "User created" },
+    { value: "user_updated", label: "User updated" },
+    { value: "user_deleted", label: "User deleted" },
+    { value: "incident_created", label: "Incident created" },
+    { value: "incident_updated", label: "Incident updated" },
+    { value: "incident_resolved", label: "Incident resolved" },
+    { value: "incident_investigating", label: "Incident investigating" },
+    { value: "incident_monitoring", label: "Incident monitoring" },
+    { value: "incident_deleted", label: "Incident deleted" },
+    { value: "maintenance_created", label: "Maintenance created" },
+    { value: "maintenance_updated", label: "Maintenance updated" },
+    { value: "maintenance_canceled", label: "Maintenance canceled" }
+  ];
+  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "maintenance" | "audit" | "analytics" | "webhooks" | "profile" | "password">("incidents");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -638,6 +678,10 @@ function DashboardPageContent() {
   useEffect(() => {
     setTeamPage(1);
   }, [teamSearch]);
+
+  useEffect(() => {
+    setAuditPage(1);
+  }, [auditActionFilter, auditSearch]);
 
   useEffect(() => {
     if (!session || typeof window === "undefined") {
@@ -826,6 +870,17 @@ function DashboardPageContent() {
     bucket: format(new Date(entry.bucket), "MMM d"),
     count: entry.count
   }));
+  const auditLogsQuery = useAuditLogs(Boolean(isAdmin), {
+    action: auditActionFilter || undefined,
+    search:
+      auditSearch.trim().length >= 2
+        ? auditSearch.trim()
+        : undefined,
+    page: auditPage,
+    pageSize: AUDIT_PAGE_SIZE
+  });
+  const auditLogs = auditLogsQuery.data?.data ?? [];
+  const auditMeta = auditLogsQuery.data?.meta;
 
   const teamUsersQuery = useTeamUsers(Boolean(isAdmin), {
     search: teamSearch.trim().length >= 2 ? teamSearch.trim() : undefined,
@@ -901,6 +956,18 @@ function DashboardPageContent() {
             icon: "MAINT",
             current: activeTab === "maintenance",
             onClick: () => setActiveTab("maintenance")
+          }
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            id: "audit",
+            name: "System Audit",
+            description: "Track logins & changes",
+            icon: "AUD",
+            current: activeTab === "audit",
+            onClick: () => setActiveTab("audit")
           }
         ]
       : []),
@@ -1876,6 +1943,123 @@ function DashboardPageContent() {
                     </ResponsiveContainer>
                   )}
                 </ChartCard>
+              </div>
+            )}
+
+            {activeTab === 'audit' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-400">System audit</p>
+                    <h2 className="text-2xl font-bold text-white">Audit Log</h2>
+                    <p className="text-sm text-gray-400">
+                      Trace logins, incident changes, and user management activity in one place.
+                    </p>
+                  </div>
+                  {auditLogsQuery.isFetching ? (
+                    <p className="text-xs text-gray-500">Refreshing…</p>
+                  ) : null}
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={auditSearch}
+                      onChange={(event) => setAuditSearch(event.target.value)}
+                      placeholder="Search actor, target, or ID…"
+                      className="w-full rounded-lg border border-gray-700 bg-gray-900 pl-9 pr-3 py-2 text-sm text-gray-200 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <select
+                    value={auditActionFilter}
+                    onChange={(event) => setAuditActionFilter(event.target.value)}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {auditActionOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-gray-700 shadow-inner">
+                  <table className="min-w-full divide-y divide-gray-700">
+                    <thead className="bg-gray-800 text-xs uppercase text-gray-400">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Timestamp</th>
+                        <th className="px-4 py-3 text-left">Action</th>
+                        <th className="px-4 py-3 text-left">Actor</th>
+                        <th className="px-4 py-3 text-left">Target</th>
+                        <th className="px-4 py-3 text-left">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800 text-sm text-gray-300">
+                      {auditLogsQuery.isLoading ? (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-5 text-center text-gray-500">
+                            Loading audit events…
+                          </td>
+                        </tr>
+                      ) : auditLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-5 text-center text-gray-500">
+                            No audit events match your filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        auditLogs.map((log) => (
+                          <tr key={log.id} className="hover:bg-gray-800/60 transition">
+                            <td className="px-4 py-3 text-xs text-gray-400">
+                              {format(new Date(log.createdAt), "PPpp")}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="rounded-full bg-gray-700/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-200">
+                                {formatAuditAction(log.action)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {log.actorName ?? log.actorEmail ?? "System"}
+                              {log.actorEmail && log.actorName ? (
+                                <span className="block text-xs text-gray-500">{log.actorEmail}</span>
+                              ) : null}
+                            </td>
+                            <td className="px-4 py-3 text-gray-300">
+                              {log.targetType ? (
+                                <span>
+                                  {log.targetType}
+                                  {log.targetId ? ` • ${log.targetId}` : ""}
+                                </span>
+                              ) : (
+                                <span className="text-gray-500">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-xs">
+                              {log.metadata ? (
+                                <code className="block max-w-xs overflow-hidden text-ellipsis whitespace-nowrap rounded bg-gray-900/80 px-2 py-1 text-gray-300">
+                                  {JSON.stringify(log.metadata)}
+                                </code>
+                              ) : (
+                                <span className="text-gray-500">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {auditMeta ? (
+                  <Pagination
+                    page={auditMeta.page}
+                    pageSize={auditMeta.pageSize}
+                    total={auditMeta.total}
+                    onPageChange={(nextPage) => setAuditPage(nextPage)}
+                  />
+                ) : null}
               </div>
             )}
 

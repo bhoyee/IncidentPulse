@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { prisma } from "../lib/db";
 import { changePasswordSchema, loginSchema } from "../lib/validation";
 import { clearSession, hashPassword, setSessionCookie, toSafeUser, verifyPassword } from "../lib/auth";
+import { recordAuditLog } from "../lib/audit";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/login", async (request, reply) => {
@@ -42,6 +43,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     await setSessionCookie(reply, token);
+    await recordAuditLog({
+      action: "user_login",
+      actorId: user.id,
+      actorEmail: user.email,
+      actorName: user.name
+    });
 
     return reply.status(200).send({
       error: false,

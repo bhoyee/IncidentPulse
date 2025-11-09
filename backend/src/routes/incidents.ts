@@ -21,6 +21,7 @@ import {
   removeAttachmentFile,
   removeIncidentUploads
 } from "../lib/storage";
+import { recordAuditLog } from "../lib/audit";
 
 const MAX_ATTACHMENTS_PER_UPDATE = 5;
 
@@ -259,6 +260,19 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
 
       await notifyAdminsOfIncident(fastify.log, incident, admins);
       await notifyIncidentIntegrations(fastify.log, incident, "created");
+      await recordAuditLog({
+        action: "incident_created",
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        targetType: "incident",
+        targetId: incident.id,
+        metadata: {
+          severity: incident.severity,
+          status: incident.status,
+          serviceId: incident.serviceId
+        }
+      });
 
       return reply.status(201).send({
         error: false,
@@ -546,6 +560,38 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         const resolutionTime = incident.resolvedAt ?? now;
         await notifyAssigneeOfResolution(fastify.log, incident, resolutionTime);
         await notifyIncidentIntegrations(fastify.log, incident, "resolved", { resolutionTime });
+        await recordAuditLog({
+          action: "incident_resolved",
+          actorId: request.user.id,
+          actorEmail: request.user.email,
+          actorName: request.user.name,
+          targetType: "incident",
+          targetId: incident.id,
+          metadata: {
+            status: incident.status,
+            resolvedAt: incident.resolvedAt
+          }
+        });
+      } else if (parsedBody.data.status === "investigating") {
+        await recordAuditLog({
+          action: "incident_investigating",
+          actorId: request.user.id,
+          actorEmail: request.user.email,
+          actorName: request.user.name,
+          targetType: "incident",
+          targetId: incident.id,
+          metadata: { status: incident.status }
+        });
+      } else if (parsedBody.data.status === "monitoring") {
+        await recordAuditLog({
+          action: "incident_monitoring",
+          actorId: request.user.id,
+          actorEmail: request.user.email,
+          actorName: request.user.name,
+          targetType: "incident",
+          targetId: incident.id,
+          metadata: { status: incident.status }
+        });
       }
 
       if (assignmentChanged) {
@@ -554,6 +600,19 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         await notifyAssigneeOfAssignment(fastify.log, incident, assignedBy);
         await notifyIncidentIntegrations(fastify.log, incident, "assigned", { assignedBy });
       }
+
+      await recordAuditLog({
+        action: "incident_updated",
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        targetType: "incident",
+        targetId: incident.id,
+        metadata: {
+          status: incident.status,
+          severity: incident.severity
+        }
+      });
 
       return reply.send({
         error: false,
@@ -798,20 +857,44 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const params = request.params as { id: string };
 
+      const existing = await prisma.incident.findUnique({
+        where: { id: params.id },
+        select: {
+          id: true,
+          severity: true,
+          status: true,
+          serviceId: true
+        }
+      });
+
+      if (!existing) {
+        return reply.status(404).send({
+          error: true,
+          message: "Incident not found"
+        });
+      }
+
       try {
         await prisma.incident.delete({
           where: { id: params.id }
         });
         await removeIncidentUploads(params.id);
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
-          return reply.status(404).send({
-            error: true,
-            message: "Incident not found"
-          });
-        }
         throw error;
       }
+
+      await recordAuditLog({
+        action: "incident_deleted",
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        targetType: "incident",
+        targetId: existing.id,
+        metadata: {
+          severity: existing.severity,
+          status: existing.status
+        }
+      });
 
       return reply.status(204).send();
     }

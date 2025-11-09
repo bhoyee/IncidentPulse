@@ -169,7 +169,8 @@ const featureCards: Array<{
       "Govern identity providers, integrations, webhooks, and audit trails from a single control center.",
     highlights: [
       "Role-based access controls and SCIM keep user lifecycle in sync.",
-      "Audit log export satisfies compliance and security review requirements."
+      "Audit log export satisfies compliance and security review requirements.",
+      "Live System Audit page surfaces logins, user provisioning, and incident lifecycle changes with filters and pagination."
     ],
     icon: Cog8ToothIcon
   }

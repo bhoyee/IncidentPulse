@@ -11,6 +11,7 @@ import {
   serializeMaintenanceEvent,
   transitionMaintenanceEvents
 } from "../lib/maintenance";
+import { recordAuditLog } from "../lib/audit";
 
 const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -98,6 +99,20 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       await transitionMaintenanceEvents(prisma);
+      await recordAuditLog({
+        action: "maintenance_created",
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        targetType: "maintenance",
+        targetId: event.id,
+        metadata: {
+          title: event.title,
+          startsAt: event.startsAt,
+          endsAt: event.endsAt,
+          appliesToAll: event.appliesToAll
+        }
+      });
 
       return reply.status(201).send({
         error: false,
@@ -147,6 +162,19 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       await transitionMaintenanceEvents(prisma);
+      await recordAuditLog({
+        action: "maintenance_updated",
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        targetType: "maintenance",
+        targetId: event.id,
+        metadata: {
+          status: event.status,
+          startsAt: event.startsAt,
+          endsAt: event.endsAt
+        }
+      });
 
       return reply.send({
         error: false,
@@ -185,6 +213,18 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
           status: "canceled"
         },
         include: maintenanceEventInclude
+      });
+
+      await recordAuditLog({
+        action: "maintenance_canceled",
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        targetType: "maintenance",
+        targetId: updated.id,
+        metadata: {
+          title: updated.title
+        }
       });
 
       return reply.send({
