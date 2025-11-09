@@ -33,6 +33,13 @@ enum StatusState {
   major_outage
 }
 
+enum MaintenanceStatus {
+  scheduled
+  in_progress
+  completed
+  canceled
+}
+
 model User {
   id           String    @id @default(uuid())
   name         String
@@ -45,6 +52,7 @@ model User {
   updates      IncidentUpdate[]
   attachments  IncidentAttachment[]
   assignments  Incident[] @relation("IncidentAssignee")
+  maintenanceEvents MaintenanceEvent[] @relation("MaintenanceCreatedBy")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
@@ -117,8 +125,29 @@ model Service {
   slug        String    @unique
   description String?
   incidents   Incident[]
+  maintenance MaintenanceEvent[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model MaintenanceEvent {
+  id            String            @id @default(uuid())
+  title         String
+  description   String?
+  status        MaintenanceStatus @default(scheduled)
+  startsAt      DateTime
+  endsAt        DateTime
+  appliesToAll  Boolean           @default(true)
+  serviceId     String?
+  service       Service?          @relation(fields: [serviceId], references: [id])
+  createdById   String?
+  createdBy     User?             @relation("MaintenanceCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([startsAt])
+  @@index([endsAt])
+  @@index([status])
 }
 
 model IncidentAttachment {

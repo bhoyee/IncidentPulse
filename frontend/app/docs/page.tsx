@@ -106,7 +106,8 @@ const featureCards: Array<{
       "Keep stakeholders aligned with templated updates across email, Slack, and public channels.",
     highlights: [
       "Compose updates once and distribute across every channel with scheduling support.",
-      "Auto-expire outdated posts and highlight customer-facing impact visually."
+      "Auto-expire outdated posts and highlight customer-facing impact visually.",
+      "Announce scheduled maintenance separately from incidents so customers know what to expect."
     ],
     icon: GlobeAltIcon
   },
@@ -157,7 +158,8 @@ const featureCards: Array<{
       "Deliver a trustworthy, branded status experience that reflects the latest internal truth.",
     highlights: [
       "Custom domains, regional scoping, and historical uptime badges build credibility.",
-      "Allow visitors to filter by service and subscribe for real-time alerts."
+      "Allow visitors to filter by service and subscribe for real-time alerts.",
+      "Show scheduled maintenance windows in advance without triggering outage states."
     ],
     icon: GlobeAltIcon
   },
@@ -342,6 +344,67 @@ Content-Type: application/json
       "Remove a staged attachment before it is bound to a timeline update. Only admins or the original uploader can delete it.",
     request: `DELETE /incidents/inc_481/attachments/att_901`,
     response: `204 No Content`
+  },
+  {
+    method: "POST",
+    path: "/maintenance",
+    summary:
+      "Create a scheduled maintenance window (admin only). Planned downtime is announced separately from incidents.",
+    request: `POST /maintenance
+Content-Type: application/json
+
+{
+  "title": "Database maintenance",
+  "description": "Upgrading storage tier. Read-only for 15 minutes.",
+  "startsAt": "2025-11-10T01:00:00Z",
+  "endsAt": "2025-11-10T01:15:00Z",
+  "appliesToAll": false,
+  "serviceId": "svc_db_primary"
+}`,
+    response: `201 Created
+Content-Type: application/json
+
+{
+  "error": false,
+  "data": {
+    "id": "mnt_901",
+    "status": "scheduled",
+    "startsAt": "2025-11-10T01:00:00.000Z",
+    "endsAt": "2025-11-10T01:15:00.000Z",
+    "appliesToAll": false,
+    "service": {
+      "id": "svc_db_primary",
+      "name": "Primary Database"
+    }
+  }
+}`
+  },
+  {
+    method: "GET",
+    path: "/maintenance?window=upcoming",
+    summary:
+      "List upcoming and active maintenance windows. Use window=past for history or filter by serviceId.",
+    request: `GET /maintenance?window=upcoming
+Accept: application/json`,
+    response: `200 OK
+Content-Type: application/json
+
+{
+  "data": [
+    {
+      "id": "mnt_901",
+      "title": "Database maintenance",
+      "status": "scheduled",
+      "startsAt": "2025-11-10T01:00:00.000Z",
+      "endsAt": "2025-11-10T01:15:00.000Z",
+      "appliesToAll": false,
+      "service": {
+        "id": "svc_db_primary",
+        "name": "Primary Database"
+      }
+    }
+  ]
+}`
   }
 ];
 

@@ -81,6 +81,24 @@ export type ServiceStatus = {
   description: string | null;
   state: "operational" | "partial_outage" | "major_outage";
   activeIncidentCount: number;
+  maintenance?: MaintenanceEvent | null;
+};
+
+export type MaintenanceStatus = "scheduled" | "in_progress" | "completed" | "canceled";
+
+export type MaintenanceEvent = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: MaintenanceStatus;
+  startsAt: string;
+  endsAt: string;
+  appliesToAll: boolean;
+  service: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
 };
 
 export type StatusSnapshot = {
@@ -101,5 +119,9 @@ export type StatusSnapshot = {
   last_24h: {
     uptime_percent: number;
     incident_count: number;
+  };
+  scheduled_maintenance: {
+    active: MaintenanceEvent[];
+    upcoming: MaintenanceEvent[];
   };
 };

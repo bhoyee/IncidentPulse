@@ -1,5 +1,10 @@
-import type { PrismaClient, Incident } from "@prisma/client";
+import type { PrismaClient, Incident, MaintenanceEvent } from "@prisma/client";
 import { prisma as defaultPrisma } from "./db";
+import {
+  maintenanceEventInclude,
+  serializeMaintenanceEvent,
+  transitionMaintenanceEvents
+} from "./maintenance";
 
 export type PublicIncident = {
   id: string;
@@ -21,6 +26,22 @@ export type ServiceStatusSnapshot = {
   description: string | null;
   state: StatusSnapshot["state"];
   activeIncidentCount: number;
+  maintenance?: PublicMaintenanceEvent | null;
+};
+
+export type PublicMaintenanceEvent = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: MaintenanceEvent["status"];
+  startsAt: Date;
+  endsAt: Date;
+  appliesToAll: boolean;
+  service: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
 };
 
 export type StatusSnapshot = {
@@ -34,6 +55,10 @@ export type StatusSnapshot = {
       uptime_percent: number;
       incident_count: number;
     };
+    scheduled_maintenance: {
+      active: PublicMaintenanceEvent[];
+      upcoming: PublicMaintenanceEvent[];
+    };
   };
 };
 
@@ -43,7 +68,9 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
   const now = new Date();
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-  const [activeIncidents, incidentsLast24hCount, services] = await Promise.all([
+  await transitionMaintenanceEvents(prisma);
+
+  const [activeIncidents, incidentsLast24hCount, services, maintenanceEvents] = await Promise.all([
     prisma.incident.findMany({
       where: {
         status: {
@@ -71,6 +98,18 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
     }),
     prisma.service.findMany({
       orderBy: { name: "asc" }
+    }),
+    prisma.maintenanceEvent.findMany({
+      where: {
+        status: {
+          in: ["scheduled", "in_progress"]
+        },
+        endsAt: {
+          gte: now
+        }
+      },
+      orderBy: { startsAt: "asc" },
+      include: maintenanceEventInclude
     })
   ]);
 
@@ -94,16 +133,28 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
     return acc;
   }, {});
 
+  const activeMaintenanceEvents = maintenanceEvents.filter(
+    (event) => event.status === "in_progress" || (event.status === "scheduled" && event.startsAt <= now)
+  );
+  const upcomingMaintenanceEvents = maintenanceEvents.filter(
+    (event) => event.status === "scheduled" && event.startsAt > now
+  );
+
   const serviceSnapshots: ServiceStatusSnapshot[] = services.map((service) => {
     const serviceIncidents = incidentsByService[service.id] ?? [];
     const state = determineOverallState(serviceIncidents);
+    const maintenance = activeMaintenanceEvents.find(
+      (event) => event.appliesToAll || event.serviceId === service.id
+    );
+
     return {
       id: service.id,
       name: service.name,
       slug: service.slug,
       description: service.description,
       state,
-      activeIncidentCount: serviceIncidents.length
+      activeIncidentCount: serviceIncidents.length,
+      maintenance: maintenance ? (serializeMaintenanceEvent(maintenance) as PublicMaintenanceEvent) : null
     };
   });
 
@@ -120,6 +171,14 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
       last_24h: {
         uptime_percent: uptime24h,
         incident_count: incidentsLast24hCount
+      },
+      scheduled_maintenance: {
+        active: activeMaintenanceEvents.map(
+          (event) => serializeMaintenanceEvent(event) as PublicMaintenanceEvent
+        ),
+        upcoming: upcomingMaintenanceEvents.map(
+          (event) => serializeMaintenanceEvent(event) as PublicMaintenanceEvent
+        )
       }
     }
   };
@@ -215,7 +274,7 @@ export async function fetchFreshStatus(prisma: PrismaClient = defaultPrisma): Pr
   }
 
   const payload = cache.payload as Record<string, unknown>;
-  if (!("services" in payload)) {
+  if (!("services" in payload) || !("scheduled_maintenance" in payload)) {
     return refreshStatusCache(prisma);
   }
 

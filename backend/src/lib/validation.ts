@@ -84,3 +84,56 @@ export const changePasswordSchema = z
     message: "New password must be different from the current password",
     path: ["newPassword"]
   });
+
+const maintenanceBaseSchema = z.object({
+  title: z.string().min(3).max(120),
+  description: z.string().max(2000).optional(),
+  startsAt: z.string().datetime(),
+  endsAt: z.string().datetime(),
+  appliesToAll: z.boolean().optional(),
+  serviceId: z.string().uuid().nullable().optional()
+});
+
+export const createMaintenanceSchema = maintenanceBaseSchema.superRefine((data, ctx) => {
+  if (new Date(data.startsAt) >= new Date(data.endsAt)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "End time must be after the start time",
+      path: ["endsAt"]
+    });
+  }
+
+  if (data.appliesToAll === false && !data.serviceId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Select a service or mark the event as global",
+      path: ["serviceId"]
+    });
+  }
+});
+
+export const updateMaintenanceSchema = maintenanceBaseSchema
+  .partial()
+  .superRefine((data, ctx) => {
+    if (data.startsAt && data.endsAt && new Date(data.startsAt) >= new Date(data.endsAt)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "End time must be after the start time",
+        path: ["endsAt"]
+      });
+    }
+
+    if (data.appliesToAll === false && !data.serviceId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Select a service or mark the event as global",
+        path: ["serviceId"]
+      });
+    }
+  });
+
+export const maintenanceQuerySchema = z.object({
+  status: z.enum(["scheduled", "in_progress", "completed", "canceled"]).optional(),
+  window: z.enum(["upcoming", "past", "all"]).optional(),
+  serviceId: z.string().uuid().optional()
+});

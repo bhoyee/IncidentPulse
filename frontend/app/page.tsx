@@ -80,6 +80,8 @@ export default function HomePage() {
   const { data: session } = useSession();
 
   const activeCount = useMemo(() => data?.data.active_incidents.length ?? 0, [data]);
+  const maintenance = data?.data?.scheduled_maintenance ?? { active: [], upcoming: [] };
+  const nextMaintenance = maintenance.active[0] ?? maintenance.upcoming[0] ?? null;
   const overallState = data?.meta.state;
   const year = new Date().getFullYear();
   const isAuthenticated = Boolean(session);
@@ -225,13 +227,33 @@ export default function HomePage() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <StatusBanner state={overallState} />
-                      <div className="rounded-lg bg-gray-50 p-4">
-                        <p className="text-sm text-gray-600">
-                          {activeCount === 0
-                            ? "All systems operational with no active incidents"
-                            : `${activeCount} active ${activeCount === 1 ? "incident" : "incidents"} being monitored`}
-                        </p>
+                      <StatusBanner
+                        state={overallState}
+                        activeMaintenanceCount={maintenance.active.length}
+                        nextMaintenance={nextMaintenance}
+                      />
+                      <div className="space-y-3">
+                        <div className="rounded-lg bg-gray-50 p-4">
+                          <p className="text-sm text-gray-600">
+                            {activeCount === 0
+                              ? "All systems operational with no active incidents"
+                              : `${activeCount} active ${activeCount === 1 ? "incident" : "incidents"} being monitored`}
+                          </p>
+                        </div>
+                        {maintenance.active.length > 0 ? (
+                          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+                            Scheduled maintenance in progress for{" "}
+                            {maintenance.active[0].appliesToAll
+                              ? "all services"
+                              : maintenance.active[0].service?.name ?? "select services"}
+                            .
+                          </div>
+                        ) : nextMaintenance ? (
+                          <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                            Next maintenance window begins{" "}
+                            {new Date(nextMaintenance.startsAt).toLocaleString()}.
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   )}
@@ -354,7 +376,11 @@ export default function HomePage() {
                   </div>
                 ) : data ? (
                   <div className="space-y-4">
-                    <StatusBanner state={overallState} />
+                    <StatusBanner
+                      state={overallState}
+                      activeMaintenanceCount={maintenance.active.length}
+                      nextMaintenance={nextMaintenance}
+                    />
                     {activeCount === 0 ? (
                       <div className="rounded-lg bg-green-50 p-6 text-center">
                         <CheckCircleIcon className="mx-auto h-8 w-8 text-green-500 mb-2" />
@@ -368,6 +394,15 @@ export default function HomePage() {
                         ))}
                       </div>
                     )}
+                    {nextMaintenance ? (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                        Next scheduled maintenance:{" "}
+                        {nextMaintenance.appliesToAll
+                          ? "All services"
+                          : nextMaintenance.service?.name ?? "Select services"}{" "}
+                        on {new Date(nextMaintenance.startsAt).toLocaleString()}.
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-gray-300">

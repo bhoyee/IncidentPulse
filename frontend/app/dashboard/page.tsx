@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { format } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isAxiosError } from "axios";
 import {
@@ -38,6 +39,11 @@ import {
   useUpdateService,
   useDeleteService
 } from "@hooks/useServices";
+import {
+  useMaintenanceEvents,
+  useCreateMaintenanceEvent,
+  useCancelMaintenanceEvent
+} from "@hooks/useMaintenance";
 import { apiClient } from "@lib/api-client";
 import {
   MAX_ATTACHMENTS_PER_BATCH,
@@ -46,7 +52,7 @@ import {
   uploadIncidentAttachment,
   validateAttachmentSize
 } from "@lib/attachments";
-import type { Incident, IncidentSeverity, IncidentStatus } from "@lib/types";
+import type { Incident, IncidentSeverity, IncidentStatus, MaintenanceEvent } from "@lib/types";
 
 interface NewTeamMemberPayload {
   name: string;
@@ -494,7 +500,7 @@ function DashboardPageContent() {
   const [severityFilter, setSeverityFilter] = useState<IncidentSeverity | undefined>();
   const [serviceFilter, setServiceFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "profile" | "password" | "webhooks">("incidents");
+  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "maintenance" | "webhooks" | "profile" | "password">("incidents");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -513,8 +519,18 @@ function DashboardPageContent() {
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [showPasswordReminder, setShowPasswordReminder] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [maintenanceForm, setMaintenanceForm] = useState({
+    title: "",
+    description: "",
+    start: "",
+    end: "",
+    appliesToAll: true,
+    serviceId: ""
+  });
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
 
   const { data: session } = useSession();
+  const isAdmin = session?.role === "admin";
   const createTeamUser = useCreateTeamUser();
   const updateTeamUser = useUpdateTeamUser();
   const deleteTeamUser = useDeleteTeamUser();
@@ -522,7 +538,10 @@ function DashboardPageContent() {
   const createService = useCreateService();
   const updateService = useUpdateService();
   const deleteService = useDeleteService();
-  const isAdmin = session?.role === "admin";
+  const maintenanceEventsQuery = useMaintenanceEvents("upcoming", { enabled: Boolean(isAdmin) });
+  const maintenanceEvents = maintenanceEventsQuery.data ?? [];
+  const createMaintenanceEvent = useCreateMaintenanceEvent();
+  const cancelMaintenanceEvent = useCancelMaintenanceEvent();
   const canCreate = Boolean(session && session.role !== "viewer");
   const firstName = session?.name?.split(" ")[0] || "Team";
   const integrationSettingsQuery = useIntegrationSettings(Boolean(isAdmin));
@@ -577,6 +596,79 @@ function DashboardPageContent() {
 
   const handleDeleteService = (id: string) => deleteService.mutateAsync(id);
 
+  const handleMaintenanceFieldChange = (
+    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const target = event.target;
+    const { name } = target;
+    setMaintenanceForm((prev) => {
+      if (name === "appliesToAll" && target instanceof HTMLInputElement) {
+        const checked = target.checked;
+        return {
+          ...prev,
+          appliesToAll: checked,
+          serviceId: checked ? "" : prev.serviceId
+        };
+      }
+      return {
+        ...prev,
+        [name]:
+          target instanceof HTMLInputElement && target.type === "checkbox"
+            ? target.checked
+            : target.value
+      };
+    });
+  };
+
+  const handleMaintenanceSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!maintenanceForm.title.trim()) {
+      setMaintenanceError("Title is required.");
+      return;
+    }
+    if (!maintenanceForm.start || !maintenanceForm.end) {
+      setMaintenanceError("Start and end times are required.");
+      return;
+    }
+    const startsAt = new Date(maintenanceForm.start);
+    const endsAt = new Date(maintenanceForm.end);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+      setMaintenanceError("Enter valid dates.");
+      return;
+    }
+    if (startsAt >= endsAt) {
+      setMaintenanceError("End time must be after the start.");
+      return;
+    }
+    if (!maintenanceForm.appliesToAll && !maintenanceForm.serviceId) {
+      setMaintenanceError("Select a service or mark the window as global.");
+      return;
+    }
+
+    setMaintenanceError(null);
+    await createMaintenanceEvent.mutateAsync({
+      title: maintenanceForm.title.trim(),
+      description: maintenanceForm.description?.trim() || undefined,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      appliesToAll: maintenanceForm.appliesToAll,
+      serviceId: maintenanceForm.appliesToAll ? null : maintenanceForm.serviceId || null
+    });
+
+    setMaintenanceForm({
+      title: "",
+      description: "",
+      start: "",
+      end: "",
+      appliesToAll: true,
+      serviceId: ""
+    });
+  };
+
+  const handleCancelMaintenance = async (id: string) => {
+    await cancelMaintenanceEvent.mutateAsync(id);
+  };
+
   const dismissPasswordReminder = () => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(PASSWORD_PROMPT_KEY, "1");
@@ -611,6 +703,21 @@ function DashboardPageContent() {
 
   const { data: incidentsResponse } = useIncidents(incidentFilters);
   const incidents = incidentsResponse?.data ?? [];
+  const maintenanceReference = new Date();
+  const activeMaintenanceEvents = maintenanceEvents.filter((event) => {
+    const start = new Date(event.startsAt);
+    const end = new Date(event.endsAt);
+    return (
+      event.status === "in_progress" ||
+      (event.status === "scheduled" && start <= maintenanceReference && end >= maintenanceReference)
+    );
+  });
+  const upcomingMaintenanceEvents = maintenanceEvents.filter((event) => {
+    const start = new Date(event.startsAt);
+    return event.status === "scheduled" && start > maintenanceReference;
+  });
+  const formatMaintenanceRange = (event: MaintenanceEvent) =>
+    `${format(new Date(event.startsAt), "PPpp")} → ${format(new Date(event.endsAt), "PPpp")}`;
 
   const teamUsersQuery = useTeamUsers(Boolean(isAdmin), {
     search: teamSearch.trim().length >= 2 ? teamSearch.trim() : undefined,
@@ -673,6 +780,18 @@ function DashboardPageContent() {
             icon: "TEAM",
             current: activeTab === "team",
             onClick: () => setActiveTab("team")
+          }
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            id: "maintenance",
+            name: "Maintenance",
+            description: "Planned downtime & notices",
+            icon: "MAINT",
+            current: activeTab === "maintenance",
+            onClick: () => setActiveTab("maintenance")
           }
         ]
       : []),
@@ -1321,6 +1440,191 @@ function DashboardPageContent() {
                         )}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'maintenance' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-8 shadow-lg">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-amber-300">Planned Downtime</p>
+                    <h2 className="text-2xl font-bold text-white">Scheduled Maintenance</h2>
+                    <p className="text-sm text-amber-100">
+                      Publish maintenance windows separately from incidents so customers know what to expect.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <form
+                    onSubmit={handleMaintenanceSubmit}
+                    className="rounded-xl border border-amber-500/40 bg-gray-900/60 p-6 space-y-4 shadow-inner"
+                  >
+                    <div>
+                      <label className="text-xs font-semibold uppercase text-amber-200">Title</label>
+                      <input
+                        type="text"
+                        name="title"
+                        value={maintenanceForm.title}
+                        onChange={handleMaintenanceFieldChange}
+                        className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-amber-400 focus:ring-amber-500"
+                        placeholder="Database maintenance"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold uppercase text-amber-200">Description</label>
+                      <textarea
+                        name="description"
+                        value={maintenanceForm.description}
+                        onChange={handleMaintenanceFieldChange}
+                        rows={3}
+                        className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-amber-400 focus:ring-amber-500"
+                        placeholder="Describe customer impact and planned actions"
+                      />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="text-xs font-semibold uppercase text-amber-200">
+                        Starts at
+                        <input
+                          type="datetime-local"
+                          name="start"
+                          value={maintenanceForm.start}
+                          onChange={handleMaintenanceFieldChange}
+                          className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-amber-400 focus:ring-amber-500"
+                          required
+                        />
+                      </label>
+                      <label className="text-xs font-semibold uppercase text-amber-200">
+                        Ends at
+                        <input
+                          type="datetime-local"
+                          name="end"
+                          value={maintenanceForm.end}
+                          onChange={handleMaintenanceFieldChange}
+                          className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-amber-400 focus:ring-amber-500"
+                          required
+                        />
+                      </label>
+                    </div>
+                    <div className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-3 space-y-3">
+                      <label className="inline-flex items-center gap-2 text-sm text-gray-200">
+                        <input
+                          type="checkbox"
+                          name="appliesToAll"
+                          checked={maintenanceForm.appliesToAll}
+                          onChange={handleMaintenanceFieldChange}
+                          className="rounded border-gray-600 bg-gray-900 text-amber-500 focus:ring-amber-400"
+                        />
+                        Applies to all services
+                      </label>
+                      {!maintenanceForm.appliesToAll ? (
+                        <label className="block text-xs font-semibold uppercase text-amber-200">
+                          Target service
+                          <select
+                            name="serviceId"
+                            value={maintenanceForm.serviceId}
+                            onChange={handleMaintenanceFieldChange}
+                            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-amber-400 focus:ring-amber-500"
+                          >
+                            <option value="">Select service...</option>
+                            {serviceOptions.map((service) => (
+                              <option key={service.id} value={service.id}>
+                                {service.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                    {maintenanceError ? (
+                      <p className="text-sm text-red-400">{maintenanceError}</p>
+                    ) : null}
+                    <button
+                      type="submit"
+                      disabled={createMaintenanceEvent.isPending}
+                      className="w-full rounded-lg bg-amber-500 py-2 text-sm font-semibold text-gray-900 hover:bg-amber-400 disabled:opacity-60"
+                    >
+                      {createMaintenanceEvent.isPending ? "Scheduling..." : "Schedule maintenance"}
+                    </button>
+                  </form>
+
+                  <div className="space-y-6">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-200">
+                          Active windows
+                        </h3>
+                        {maintenanceEventsQuery.isFetching ? (
+                          <p className="text-xs text-amber-200">Refreshing...</p>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {maintenanceEventsQuery.isLoading ? (
+                          <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 text-sm text-gray-400">
+                            Loading maintenance schedule...
+                          </div>
+                        ) : activeMaintenanceEvents.length === 0 ? (
+                          <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 text-sm text-gray-400">
+                            No active maintenance windows.
+                          </div>
+                        ) : (
+                          activeMaintenanceEvents.map((event) => (
+                            <div key={event.id} className="rounded-lg border border-amber-500/40 bg-gray-900 p-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-semibold text-white">{event.title}</p>
+                                  <p className="text-xs text-gray-400">
+                                    {event.appliesToAll
+                                      ? "All services"
+                                      : event.service?.name ?? "Selected services"}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelMaintenance(event.id)}
+                                  disabled={cancelMaintenanceEvent.isPending}
+                                  className="text-xs font-semibold text-red-300 hover:text-red-200 disabled:opacity-60"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              <p className="mt-2 text-xs text-gray-400">{formatMaintenanceRange(event)}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-300">
+                        Upcoming windows
+                      </h3>
+                      <div className="mt-3 space-y-3">
+                        {upcomingMaintenanceEvents.length === 0 ? (
+                          <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 text-sm text-gray-400">
+                            No upcoming maintenance scheduled.
+                          </div>
+                        ) : (
+                          upcomingMaintenanceEvents.map((event) => (
+                            <div key={event.id} className="rounded-lg border border-gray-700 bg-gray-900 p-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-semibold text-white">{event.title}</p>
+                                  <p className="text-xs text-gray-400">
+                                    {event.appliesToAll
+                                      ? "All services"
+                                      : event.service?.name ?? "Selected services"}
+                                  </p>
+                                </div>
+                              </div>
+                              <p className="mt-2 text-xs text-gray-400">{formatMaintenanceRange(event)}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

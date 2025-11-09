@@ -18,6 +18,7 @@ import teamRoutes from "./routes/team";
 import integrationsRoutes from "./routes/integrations";
 import webhooksRoutes from "./routes/webhooks";
 import servicesRoutes from "./routes/services";
+import maintenanceRoutes from "./routes/maintenance";
 import {
   ensureUploadsRootSync,
   MAX_ATTACHMENT_BYTES,
@@ -117,6 +118,7 @@ export function buildApp() {
   fastify.register(servicesRoutes, { prefix: "/services" });
   fastify.register(integrationsRoutes, { prefix: "/integrations" });
   fastify.register(webhooksRoutes, { prefix: "/webhooks" });
+  fastify.register(maintenanceRoutes, { prefix: "/maintenance" });
 
   registerIncidentEscalationWatcher(fastify);
 
