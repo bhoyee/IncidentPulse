@@ -63,6 +63,8 @@ model Incident {
   service         Service          @relation(fields: [serviceId], references: [id])
   firstResponseAt DateTime?
   resolvedAt      DateTime?
+  rootCause       String?   @db.Text
+  resolutionSummary String? @db.Text
   updates         IncidentUpdate[]
   attachments     IncidentAttachment[]
   createdAt       DateTime         @default(now())

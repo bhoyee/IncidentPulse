@@ -405,8 +405,35 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         categories,
         impactScope,
         serviceId: incomingServiceId,
+        rootCause,
+        resolutionSummary,
         ...updatePayload
       } = parsedBody.data;
+
+      const trimmedRootCause =
+        rootCause === undefined ? undefined : rootCause.trim();
+      const trimmedResolutionSummary =
+        resolutionSummary === undefined ? undefined : resolutionSummary.trim();
+
+      if (
+        trimmedRootCause !== undefined &&
+        trimmedRootCause.length === 0
+      ) {
+        return reply.status(400).send({
+          error: true,
+          message: "Root cause cannot be empty"
+        });
+      }
+
+      if (
+        trimmedResolutionSummary !== undefined &&
+        trimmedResolutionSummary.length === 0
+      ) {
+        return reply.status(400).send({
+          error: true,
+          message: "Resolution summary cannot be empty"
+        });
+      }
 
       let resolvedAssignedToId: string | null | undefined = undefined;
 
@@ -476,6 +503,16 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       const now = new Date();
       const statusChangedToResolved =
         parsedBody.data.status === "resolved" && existing.status !== "resolved";
+
+      if (statusChangedToResolved) {
+        if (!trimmedRootCause || !trimmedResolutionSummary) {
+          return reply.status(400).send({
+            error: true,
+            message: "Root cause and resolution summary are required when resolving an incident"
+          });
+        }
+      }
+
       const shouldSetResolvedAt = statusChangedToResolved && existing.resolvedAt === null;
       const assignmentChanged =
         request.user.role === "admin" &&
@@ -496,7 +533,11 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
             ? { assignedToId: resolvedAssignedToId ?? null }
             : {}),
           ...(hasServiceKey && nextServiceId ? { serviceId: nextServiceId } : {}),
-          ...(shouldSetResolvedAt ? { resolvedAt: now } : {})
+          ...(shouldSetResolvedAt ? { resolvedAt: now } : {}),
+          ...(trimmedRootCause !== undefined ? { rootCause: trimmedRootCause } : {}),
+          ...(trimmedResolutionSummary !== undefined
+            ? { resolutionSummary: trimmedResolutionSummary }
+            : {})
         },
         include: incidentNotificationInclude
       });

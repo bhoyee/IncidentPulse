@@ -24,7 +24,9 @@ export const updateIncidentSchema = z
     assignedToId: z.string().uuid().nullable().optional(),
     categories: z.array(z.string().min(2).max(50)).max(5).optional(),
     impactScope: z.string().min(3).max(200).nullable().optional(),
-    serviceId: z.string().uuid().optional()
+    serviceId: z.string().uuid().optional(),
+    rootCause: z.string().min(10).max(5000).optional(),
+    resolutionSummary: z.string().min(10).max(2000).optional()
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided"

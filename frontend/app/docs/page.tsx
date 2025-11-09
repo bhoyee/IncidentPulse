@@ -95,7 +95,8 @@ const featureCards: Array<{
       "Unify alert intake, manual reports, and automation triggers into a single prioritized queue.",
     highlights: [
       "Triage with severity templates, service impact tagging, and follow-up tasks.",
-      "Link incidents to postmortems and problem records for continuous improvement."
+      "Link incidents to postmortems and problem records for continuous improvement.",
+      "Enforced closure workflow requires root-cause analysis and resolution summaries before marking incidents resolved."
     ],
     icon: ShieldCheckIcon
   },
@@ -383,7 +384,7 @@ const uiScreens = [
   {
     title: "Incident Detail",
     description:
-      "Timeline-first view with task checklists, linked runbooks, and collaboration tools for responders."
+      "Timeline-first view with task checklists, linked runbooks, and collaboration tools for responders. Operators must capture root cause plus a resolution summary before the system allows closure."
   },
   {
     title: "Analytics",

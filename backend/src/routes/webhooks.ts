@@ -329,12 +329,23 @@ const webhookRoutes: FastifyPluginAsync = async (fastify) => {
       const resolutionTime = payload.occurredAt
         ? new Date(payload.occurredAt)
         : new Date();
+      const autoRootCause =
+        (payload.meta && typeof payload.meta.rootCause === "string" && payload.meta.rootCause.trim()) ||
+        incident.rootCause ||
+        `Automated recovery for ${payload.service ?? "service"}`;
+      const autoResolutionSummary =
+        (payload.meta &&
+          typeof payload.meta.resolutionSummary === "string" &&
+          payload.meta.resolutionSummary.trim()) ||
+        buildRecoveryMessage(payload);
 
       const updatedIncident = await prisma.incident.update({
         where: { id: incident.id },
         data: {
           status: "resolved",
-          resolvedAt: resolutionTime
+          resolvedAt: resolutionTime,
+          rootCause: autoRootCause,
+          resolutionSummary: autoResolutionSummary
         },
         include: incidentNotificationInclude
       });

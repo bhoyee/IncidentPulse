@@ -31,6 +31,8 @@ export type Incident = {
   resolvedAt: string | null;
   categories: string[];
   impactScope: string | null;
+  rootCause?: string | null;
+  resolutionSummary?: string | null;
   createdBy?: {
     id: string;
     name: string;

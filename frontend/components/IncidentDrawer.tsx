@@ -1,7 +1,7 @@
 "use client";
 
 import { Dialog, Transition } from "@headlessui/react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { isAxiosError } from "axios";
@@ -53,6 +53,8 @@ type PatchIncidentPayload = Partial<{
   categories: string[];
   impactScope: string | null;
   serviceId: string;
+  rootCause: string;
+  resolutionSummary: string;
 }>;
 
 export function IncidentDrawer({
@@ -89,6 +91,12 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
   const [pendingAttachments, setPendingAttachments] = useState<IncidentAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [isResolutionPromptVisible, setIsResolutionPromptVisible] = useState(false);
+  const [resolutionForm, setResolutionForm] = useState({
+    rootCause: "",
+    resolutionSummary: ""
+  });
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
   const deleteIncident = useDeleteIncident();
 
   const isAdmin = currentUser.role === "admin";
@@ -173,6 +181,13 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
     }
   }, [open]);
 
+  useEffect(() => {
+    if (incident?.status !== "resolved") {
+      setIsResolutionPromptVisible(false);
+      setResolutionError(null);
+    }
+  }, [incident?.status]);
+
   const canCollaborate =
     incident &&
     (isAdmin ||
@@ -244,8 +259,77 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
   };
 
   const handleStatusChange = (status: IncidentStatus) => {
+    if (!incident || incident.status === status) {
+      return;
+    }
+
+    if (status === "resolved") {
+      setResolutionForm({
+        rootCause: incident.rootCause ?? "",
+        resolutionSummary: incident.resolutionSummary ?? ""
+      });
+      setResolutionError(null);
+      setIsResolutionPromptVisible(true);
+      return;
+    }
+
     setStatusChangePending(status);
     updateIncidentMutation.mutate({ status });
+  };
+
+  const handleResolutionFieldChange = (
+    event: ChangeEvent<HTMLTextAreaElement>
+  ) => {
+    const { name, value } = event.target;
+    setResolutionForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCancelResolutionPrompt = () => {
+    setIsResolutionPromptVisible(false);
+    setResolutionError(null);
+  };
+
+  const handleSubmitResolutionPrompt = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!incidentId) {
+      return;
+    }
+    const trimmedRootCause = resolutionForm.rootCause.trim();
+    const trimmedSummary = resolutionForm.resolutionSummary.trim();
+
+    if (trimmedRootCause.length < 10) {
+      setResolutionError("Root cause must be at least 10 characters.");
+      return;
+    }
+
+    if (trimmedSummary.length < 10) {
+      setResolutionError("Resolution summary must be at least 10 characters.");
+      return;
+    }
+
+    setResolutionError(null);
+    setStatusChangePending("resolved");
+    updateIncidentMutation.mutate(
+      {
+        status: "resolved",
+        rootCause: trimmedRootCause,
+        resolutionSummary: trimmedSummary
+      },
+      {
+        onSuccess: () => {
+          setIsResolutionPromptVisible(false);
+        },
+        onError: (error) => {
+          let message = "Failed to resolve incident.";
+          if (isAxiosError(error)) {
+            message = error.response?.data?.message ?? error.message;
+          } else if (error instanceof Error) {
+            message = error.message;
+          }
+          setResolutionError(message);
+        }
+      }
+    );
   };
 
   const handleAssignmentChange = (assigneeId: string) => {
@@ -626,6 +710,26 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
                               </div>
                             </div>
                           ) : null}
+                          {incident.status === "resolved" ? (
+                            <div className="mt-4 grid gap-4 rounded-lg border border-emerald-100 bg-emerald-50/80 p-4 text-sm text-emerald-900">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                                  Root cause
+                                </p>
+                                <p className="mt-1 whitespace-pre-line text-emerald-900">
+                                  {incident.rootCause?.trim() || "Not documented yet."}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                                  Resolution summary
+                                </p>
+                                <p className="mt-1 whitespace-pre-line text-emerald-900">
+                                  {incident.resolutionSummary?.trim() || "Not documented yet."}
+                                </p>
+                              </div>
+                            </div>
+                          ) : null}
                         </>
                       )}
                     </section>
@@ -688,6 +792,66 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
                               </button>
                             ))}
                           </div>
+                          {isResolutionPromptVisible ? (
+                            <form
+                              onSubmit={handleSubmitResolutionPrompt}
+                              className="mt-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900"
+                            >
+                              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                                Document root cause & resolution to close this incident
+                              </p>
+                              <label className="block text-xs font-semibold text-amber-800">
+                                Root cause
+                                <textarea
+                                  name="rootCause"
+                                  value={resolutionForm.rootCause}
+                                  onChange={handleResolutionFieldChange}
+                                  rows={3}
+                                  className="mt-1 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-amber-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  placeholder="Explain the underlying issue, e.g. 'Redis cache exhausted connections due to runaway cron job'."
+                                  required
+                                  disabled={updateIncidentMutation.isPending}
+                                />
+                              </label>
+                              <label className="block text-xs font-semibold text-amber-800">
+                                Resolution summary
+                                <textarea
+                                  name="resolutionSummary"
+                                  value={resolutionForm.resolutionSummary}
+                                  onChange={handleResolutionFieldChange}
+                                  rows={3}
+                                  className="mt-1 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-amber-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  placeholder="Describe the fix and follow-up, e.g. 'Rolled back build 542, doubled cache nodes, added connection alarms'."
+                                  required
+                                  disabled={updateIncidentMutation.isPending}
+                                />
+                              </label>
+                              {resolutionError ? (
+                                <p className="text-xs font-semibold text-red-500">{resolutionError}</p>
+                              ) : (
+                                <p className="text-[11px] text-amber-700">
+                                  These notes feed historical reports and compliance exports.
+                                </p>
+                              )}
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleCancelResolutionPrompt}
+                                  className="rounded-md border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                                  disabled={updateIncidentMutation.isPending}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="rounded-md bg-amber-600 px-4 py-1.5 text-xs font-semibold text-white shadow disabled:opacity-70"
+                                  disabled={updateIncidentMutation.isPending}
+                                >
+                                  {updateIncidentMutation.isPending ? "Saving..." : "Resolve incident"}
+                                </button>
+                              </div>
+                            </form>
+                          ) : null}
                         </section>
 
                         <section className="flex-1">
@@ -753,7 +917,7 @@ const [assignmentChangePending, setAssignmentChangePending] = useState<string | 
                                   <div>
                                     <p className="text-sm font-semibold text-slate-700">Attachments</p>
                                     <p className="text-[11px] text-slate-500">
-                                      Optional · up to {MAX_ATTACHMENTS_PER_BATCH} files · 10&nbsp;MB each
+                                      Optional · up to {MAX_ATTACHMENTS_PER_BATCH} files · 10 MB each
                                     </p>
                                   </div>
                                   <label
