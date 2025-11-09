@@ -874,14 +874,10 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      try {
-        await prisma.incident.delete({
-          where: { id: params.id }
-        });
-        await removeIncidentUploads(params.id);
-      } catch (error) {
-        throw error;
-      }
+      await prisma.incident.delete({
+        where: { id: params.id }
+      });
+      await removeIncidentUploads(params.id);
 
       await recordAuditLog({
         action: "incident_deleted",
