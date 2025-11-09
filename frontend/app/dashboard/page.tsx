@@ -15,6 +15,17 @@ import {
   TrashIcon,
   ArrowRightOnRectangleIcon
 } from "@heroicons/react/24/solid";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  BarChart,
+  Bar
+} from "recharts";
 import { AuthGuard } from "@components/AuthGuard";
 import { IncidentDrawer } from "@components/IncidentDrawer";
 import { IntegrationsPanel } from "@components/IntegrationsPanel";
@@ -44,6 +55,7 @@ import {
   useCreateMaintenanceEvent,
   useCancelMaintenanceEvent
 } from "@hooks/useMaintenance";
+import { useAnalytics } from "@hooks/useAnalytics";
 import { apiClient } from "@lib/api-client";
 import {
   MAX_ATTACHMENTS_PER_BATCH,
@@ -109,6 +121,51 @@ const ChangePasswordCard = () => {
     </form>
   );
 };
+
+function StatCard({
+  label,
+  value,
+  description
+}: {
+  label: string;
+  value: string;
+  description?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-700 bg-gray-900/60 p-4 shadow-inner">
+      <p className="text-xs uppercase tracking-wide text-gray-400">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      {description ? <p className="mt-1 text-xs text-gray-500">{description}</p> : null}
+    </div>
+  );
+}
+
+function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-gray-700 bg-gray-900/60 p-4 shadow-inner">
+      <div className="flex items-center justify-between pb-4">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-300">{title}</h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function LoadingState({ message }: { message: string }) {
+  return (
+    <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-gray-700 bg-gray-900/40 text-sm text-gray-400">
+      {message}
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-gray-700 bg-gray-900/40 text-sm text-gray-400">
+      {message}
+    </div>
+  );
+}
 
 const NewIncidentForm = ({
   disabled,
@@ -500,7 +557,7 @@ function DashboardPageContent() {
   const [severityFilter, setSeverityFilter] = useState<IncidentSeverity | undefined>();
   const [serviceFilter, setServiceFilter] = useState<string | undefined>();
   const [teamSearch, setTeamSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "maintenance" | "webhooks" | "profile" | "password">("incidents");
+  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "maintenance" | "analytics" | "webhooks" | "profile" | "password">("incidents");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -542,6 +599,7 @@ function DashboardPageContent() {
   const maintenanceEvents = maintenanceEventsQuery.data ?? [];
   const createMaintenanceEvent = useCreateMaintenanceEvent();
   const cancelMaintenanceEvent = useCancelMaintenanceEvent();
+  const analyticsQuery = useAnalytics();
   const canCreate = Boolean(session && session.role !== "viewer");
   const firstName = session?.name?.split(" ")[0] || "Team";
   const integrationSettingsQuery = useIntegrationSettings(Boolean(isAdmin));
@@ -738,6 +796,19 @@ function DashboardPageContent() {
   });
   const formatMaintenanceRange = (event: MaintenanceEvent) =>
     `${format(new Date(event.startsAt), "PPpp")} → ${format(new Date(event.endsAt), "PPpp")}`;
+  const analytics = analyticsQuery.data;
+  const severityChartData = (analytics?.severityBreakdown ?? []).map((entry) => ({
+    name: entry.severity,
+    count: entry.count
+  }));
+  const serviceChartData = (analytics?.serviceBreakdown ?? []).map((entry) => ({
+    name: entry.serviceName,
+    count: entry.count
+  }));
+  const weeklyTrendData = (analytics?.weeklyTrend ?? []).map((entry) => ({
+    bucket: format(new Date(entry.bucket), "MMM d"),
+    count: entry.count
+  }));
 
   const teamUsersQuery = useTeamUsers(Boolean(isAdmin), {
     search: teamSearch.trim().length >= 2 ? teamSearch.trim() : undefined,
@@ -812,6 +883,18 @@ function DashboardPageContent() {
             icon: "MAINT",
             current: activeTab === "maintenance",
             onClick: () => setActiveTab("maintenance")
+          }
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            id: "analytics",
+            name: "Analytics",
+            description: "Trends & reporting",
+            icon: "DATA",
+            current: activeTab === "analytics",
+            onClick: () => setActiveTab("analytics")
           }
         ]
       : []),
@@ -1647,6 +1730,117 @@ function DashboardPageContent() {
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'analytics' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-8 shadow-lg">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-purple-300">Analytics</p>
+                    <h2 className="text-2xl font-bold text-white">Operations Insights</h2>
+                    <p className="text-sm text-purple-100">
+                      Track MTTR, SLA performance, and incident trends across services and severities.
+                    </p>
+                  </div>
+                  {analyticsQuery.isFetching ? (
+                    <p className="text-xs text-purple-200">Refreshing...</p>
+                  ) : null}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <StatCard
+                    label="Average resolution (30d)"
+                    value={`${analytics?.avgResolutionMinutes ?? 0} min`}
+                    description="Mean time to resolve incidents"
+                  />
+                  <StatCard
+                    label="Average first response (30d)"
+                    value={`${analytics?.avgFirstResponseMinutes ?? 0} min`}
+                    description="Mean time to first responder action"
+                  />
+                  <StatCard
+                    label="Active maintenance"
+                    value={activeMaintenanceEvents.length.toString()}
+                    description="Windows currently in progress"
+                  />
+                  <StatCard
+                    label="Upcoming maintenance"
+                    value={upcomingMaintenanceEvents.length.toString()}
+                    description="Scheduled windows in next 90d"
+                  />
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <ChartCard title="Incidents by severity">
+                    {analyticsQuery.isLoading ? (
+                      <LoadingState message="Loading severity breakdown..." />
+                    ) : severityChartData.length === 0 ? (
+                      <EmptyState message="No incidents recorded in the past 30 days." />
+                    ) : (
+                      <ResponsiveContainer width="100%" height={240}>
+                        <BarChart data={severityChartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis dataKey="name" stroke="#cbd5f5" />
+                          <YAxis stroke="#cbd5f5" allowDecimals={false} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#111827", borderColor: "#374151" }}
+                            labelStyle={{ color: "#e5e7eb" }}
+                          />
+                          <Bar dataKey="count" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </ChartCard>
+
+                  <ChartCard title="Incidents by service">
+                    {analyticsQuery.isLoading ? (
+                      <LoadingState message="Loading service distribution..." />
+                    ) : serviceChartData.length === 0 ? (
+                      <EmptyState message="No service-level incidents recorded recently." />
+                    ) : (
+                      <ResponsiveContainer width="100%" height={240}>
+                        <BarChart data={serviceChartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis dataKey="name" stroke="#cbd5f5" hide />
+                          <YAxis stroke="#cbd5f5" allowDecimals={false} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#111827", borderColor: "#374151" }}
+                            labelStyle={{ color: "#e5e7eb" }}
+                          />
+                          <Bar dataKey="count" fill="#60a5fa" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </ChartCard>
+                </div>
+
+                <ChartCard title="Weekly incident trend (last 12 weeks)">
+                  {analyticsQuery.isLoading ? (
+                    <LoadingState message="Loading trend..." />
+                  ) : weeklyTrendData.length === 0 ? (
+                    <EmptyState message="No weekly trend data available." />
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={weeklyTrendData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="bucket" stroke="#cbd5f5" />
+                        <YAxis stroke="#cbd5f5" allowDecimals={false} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: "#111827", borderColor: "#374151" }}
+                          labelStyle={{ color: "#e5e7eb" }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="count"
+                          stroke="#34d399"
+                          strokeWidth={2}
+                          dot={{ stroke: "#34d399", strokeWidth: 2 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </ChartCard>
               </div>
             )}
 

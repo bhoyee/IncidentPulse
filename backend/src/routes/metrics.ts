@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { prisma } from "../lib/db";
+import type { Prisma } from "@prisma/client";
 import { refreshStatusCache } from "../lib/status";
 import { getWebhookMetrics } from "../lib/webhook-metrics";
 
@@ -38,6 +39,91 @@ const metricsRoutes: FastifyPluginAsync = async (fastify) => {
         data: {
           avgFirstResponseMinutesToday: average(firstResponseDurations),
           avgResolveMinutesToday: average(resolutionDurations)
+        }
+      });
+    }
+  );
+
+  fastify.get(
+    "/analytics",
+    { preHandler: fastify.authenticate },
+    async (_request, reply) => {
+      const now = new Date();
+      const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const last90Days = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+      const [incidents, severityGroups, serviceGroups, weeklyTrend, monthlyTrend] = await Promise.all([
+        prisma.incident.findMany({
+          where: {
+            createdAt: {
+              gte: last30Days
+            }
+          },
+          select: {
+            createdAt: true,
+            firstResponseAt: true,
+            resolvedAt: true,
+            severity: true,
+            serviceId: true
+          }
+        }),
+        prisma.incident.groupBy({
+          by: ["severity"],
+          _count: { _all: true }
+        }),
+        prisma.incident.groupBy({
+          by: ["serviceId"],
+          _count: { _all: true }
+        }),
+        prisma.$queryRaw<
+          Array<{ bucket: Date; count: number }>
+        >`SELECT DATE_TRUNC('week', "createdAt")::date AS bucket, COUNT(*)::int AS count FROM "Incident" WHERE "createdAt" >= ${last90Days} GROUP BY bucket ORDER BY bucket`,
+        prisma.$queryRaw<
+          Array<{ bucket: Date; count: number }>
+        >`SELECT DATE_TRUNC('month', "createdAt")::date AS bucket, COUNT(*)::int AS count FROM "Incident" WHERE "createdAt" >= ${last90Days} GROUP BY bucket ORDER BY bucket`
+      ]);
+
+      const firstResponseDurations = incidents
+        .filter((incident) => incident.firstResponseAt)
+        .map((incident) => differenceInMinutes(incident.createdAt, incident.firstResponseAt!));
+
+      const resolutionDurations = incidents
+        .filter((incident) => incident.resolvedAt)
+        .map((incident) => differenceInMinutes(incident.createdAt, incident.resolvedAt!));
+
+      const services = await prisma.service.findMany({
+        where: {
+          id: {
+            in: serviceGroups.map((group) => group.serviceId).filter(Boolean) as string[]
+          }
+        },
+        select: {
+          id: true,
+          name: true
+        }
+      });
+      const serviceNameMap = new Map(services.map((service) => [service.id, service.name]));
+
+      const severityStats = severityGroups.map((group) => ({
+        severity: group.severity,
+        count: group._count._all
+      }));
+
+      const serviceStats = serviceGroups.map((group) => ({
+        serviceId: group.serviceId,
+        serviceName: group.serviceId ? serviceNameMap.get(group.serviceId) ?? "Unknown service" : "Unassigned",
+        count: group._count._all
+      }));
+
+      return reply.send({
+        error: false,
+        data: {
+          avgResolutionMinutes: average(resolutionDurations),
+          avgFirstResponseMinutes: average(firstResponseDurations),
+          severityBreakdown: severityStats,
+          serviceBreakdown: serviceStats,
+          weeklyTrend: weeklyTrend.map((entry) => ({ bucket: entry.bucket, count: entry.count })),
+          monthlyTrend: monthlyTrend.map((entry) => ({ bucket: entry.bucket, count: entry.count }))
         }
       });
     }
