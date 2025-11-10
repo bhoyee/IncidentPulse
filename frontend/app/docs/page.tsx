@@ -439,6 +439,44 @@ X-Signature: <hex-hmac-from-WEBHOOK_HMAC_SECRET>
   }
 }`;
 
+const githubActionsSnippet = `- name: Notify IncidentPulse when workflow fails
+  if: failure()
+  env:
+    INCIDENT_URL: \${{ secrets.INCIDENTPULSE_ALERT_URL }}
+    INCIDENT_SECRET: \${{ secrets.INCIDENTPULSE_HMAC }}
+  run: |
+    payload=$(cat <<'JSON'
+    {
+      "service": "ci-pipeline",
+      "environment": "\${{ github.ref_name }}",
+      "eventType": "workflow_failure",
+      "message": "Workflow \${{ github.workflow }} failed on \${{ github.sha }}",
+      "severity": "high",
+      "occurredAt": "\${{ github.event.head_commit.timestamp }}",
+      "fingerprint": "ci|\${{ github.repository }}|\${{ github.workflow }}"
+    }
+JSON
+    )
+    signature=$(echo -n "$payload" | openssl dgst -sha256 -hmac "$INCIDENT_SECRET" | sed 's/^.* //')
+    curl -sSf -X POST "$INCIDENT_URL" \\
+      -H "Content-Type: application/json" \\
+      -H "X-Signature: $signature" \\
+      --data "$payload"`;
+
+const uptimeRobotDocSnippet = `{
+  "service": "edge-api",
+  "environment": "production",
+  "eventType": "uptimerobot_{{ALERT_TYPE}}",
+  "message": "Monitor {{MONITOR_NAME}} reported {{ALERT_TYPE}}",
+  "severity": "high",
+  "fingerprint": "uptimerobot|{{MONITOR_ID}}",
+  "occurredAt": "{{ALERT_TIME_ISO}}",
+  "meta": {
+    "monitorUrl": "{{URL}}",
+    "friendlyStatus": "{{ALERT_TYPE}}"
+  }
+}`;
+
 const uiScreens = [
   {
     title: "Incident List",
@@ -463,7 +501,7 @@ const uiScreens = [
   {
     title: "Webhooks & Integrations",
     description:
-      "Left-rail admin console that surfaces alert and recovery endpoints, sample cURL snippets, secret handling guidance, and Slack or Telegram notification settings alongside quick links to documentation and the public status page."
+      "Left-rail admin console that surfaces alert and recovery endpoints, sample cURL snippets, secret handling guidance, and Slack/Discord/Teams/Telegram notification settings alongside quick links to documentation and the public status page."
   },
   {
     title: "Public Status Page",
@@ -489,14 +527,14 @@ const faqItems = [
       "The backend streams files into the directory referenced by UPLOAD_DIR (uploads/ by default, relative to the backend app) and serves them via the /uploads prefix. Point UPLOAD_DIR at persistent storage so artifacts survive restarts."
   },
   {
-    question: "How do I enable Slack or Telegram notifications?",
+    question: "How do I enable Slack, Discord, Teams, or Telegram notifications?",
     answer:
-      "Admins can connect Slack or Teams under System Settings → Integrations. Provide the webhook URL, select channels, and enable incident triggers for creation, updates, and resolution."
+      "Admins can connect Slack, Discord, Microsoft Teams, or Telegram under System Settings → Integrations. Paste the webhook URL or bot credentials, choose the destination channel, and IncidentPulse will publish incident creation, assignment, and resolution events automatically."
   },
   {
     question: "Can I restore historical incidents for analytics?",
     answer:
-      "Yes. Import CSV data or use the bulk API to seed legacy incidents. Run `npm run seed` in the backend to load sample data for demos."
+      "Yes. Import CSV data or use the bulk API to seed legacy incidents. Run \"npm run seed\" in the backend to load sample data for demos."
   }
 ];
 
@@ -1139,7 +1177,7 @@ export default function DocumentationPage() {
 
                   <p className="mt-4 text-xs text-slate-600">
                     Treat the HMAC secret like any other credential: rotate it from Render if compromised and share it with integrators through a secure channel (password vault, secret manager). Open the dashboard&rsquo;s{" "}
-                    <span className="font-semibold text-slate-800">Webhooks &amp; Integrations</span> tab to copy the alert and recovery endpoints, grab ready-to-run cURL/Postman snippets, and wire up Slack or Telegram notifications. The panel reiterates
+                    <span className="font-semibold text-slate-800">Webhooks &amp; Integrations</span> tab to copy the alert and recovery endpoints, grab ready-to-run cURL/Postman snippets, and wire up Slack, Discord, Teams, or Telegram notifications. The panel reiterates
                     which secrets live in Render but intentionally never exposes the raw values to prevent leakage.
                   </p>
 
@@ -1148,6 +1186,10 @@ export default function DocumentationPage() {
               <div className="grid gap-6 lg:grid-cols-2">
                 <CodeBlock label="Alert webhook request" value={webhookAlertSample} />
                 <CodeBlock label="Recovery webhook request" value={webhookRecoverySample} />
+              </div>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <CodeBlock label="GitHub Actions failure hook" value={githubActionsSnippet} />
+                <CodeBlock label="UptimeRobot payload template" value={uptimeRobotDocSnippet} />
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
@@ -1164,7 +1206,7 @@ export default function DocumentationPage() {
                     Admins are notified on creation, repeat alerts append timeline updates, and all interactions are included in audit logs.
                   </li>
                   <li>
-                    Configure Slack and Telegram notifications from the dashboard&apos;s Webhooks tab once your HMAC secret is in place.
+                    Configure Slack, Discord, Microsoft Teams, or Telegram notifications from the dashboard&apos;s Webhooks tab once your HMAC secret is in place.
                   </li>
                   <li>
                     Need a refresher? Visit <Link href="/docs#webhooks" className="text-blue-600 underline">/docs#webhooks</Link> for Postman scripts, cURL examples, and troubleshooting tips.

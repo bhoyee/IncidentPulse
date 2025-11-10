@@ -33,6 +33,8 @@ export async function getIntegrationSettings(force = false): Promise<Integration
 
 type IntegrationSettingsInput = {
   slackWebhookUrl?: string | null | undefined;
+  discordWebhookUrl?: string | null | undefined;
+  teamsWebhookUrl?: string | null | undefined;
   telegramBotToken?: string | null | undefined;
   telegramChatId?: string | null | undefined;
 };

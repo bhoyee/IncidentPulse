@@ -3,6 +3,8 @@ import { apiClient } from "@lib/api-client";
 
 export type IntegrationSettings = {
   slackWebhookUrl: string;
+  discordWebhookUrl: string;
+  teamsWebhookUrl: string;
   telegramBotToken: string;
   telegramChatId: string;
 };
@@ -14,6 +16,8 @@ type SettingsResponse = {
 
 type UpdatePayload = {
   slackWebhookUrl?: string;
+  discordWebhookUrl?: string;
+  teamsWebhookUrl?: string;
   telegramBotToken?: string;
   telegramChatId?: string;
 };

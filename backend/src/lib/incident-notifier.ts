@@ -227,6 +227,8 @@ export async function notifyIncidentIntegrations(
 
   await Promise.allSettled([
     sendSlackNotification(logger, settings.slackWebhookUrl, incident, event, metadata),
+    sendDiscordNotification(logger, settings.discordWebhookUrl, incident, event, metadata),
+    sendTeamsNotification(logger, settings.teamsWebhookUrl, incident, event, metadata),
     sendTelegramNotification(
       logger,
       settings.telegramBotToken,
@@ -271,6 +273,84 @@ async function sendSlackNotification(
     }
   } catch (error) {
     logger.error({ err: error, incidentId: incident.id }, "Slack notification threw error");
+  }
+}
+
+async function sendDiscordNotification(
+  logger: FastifyBaseLogger,
+  webhookUrl: string | null | undefined,
+  incident: IncidentNotificationContext,
+  event: IntegrationEvent,
+  metadata: IntegrationMetadata
+): Promise<void> {
+  if (!webhookUrl) {
+    return;
+  }
+
+  const link = `${env.FRONTEND_URL}/dashboard?incidentId=${incident.id}`;
+  const title = `[${incident.severity.toUpperCase()}] ${incident.title}`;
+  const statusLine = `Status: ${incident.status}`;
+  const body = buildIntegrationMessage(event, incident, metadata);
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: `**${title}**\n${statusLine}\n${body}\n${link}`
+      })
+    });
+
+    if (!response.ok) {
+      logger.error(
+        { status: response.status, incidentId: incident.id },
+        "Discord notification failed"
+      );
+    }
+  } catch (error) {
+    logger.error({ err: error, incidentId: incident.id }, "Discord notification threw error");
+  }
+}
+
+async function sendTeamsNotification(
+  logger: FastifyBaseLogger,
+  webhookUrl: string | null | undefined,
+  incident: IncidentNotificationContext,
+  event: IntegrationEvent,
+  metadata: IntegrationMetadata
+): Promise<void> {
+  if (!webhookUrl) {
+    return;
+  }
+
+  const link = `${env.FRONTEND_URL}/dashboard?incidentId=${incident.id}`;
+  const title = `[${incident.severity.toUpperCase()}] ${incident.title}`;
+  const statusLine = `Status: ${incident.status}`;
+  const body = buildIntegrationMessage(event, incident, metadata);
+  const color = severityToTeamsColor(incident.severity);
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        "@type": "MessageCard",
+        "@context": "https://schema.org/extensions",
+        themeColor: color,
+        summary: title,
+        title,
+        text: `${statusLine}\n\n${body}\n\n[Open IncidentPulse](${link})`
+      })
+    });
+
+    if (!response.ok) {
+      logger.error(
+        { status: response.status, incidentId: incident.id },
+        "Teams notification failed"
+      );
+    }
+  } catch (error) {
+    logger.error({ err: error, incidentId: incident.id }, "Teams notification threw error");
   }
 }
 
@@ -342,6 +422,19 @@ function buildIntegrationMessage(
       } by ${incident.assignedTo?.name ?? incident.assignedTo?.email ?? "Responder"}`;
     default:
       return "";
+  }
+}
+
+function severityToTeamsColor(severity: string | undefined): string {
+  switch (severity) {
+    case "critical":
+      return "d32f2f";
+    case "high":
+      return "f57c00";
+    case "medium":
+      return "fbc02d";
+    default:
+      return "1976d2";
   }
 }
 

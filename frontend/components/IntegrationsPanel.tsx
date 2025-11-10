@@ -13,9 +13,58 @@ type Props = {
 
 const defaultState: IntegrationSettings = {
   slackWebhookUrl: "",
+  discordWebhookUrl: "",
+  teamsWebhookUrl: "",
   telegramBotToken: "",
   telegramChatId: ""
 };
+
+const githubWorkflowSample = `jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Notify IncidentPulse when CI fails
+        if: failure()
+        env:
+          WEBHOOK_URL: \${{ secrets.INCIDENTPULSE_ALERT_URL }}
+          WEBHOOK_SECRET: \${{ secrets.INCIDENTPULSE_HMAC }}
+        run: |
+          payload=$(cat <<'JSON'
+          {
+            "service": "ci-pipeline",
+            "environment": "\${{ github.ref_name }}",
+            "eventType": "workflow_failure",
+            "message": "Workflow \${{ github.workflow }} failed on \${{ github.ref }}",
+            "severity": "high",
+            "occurredAt": "\${{ github.event.head_commit.timestamp }}",
+            "fingerprint": "ci|\${{ github.repository }}|\${{ github.workflow }}"
+          }
+JSON
+          )
+          signature=$(echo -n "$payload" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | sed 's/^.* //')
+          curl -sSf -X POST "$WEBHOOK_URL" \\
+            -H "Content-Type: application/json" \\
+            -H "X-Signature: $signature" \\
+            --data "$payload"`;
+
+const uptimeRobotSample = `POST /webhooks/incidents
+Content-Type: application/json
+X-Signature: <hex-hmac-from-WEBHOOK_HMAC_SECRET>
+
+{
+  "service": "edge-api",
+  "environment": "production",
+  "eventType": "uptimerobot_downtime",
+  "severity": "high",
+  "message": "UptimeRobot monitor {{MONITOR_NAME}} reported status {{ALERT_TYPE}}",
+  "fingerprint": "uptimerobot|{{MONITOR_ID}}",
+  "occurredAt": "{{EVENT_TIME_ISO}}",
+  "meta": {
+    "monitorUrl": "{{URL}}",
+    "alertType": "{{ALERT_TYPE}}"
+  }
+}`;
 
 export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Props) {
   const [form, setForm] = useState<IntegrationSettings>(defaultState);
@@ -59,11 +108,13 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
       <div className="mb-6 space-y-2">
         <h2 className="text-xl font-semibold text-gray-900">Integrations & Notifications</h2>
         <p className="text-sm text-gray-600">
-          Configure Slack and Telegram notifications, then follow the{" "}
+          Connect Slack, Discord, Teams, or Telegram for outbound alerts, then wire GitHub Actions or
+          UptimeRobot into the webhook endpoint for automated incident creation. Full walkthroughs
+          live in the{" "}
           <Link href="/docs#webhooks" className="text-blue-600 underline">
-            webhook documentation
-          </Link>{" "}
-          to automate incident intake.
+            webhook reference
+          </Link>
+          .
         </p>
       </div>
 
@@ -80,6 +131,29 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
           handy for trusted internal scripts. Webhook activity metrics are available via{" "}
           <code className="font-mono text-xs text-blue-700">GET /metrics/webhook</code>.
         </p>
+      </div>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-lg border border-gray-200 p-4">
+          <h3 className="text-sm font-semibold text-gray-800">GitHub Actions template</h3>
+          <p className="mt-1 text-xs text-gray-600">
+            Add a final job step to any workflow. Store the alert URL + HMAC secret as encrypted
+            repository secrets and reuse this snippet.
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded bg-gray-900 p-3 text-[11px] leading-snug text-gray-100">
+            <code>{githubWorkflowSample}</code>
+          </pre>
+        </div>
+        <div className="rounded-lg border border-gray-200 p-4">
+          <h3 className="text-sm font-semibold text-gray-800">UptimeRobot alert contact</h3>
+          <p className="mt-1 text-xs text-gray-600">
+            Create a custom webhook contact and paste the alert URL. Map monitor placeholders to the
+            payload below so repeated downtime dedupes automatically.
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded bg-gray-900 p-3 text-[11px] leading-snug text-gray-100">
+            <code>{uptimeRobotSample}</code>
+          </pre>
+        </div>
       </div>
 
       {isLoading ? (
@@ -104,6 +178,46 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
           <p className="text-xs text-gray-600">
             Create a Slack App &rarr; Incoming Webhook, paste the URL here, and we will post incident
             lifecycle events to that channel.
+          </p>
+        </fieldset>
+
+        <fieldset className="space-y-4 rounded-lg border border-gray-200 p-4">
+          <legend className="text-sm font-semibold text-gray-800">Discord Webhook</legend>
+          <label className="block text-sm font-medium text-gray-700">
+            Webhook URL
+            <input
+              type="url"
+              name="discordWebhookUrl"
+              value={form.discordWebhookUrl}
+              onChange={handleChange}
+              placeholder="https://discord.com/api/webhooks/..."
+              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+              disabled={disabled}
+            />
+          </label>
+          <p className="text-xs text-gray-600">
+            Server Settings → Integrations → Webhooks lets you pick a channel and copy the URL.
+            Every incident event publishes severity, status, and a direct dashboard link.
+          </p>
+        </fieldset>
+
+        <fieldset className="space-y-4 rounded-lg border border-gray-200 p-4">
+          <legend className="text-sm font-semibold text-gray-800">Microsoft Teams</legend>
+          <label className="block text-sm font-medium text-gray-700">
+            Incoming webhook URL
+            <input
+              type="url"
+              name="teamsWebhookUrl"
+              value={form.teamsWebhookUrl}
+              onChange={handleChange}
+              placeholder="https://outlook.office.com/webhook/..."
+              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 text-sm"
+              disabled={disabled}
+            />
+          </label>
+          <p className="text-xs text-gray-600">
+            Add an Incoming Webhook connector to any channel, copy its URL, and IncidentPulse will
+            send MessageCards with color accents tied to severity.
           </p>
         </fieldset>
 
@@ -145,7 +259,7 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
             <Link href="/docs#webhooks" className="text-blue-600 underline">
               webhook guide
             </Link>{" "}
-            for Postman scripts and curl examples.
+            for GitHub, UptimeRobot, Discord, Teams, and Telegram walkthroughs.
           </div>
           <button
             type="submit"

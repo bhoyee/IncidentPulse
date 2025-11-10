@@ -10,6 +10,20 @@ const updateSchema = z.object({
     .max(500)
     .optional()
     .or(z.literal("")),
+  discordWebhookUrl: z
+    .string()
+    .url("Discord webhook must be a valid URL")
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal("")),
+  teamsWebhookUrl: z
+    .string()
+    .url("Teams webhook must be a valid URL")
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal("")),
   telegramBotToken: z
     .string()
     .trim()
@@ -43,6 +57,8 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
         error: false,
         data: {
           slackWebhookUrl: settings?.slackWebhookUrl ?? "",
+          discordWebhookUrl: settings?.discordWebhookUrl ?? "",
+          teamsWebhookUrl: settings?.teamsWebhookUrl ?? "",
           telegramBotToken: settings?.telegramBotToken ?? "",
           telegramChatId: settings?.telegramChatId ?? ""
         }
@@ -66,6 +82,8 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const updated = await saveIntegrationSettings({
         slackWebhookUrl: sanitizeInput(payload.slackWebhookUrl),
+        discordWebhookUrl: sanitizeInput(payload.discordWebhookUrl),
+        teamsWebhookUrl: sanitizeInput(payload.teamsWebhookUrl),
         telegramBotToken: sanitizeInput(payload.telegramBotToken),
         telegramChatId: sanitizeInput(payload.telegramChatId)
       });
@@ -74,6 +92,8 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
         error: false,
         data: {
           slackWebhookUrl: updated.slackWebhookUrl ?? "",
+          discordWebhookUrl: updated.discordWebhookUrl ?? "",
+          teamsWebhookUrl: updated.teamsWebhookUrl ?? "",
           telegramBotToken: updated.telegramBotToken ?? "",
           telegramChatId: updated.telegramChatId ?? ""
         }
