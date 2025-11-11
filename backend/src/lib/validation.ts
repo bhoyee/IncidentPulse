@@ -85,6 +85,16 @@ export const changePasswordSchema = z
     path: ["newPassword"]
   });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email()
+});
+
+export const resetPasswordSchema = z.object({
+  email: z.string().email(),
+  code: z.string().regex(/^\d{6}$/, "Reset code must be a 6-digit value"),
+  newPassword: z.string().min(10).max(128)
+});
+
 const maintenanceBaseSchema = z.object({
   title: z.string().min(3).max(120),
   description: z.string().max(2000).optional(),

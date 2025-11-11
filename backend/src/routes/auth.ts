@@ -1,9 +1,28 @@
 import type { FastifyPluginAsync } from "fastify";
+import { randomInt } from "node:crypto";
 import { prisma } from "../lib/db";
-import { changePasswordSchema, loginSchema } from "../lib/validation";
-import { clearSession, hashPassword, setSessionCookie, toSafeUser, verifyPassword } from "../lib/auth";
+import {
+  changePasswordSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  resetPasswordSchema
+} from "../lib/validation";
+import {
+  clearSession,
+  hashPassword,
+  setSessionCookie,
+  toSafeUser,
+  verifyPassword
+} from "../lib/auth";
 import { recordAuditLog } from "../lib/audit";
 import { isDemoEmail } from "../lib/demo";
+import { sendMail } from "../lib/mailer";
+
+const RESET_CODE_EXPIRY_MINUTES = 10;
+
+function generateResetCode(): string {
+  return randomInt(100000, 1000000).toString();
+}
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/login", async (request, reply) => {
@@ -160,6 +179,150 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
   );
+
+  fastify.post("/forgot-password", async (request, reply) => {
+    const parsed = forgotPasswordSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: true,
+        message: parsed.error.flatten().formErrors.join(", ") || "Invalid email"
+      });
+    }
+
+    const { email } = parsed.data;
+    const normalizedEmail = email.toLowerCase();
+
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail }
+    });
+
+    if (!user || !user.isActive) {
+      return reply.status(404).send({
+        error: true,
+        message: "No account found for that email."
+      });
+    }
+
+    if (isDemoEmail(user.email)) {
+      return reply.status(403).send({
+        error: true,
+        message: "Demo accounts cannot request password resets."
+      });
+    }
+
+    const code = generateResetCode();
+    const codeHash = await hashPassword(code);
+    const expiresAt = new Date(Date.now() + RESET_CODE_EXPIRY_MINUTES * 60 * 1000);
+
+    await prisma.passwordResetToken.deleteMany({
+      where: { userId: user.id }
+    });
+
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        codeHash,
+        expiresAt
+      }
+    });
+
+    const bodyText = [
+      "You requested to reset your IncidentPulse password.",
+      "",
+      `Use this verification code: ${code}`,
+      "",
+      "This code expires in 10 minutes."
+    ].join("\n");
+
+    await sendMail({
+      to: user.email,
+      subject: "IncidentPulse password reset code",
+      text: bodyText,
+      html: `<p>You requested to reset your IncidentPulse password.</p><p>Use this verification code:</p><p style="font-size: 20px; font-weight: bold;">${code}</p><p>This code expires in 10 minutes.</p>`
+    });
+
+    return reply.send({
+      error: false,
+      message: "A verification code has been sent to your email."
+    });
+  });
+
+  fastify.post("/reset-password", async (request, reply) => {
+    const parsed = resetPasswordSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: true,
+        message: parsed.error.flatten().formErrors.join(", ") || "Invalid payload"
+      });
+    }
+
+    const { email, code, newPassword } = parsed.data;
+    const normalizedEmail = email.toLowerCase();
+
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail }
+    });
+
+    if (!user || !user.isActive) {
+      return reply.status(404).send({
+        error: true,
+        message: "No account found for that email."
+      });
+    }
+
+    if (isDemoEmail(user.email)) {
+      return reply.status(403).send({
+        error: true,
+        message: "Demo accounts cannot change passwords via reset."
+      });
+    }
+
+    const token = await prisma.passwordResetToken.findFirst({
+      where: {
+        userId: user.id,
+        consumedAt: null,
+        expiresAt: { gt: new Date() }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    if (!token) {
+      return reply.status(400).send({
+        error: true,
+        message: "No active reset request. Please request a new code."
+      });
+    }
+
+    const codeMatches = await verifyPassword(code, token.codeHash);
+    if (!codeMatches) {
+      return reply.status(400).send({
+        error: true,
+        message: "Invalid or expired code."
+      });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: hashedPassword
+        }
+      }),
+      prisma.passwordResetToken.update({
+        where: { id: token.id },
+        data: {
+          consumedAt: new Date()
+        }
+      })
+    ]);
+
+    return reply.send({
+      error: false,
+      message: "Password updated successfully."
+    });
+  });
 };
 
 export default authRoutes;

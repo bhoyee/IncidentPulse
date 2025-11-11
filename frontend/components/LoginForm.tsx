@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
@@ -94,6 +95,14 @@ export function LoginForm() {
       >
         {loginMutation.isPending ? "Signing in..." : "Sign in"}
       </button>
+      <div className="text-right text-sm">
+        <Link
+          href="/forgot-password"
+          className="font-semibold text-brand-600 hover:text-brand-700"
+        >
+          Forgot password?
+        </Link>
+      </div>
     </form>
   );
 }

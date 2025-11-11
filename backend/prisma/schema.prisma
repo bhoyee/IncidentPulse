@@ -70,6 +70,7 @@ model User {
   assignments  Incident[] @relation("IncidentAssignee")
   maintenanceEvents MaintenanceEvent[] @relation("MaintenanceCreatedBy")
   auditLogs    AuditLog[] @relation("AuditActor")
+  passwordResetTokens PasswordResetToken[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
@@ -202,4 +203,16 @@ model IncidentAttachment {
 
   @@index([incidentId])
   @@index([updateId])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
 }
