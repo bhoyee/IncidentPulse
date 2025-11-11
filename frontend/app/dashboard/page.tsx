@@ -93,6 +93,7 @@ type ServiceOption = {
 
 
 const PASSWORD_PROMPT_KEY = "incidentpulse.passwordPrompt.dismissed";
+// Namespace the password reminder per-email so shared browsers don't bleed state.
 const getPasswordPromptKey = (email?: string | null) =>
   `${PASSWORD_PROMPT_KEY}:${email?.toLowerCase() ?? "anonymous"}`;
 
@@ -655,6 +656,7 @@ function DashboardPageContent() {
     setAuditPage(1);
   }, [auditActionFilter, auditSearch]);
 
+  // Show the “secure your account” reminder once per user (and never for demo logins).
   useEffect(() => {
     if (!session || session.isDemo || typeof window === "undefined") {
       return;
@@ -776,6 +778,7 @@ function DashboardPageContent() {
   };
 
   const dismissPasswordReminder = () => {
+    // Persist dismissal so we don't nag on every login.
     if (session?.email && typeof window !== "undefined") {
       window.localStorage.setItem(getPasswordPromptKey(session.email), "1");
     }

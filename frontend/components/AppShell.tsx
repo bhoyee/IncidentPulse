@@ -13,6 +13,7 @@ export function AppShell({ children }: PropsWithChildren) {
   const isDocs = pathname?.startsWith("/docs");
   const hideHeader = pathname === "/";
   const { data: session } = useSession();
+  // Demo sessions get a banner reminding them the environment is read-only.
   const showDemoBanner = Boolean(session?.isDemo) && !hideHeader;
 
   const mainClassName = isDashboard

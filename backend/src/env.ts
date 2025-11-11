@@ -19,6 +19,7 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(60),
+  // Comma-separated list of demo emails that should be treated as read-only.
   DEMO_USER_EMAILS: z.string().optional(),
   PORT: z
     .string()

@@ -25,6 +25,7 @@ type DemoIncident = {
   }>;
 };
 
+// Demo accounts exposed publicly – keep credentials in sync with README/login page.
 const demoUsers = [
   {
     email: "admin@incidentpulse.com",
@@ -72,6 +73,7 @@ const demoServices = [
   }
 ];
 
+// Curated incident scenarios to showcase different severities/statuses in the demo.
 const incidents: DemoIncident[] = [
   {
     title: "Major outage: status API returning 500s",
@@ -228,6 +230,7 @@ async function seedServices() {
 }
 
 async function seedIncidents(userIds: Record<string, string>, serviceIds: Record<string, string>) {
+  // Remove any previously seeded demo incidents before inserting fresh copies.
   const demoTitles = incidents.map((incident) => incident.title);
   await prisma.incidentUpdate.deleteMany({
     where: { incident: { title: { in: demoTitles } } }
@@ -287,6 +290,7 @@ async function seedIncidents(userIds: Record<string, string>, serviceIds: Record
 
 async function seedMaintenance(serviceIds: Record<string, string>, userIds: Record<string, string>) {
   const now = new Date();
+  // Same idea for maintenance events – keep demo data deterministic.
   await prisma.maintenanceEvent.deleteMany({
     where: {
       title: {

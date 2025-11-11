@@ -36,6 +36,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
+    // Mark demo logins so downstream middleware/UI can disable write actions.
     const demoUser = isDemoEmail(user.email);
 
     const token = await reply.jwtSign({
@@ -129,6 +130,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
+      // Prevent shared demo credentials from being modified.
       if (isDemoEmail(user.email)) {
         return reply.status(403).send({
           error: true,

@@ -1,5 +1,6 @@
 import { env } from "../env";
 
+// Pre-compute demo email addresses once so we can cheaply check on each request.
 const demoEmailSet = new Set(
   (env.DEMO_USER_EMAILS ?? "")
     .split(",")

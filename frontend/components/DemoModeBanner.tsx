@@ -7,6 +7,7 @@ import { useSession } from "@hooks/useSession";
 export function DemoModeBanner() {
   const { data: session } = useSession();
 
+  // Only render when the authenticated user is one of the demo accounts.
   if (!session?.isDemo) {
     return null;
   }

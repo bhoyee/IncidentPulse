@@ -80,6 +80,7 @@ export function buildApp() {
     const demoWriteAllow = new Set<string>(["/auth/logout"]);
 
     fastify.addHook("onRequest", async (request, reply) => {
+      // Block any mutating verbs for demo sessions before handlers run.
       const method = request.method.toUpperCase();
       if (method === "GET" || method === "OPTIONS" || method === "HEAD") {
         return;
@@ -93,6 +94,7 @@ export function buildApp() {
 
       if (isDemoEmail(request.user?.email)) {
         const routePath = request.routerPath ?? request.raw.url ?? "";
+        // Allow demo sessions to call logout so they can exit gracefully.
         if (demoWriteAllow.has(routePath)) {
           return;
         }
