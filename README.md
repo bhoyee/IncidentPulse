@@ -4,6 +4,8 @@ A modern incident-response stack that pairs an authenticated operations console 
 
 ![IncidentPulse dashboard](https://github.com/user-attachments/assets/b82fc23d-1911-442c-a1ef-648197a60722)
 
+> **Live Docs:** https://incident-pulse.vercel.app/docs
+
 ---
 
 ## Table of Contents
