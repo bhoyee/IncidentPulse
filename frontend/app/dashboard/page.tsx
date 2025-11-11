@@ -58,6 +58,7 @@ import {
 } from "@hooks/useMaintenance";
 import { useAnalytics } from "@hooks/useAnalytics";
 import { useAuditLogs } from "@hooks/useAuditLogs";
+import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { apiClient } from "@lib/api-client";
 import {
   MAX_ATTACHMENTS_PER_BATCH,
@@ -92,37 +93,8 @@ type ServiceOption = {
 
 
 const PASSWORD_PROMPT_KEY = "incidentpulse.passwordPrompt.dismissed";
-
-const ChangePasswordCard = () => {
-  return (
-    <form className="space-y-4">
-      <div>
-        <label className="text-sm font-medium text-gray-300">Current Password</label>
-        <input 
-          type="password" 
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1" 
-        />
-      </div>
-      <div>
-        <label className="text-sm font-medium text-gray-300">New Password</label>
-        <input 
-          type="password" 
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1" 
-        />
-      </div>
-      <div>
-        <label className="text-sm font-medium text-gray-300">Confirm New Password</label>
-        <input 
-          type="password" 
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mt-1" 
-        />
-      </div>
-      <button type="submit" className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition">
-        Update Password
-      </button>
-    </form>
-  );
-};
+const getPasswordPromptKey = (email?: string | null) =>
+  `${PASSWORD_PROMPT_KEY}:${email?.toLowerCase() ?? "anonymous"}`;
 
 function StatCard({
   label,
@@ -684,10 +656,11 @@ function DashboardPageContent() {
   }, [auditActionFilter, auditSearch]);
 
   useEffect(() => {
-    if (!session || typeof window === "undefined") {
+    if (!session || session.isDemo || typeof window === "undefined") {
       return;
     }
-    const dismissed = window.localStorage.getItem(PASSWORD_PROMPT_KEY);
+    const key = getPasswordPromptKey(session.email);
+    const dismissed = window.localStorage.getItem(key);
     if (!dismissed) {
       setShowPasswordReminder(true);
     }
@@ -803,8 +776,8 @@ function DashboardPageContent() {
   };
 
   const dismissPasswordReminder = () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(PASSWORD_PROMPT_KEY, "1");
+    if (session?.email && typeof window !== "undefined") {
+      window.localStorage.setItem(getPasswordPromptKey(session.email), "1");
     }
     setShowPasswordReminder(false);
   };
@@ -824,9 +797,6 @@ function DashboardPageContent() {
     setIsLoggingOut(true);
     try {
       await apiClient.post("/auth/logout");
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(PASSWORD_PROMPT_KEY);
-      }
       router.replace("/login");
     } catch (error) {
       console.error("Logout failed", error);

@@ -77,6 +77,8 @@ export function buildApp() {
   });
 
   if (hasDemoEmails()) {
+    const demoWriteAllow = new Set<string>(["/auth/logout"]);
+
     fastify.addHook("onRequest", async (request, reply) => {
       const method = request.method.toUpperCase();
       if (method === "GET" || method === "OPTIONS" || method === "HEAD") {
@@ -90,6 +92,11 @@ export function buildApp() {
       }
 
       if (isDemoEmail(request.user?.email)) {
+        const routePath = request.routerPath ?? request.raw.url ?? "";
+        if (demoWriteAllow.has(routePath)) {
+          return;
+        }
+
         return reply.status(403).send({
           error: true,
           message:
