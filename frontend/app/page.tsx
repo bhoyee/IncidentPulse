@@ -13,7 +13,8 @@ import {
   CheckCircleIcon,
   BuildingOfficeIcon,
   ClockIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  PaperClipIcon
 } from "@heroicons/react/24/outline";
 import { StatusBanner } from "@components/StatusBanner";
 import { PublicIncidentCard } from "@components/PublicIncidentCard";
@@ -30,20 +31,38 @@ const featureCards = [
   {
     title: "Unified Incident Intake",
     description:
-      "Centralize alerts from monitoring tools, on-call systems, and manual reports into a single prioritized queue.",
+      "Centralize alerts from GitHub Actions, monitoring tools, and operator reports into one prioritized queue.",
     icon: BoltIcon
   },
   {
     title: "Transparent Communication",
     description:
-      "Publish accurate status updates with the same data responders see - eliminate manual copy-pasting between tools.",
+      "Publish customer-facing status updates straight from the same data responders see. No more copy/paste.",
     icon: GlobeAltIcon
   },
   {
     title: "Operational Intelligence",
     description:
-      "Track MTTR, response times, and ownership trends with comprehensive analytics and reporting.",
+      "Track MTTR, response times, service impact, and responder load with built-in analytics and uptime snapshots.",
     icon: ChartBarIcon
+  },
+  {
+    title: "Evidence & Attachments",
+    description:
+      "Collect screenshots, HAR files, and log bundles against each incident or update to keep the forensic trail intact.",
+    icon: PaperClipIcon
+  },
+  {
+    title: "Automation-Ready Webhooks",
+    description:
+      "Secure HMAC endpoints with dedupe/recovery logic plus templates for GitHub Actions, UptimeRobot, Datadog, and more.",
+    icon: ArrowPathIcon
+  },
+  {
+    title: "Audit & Compliance",
+    description:
+      "Full audit log of logins, assignments, maintenance events, and resolution notes for SOC2-ready transparency.",
+    icon: ShieldCheckIcon
   }
 ];
 
@@ -69,10 +88,41 @@ const workflowSteps = [
 ];
 
 const stats = [
-  { label: "Response Time", value: "< 2min" },
-  { label: "Uptime", value: "99.9%" },
-  { label: "Teams Supported", value: "500+" },
-  { label: "Incidents Resolved", value: "50K+" }
+  { label: "Self-host setup", value: "<10 min" },
+  { label: "Status modules", value: "4" },
+  { label: "Webhook templates", value: "6+" },
+  { label: "Audit coverage", value: "100%" }
+];
+
+const platformHighlights = [
+  {
+    title: "Status & Communication",
+    description:
+      "Service catalog, uptime history, and scheduled maintenance sharing the same truth as your responders.",
+    bullets: ["Per-service health & uptime badges", "Scheduled maintenance announcements", "Public JSON status feed"],
+    icon: GlobeAltIcon
+  },
+  {
+    title: "Automation & Integrations",
+    description:
+      "Webhook ingestion with HMAC signatures plus outbound notifications to Slack, Discord, Teams, Telegram, and email.",
+    bullets: ["GitHub Actions + UptimeRobot templates", "Dedupe + recovery workflow", "Multi-channel alerting"],
+    icon: ArrowPathIcon
+  },
+  {
+    title: "Evidence & Attachments",
+    description:
+      "Upload screenshots, log bundles, or HAR files to each incident and keep them accessible via signed URLs.",
+    bullets: ["Up to 5 files per update", "Served securely via backend", "Storage adapter ready for S3"],
+    icon: PaperClipIcon
+  },
+  {
+    title: "Analytics & Audit",
+    description:
+      "MTTR/MTTA dashboards plus a full audit trail of every login, assignment, and maintenance action.",
+    bullets: ["MTTR + MTTA snapshots", "Exportable audit log", "Ready for compliance reviews"],
+    icon: ChartBarIcon
+  }
 ];
 
 export default function HomePage() {
@@ -87,8 +137,10 @@ export default function HomePage() {
   const isAuthenticated = Boolean(session);
   const primaryNavLabel = isAuthenticated ? "Dashboard" : "Sign In";
   const primaryNavHref = isAuthenticated ? "/dashboard" : "/login";
-  const heroPrimaryLabel = isAuthenticated ? "Open Dashboard" : "Get Started Free";
-  const heroPrimaryHref = isAuthenticated ? "/dashboard" : "/login";
+  const heroPrimaryLabel = isAuthenticated ? "Open Dashboard" : "View Docs";
+  const heroPrimaryHref = isAuthenticated ? "/dashboard" : "/docs";
+  const heroSecondaryLabel = isAuthenticated ? "View Status Page" : "Star on GitHub";
+  const heroSecondaryHref = isAuthenticated ? "/status" : "https://github.com/bhoyee/IncidentPulse";
 
   return (
     <div className="min-h-screen bg-white w-full">
@@ -116,12 +168,20 @@ export default function HomePage() {
                 <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
                   Features
                 </a>
-                <a href="#pricing" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
-                  Pricing
+                <a href="#platform" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                  Platform
                 </a>
                 <Link href="/docs" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
                   Documentation
                 </Link>
+                <a
+                  href="https://github.com/bhoyee/IncidentPulse"
+                  className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  GitHub
+                </a>
               </nav>
 
               {/* Auth Buttons */}
@@ -155,17 +215,17 @@ export default function HomePage() {
                 <div>
                   <div className="inline-flex items-center rounded-full bg-blue-100 px-4 py-1.5 text-sm font-medium text-blue-700 mb-6">
                     <CheckCircleIcon className="h-4 w-4 mr-2" />
-                    Enterprise Incident Management
+                    Open-Source & Self-Hosted
                   </div>
                   <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl lg:text-6xl">
-                    Command Center for
+                    Own Your Incident Response
                     <span className="block bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                      Modern Teams
+                      For Modern Teams
                     </span>
                   </h1>
                   <p className="mt-6 text-lg text-gray-600 max-w-2xl">
-                    IncidentPulse combines secure internal dashboards with polished customer-facing status pages. 
-                    Respond faster, keep teams aligned, and communicate with confidence.
+                    IncidentPulse couples an authenticated operations console with a polished public status page. It&apos;s MIT licensed,
+                    deploys anywhere, and keeps responders, stakeholders, and customers aligned from the same source of truth.
                   </p>
                 </div>
 
@@ -178,10 +238,12 @@ export default function HomePage() {
                     {heroPrimaryLabel}
                   </Link>
                   <a
-                    href="mailto:team@incidentpulse.io"
+                    href={heroSecondaryHref}
                     className="rounded-lg border border-gray-300 bg-white px-8 py-3.5 text-base font-semibold text-gray-900 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors text-center"
+                    target={isAuthenticated ? "_self" : "_blank"}
+                    rel="noreferrer"
                   >
-                    Schedule Demo
+                    {heroSecondaryLabel}
                   </a>
                 </div>
 
@@ -415,32 +477,68 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CTA Section - FULL WIDTH */}
+      {/* Platform Section */}
       <section
-        id="pricing"
-        className="bg-gradient-to-r w-screen relative left-1/2 right-1/2 -mx-[50vw] py-12 from-blue-600 to-blue-800 py-16 w-full"
+        id="platform"
+        className="bg-slate-900 text-white w-screen relative left-1/2 right-1/2 -mx-[50vw] py-20"
       >
-        <div className="w-full px-4 sm:px-6 lg:px-8 text-center">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="w-full max-w-7xl mx-auto">
-            <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl mb-4">
-              Ready to Transform Your Incident Response?
-            </h2>
-            <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-              Join thousands of engineering teams that trust IncidentPulse for reliable incident management.
-            </p>
-            <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4 justify-center">
-              <Link
-                href="/login"
-                className="rounded-lg bg-white px-8 py-3.5 text-base font-semibold text-blue-600 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors"
-              >
-                Start Free Trial
-              </Link>
+            <div className="text-center mb-12">
+              <p className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                Open Source + Production Ready
+              </p>
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                Everything you need for calm incident response
+              </h2>
+              <p className="mt-4 text-lg text-slate-300 max-w-3xl mx-auto">
+                Status pages, automation, evidence, analytics, and audits—all powered by the same backend so teams and customers stay aligned.
+              </p>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              {platformHighlights.map((highlight) => {
+                const Icon = highlight.icon;
+                return (
+                  <div
+                    key={highlight.title}
+                    className="rounded-2xl bg-slate-800/60 border border-slate-700 p-8 shadow-lg shadow-slate-900/20"
+                  >
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300">
+                        <Icon className="h-6 w-6" />
+                      </div>
+                      <h3 className="text-2xl font-semibold">{highlight.title}</h3>
+                    </div>
+                    <p className="text-slate-200">{highlight.description}</p>
+                    <ul className="mt-5 space-y-2 text-sm text-slate-200">
+                      {highlight.bullets.map((bullet) => (
+                        <li key={bullet} className="flex items-start gap-2">
+                          <CheckCircleIcon className="mt-0.5 h-4 w-4 text-emerald-400" />
+                          <span>{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-12 flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4 justify-center">
               <a
-                href="mailto:team@incidentpulse.io"
-                className="rounded-lg border border-white px-8 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors"
+                href="https://github.com/bhoyee/IncidentPulse"
+                className="rounded-lg bg-white px-8 py-3.5 text-base font-semibold text-blue-700 shadow-sm hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors text-center"
+                target="_blank"
+                rel="noreferrer"
               >
-                Schedule Demo
+                Star on GitHub
               </a>
+              <Link
+                href="/docs"
+                className="rounded-lg border border-white px-8 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors text-center"
+              >
+                Read the Documentation
+              </Link>
             </div>
           </div>
         </div>
@@ -472,9 +570,19 @@ export default function HomePage() {
                       <h4 className="text-sm font-semibold text-white mb-4">Product</h4>
                       <ul className="space-y-2 text-sm">
                         <li><a href="#features" className="text-gray-400 hover:text-white transition-colors">Features</a></li>
-                        <li><a href="#pricing" className="text-gray-400 hover:text-white transition-colors">Pricing</a></li>
+                        <li><a href="#platform" className="text-gray-400 hover:text-white transition-colors">Platform</a></li>
                         <li><Link href="/status" className="text-gray-400 hover:text-white transition-colors">Status</Link></li>
                         <li><Link href="/docs" className="text-gray-400 hover:text-white transition-colors">Documentation</Link></li>
+                        <li>
+                          <a
+                            href="https://github.com/bhoyee/IncidentPulse"
+                            className="text-gray-400 hover:text-white transition-colors"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            GitHub
+                          </a>
+                        </li>
                       </ul>
                     </div>
 
