@@ -3,6 +3,7 @@ import { prisma } from "../lib/db";
 import { changePasswordSchema, loginSchema } from "../lib/validation";
 import { clearSession, hashPassword, setSessionCookie, toSafeUser, verifyPassword } from "../lib/auth";
 import { recordAuditLog } from "../lib/audit";
+import { isDemoEmail } from "../lib/demo";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/login", async (request, reply) => {
@@ -35,11 +36,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
+    const demoUser = isDemoEmail(user.email);
+
     const token = await reply.jwtSign({
       id: user.id,
       role: user.role,
       email: user.email,
-      name: user.name
+      name: user.name,
+      isDemo: demoUser
     });
 
     await setSessionCookie(reply, token);
@@ -52,7 +56,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.status(200).send({
       error: false,
-      user: toSafeUser(user)
+      user: {
+        ...toSafeUser(user),
+        isDemo: demoUser
+      }
     });
   });
 
@@ -89,7 +96,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.status(200).send({
       error: false,
-      user
+      user: {
+        ...user,
+        isDemo: isDemoEmail(user.email)
+      }
     });
   });
 
@@ -119,12 +129,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const demoEmails = new Set([
-        "admin@demo.incidentpulse.com",
-        "operator@demo.incidentpulse.com"
-      ]);
-
-      if (demoEmails.has(user.email.toLowerCase())) {
+      if (isDemoEmail(user.email)) {
         return reply.status(403).send({
           error: true,
           message: "Password changes are disabled for demo accounts."

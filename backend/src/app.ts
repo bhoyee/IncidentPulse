@@ -25,6 +25,7 @@ import {
   MAX_ATTACHMENT_BYTES,
   uploadsRoot
 } from "./lib/storage";
+import { hasDemoEmails, isDemoEmail } from "./lib/demo";
 
 export function buildApp() {
   ensureUploadsRootSync();
@@ -74,6 +75,29 @@ export function buildApp() {
     prefix: "/uploads/",
     decorateReply: false
   });
+
+  if (hasDemoEmails()) {
+    fastify.addHook("onRequest", async (request, reply) => {
+      const method = request.method.toUpperCase();
+      if (method === "GET" || method === "OPTIONS" || method === "HEAD") {
+        return;
+      }
+
+      try {
+        await request.jwtVerify();
+      } catch {
+        return;
+      }
+
+      if (isDemoEmail(request.user?.email)) {
+        return reply.status(403).send({
+          error: true,
+          message:
+            "Demo accounts are read-only. Self-host IncidentPulse to explore write actions."
+        });
+      }
+    });
+  }
 
   fastify.decorate("authenticate", async (request, reply) => {
     try {

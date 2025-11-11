@@ -19,6 +19,7 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(60),
+  DEMO_USER_EMAILS: z.string().optional(),
   PORT: z
     .string()
     .optional()

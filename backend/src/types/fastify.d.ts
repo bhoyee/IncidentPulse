@@ -15,6 +15,7 @@ declare module "fastify" {
       role: "admin" | "operator" | "viewer";
       email: string;
       name: string;
+      isDemo?: boolean;
     };
     rawBody?: Buffer;
   }
@@ -27,12 +28,14 @@ declare module "@fastify/jwt" {
       role: "admin" | "operator" | "viewer";
       email: string;
       name: string;
+      isDemo?: boolean;
     };
     user: {
       id: string;
       role: "admin" | "operator" | "viewer";
       email: string;
       name: string;
+      isDemo?: boolean;
     };
   }
 }

@@ -122,6 +122,7 @@ Log in at `/login` with the seeded admin account, then explore the dashboard and
 | `WEBHOOK_SHARED_TOKEN`  | Optional fallback token when partners cannot compute HMAC                                  |
 | `WEBHOOK_SYSTEM_USER_ID`| Optional UUID of the “Automation” user that owns webhook-created incidents                 |
 | `UPLOAD_DIR`            | Directory for evidence attachments (default `uploads/`)                                    |
+| `DEMO_USER_EMAILS`      | Optional comma-separated list of emails that should be treated as read-only demo accounts |
 
 ### Frontend (`frontend/.env.local`)
 

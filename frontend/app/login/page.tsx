@@ -100,7 +100,8 @@ export default function LoginPage() {
                       </h3>
                     </div>
                     <p className="text-xs text-gray-600 mb-4">
-                      Try IncidentPulse with pre-configured demo accounts
+                      Try IncidentPulse with pre-configured demo accounts. Demo sessions are read-only—create your own
+                      deployment to test write actions.
                     </p>
 
                     <div className="space-y-3">

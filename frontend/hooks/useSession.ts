@@ -10,6 +10,7 @@ export type SessionUser = {
   role: "admin" | "operator" | "viewer";
   teamRoles: string[];
   isActive: boolean;
+  isDemo?: boolean;
 };
 
 type SessionResponse = {
