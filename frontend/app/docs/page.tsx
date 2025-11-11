@@ -29,7 +29,6 @@ const docSections = [
   { id: "setup", label: "Setup Guide" },
   { id: "webhooks", label: "Webhook Automation" },
   { id: "api", label: "API Reference" },
-  { id: "ui", label: "UI Guide" },
   { id: "faq", label: "FAQ" },
   { id: "credits", label: "Credits" }
 ] as const;
@@ -476,39 +475,6 @@ const uptimeRobotDocSnippet = `{
     "friendlyStatus": "{{ALERT_TYPE}}"
   }
 }`;
-
-const uiScreens = [
-  {
-    title: "Incident List",
-    description:
-      "Monitor active, recent, and scheduled incidents with severity badges, SLA burn-down, and quick assignment controls."
-  },
-  {
-    title: "Incident Detail",
-    description:
-      "Timeline-first view with task checklists, linked runbooks, and collaboration tools for responders. Operators must capture root cause plus a resolution summary before the system allows closure."
-  },
-  {
-    title: "Analytics",
-    description:
-      "Visualize MTTR trends, service reliability, on-call load distribution, and SLA adherence over time."
-  },
-  {
-    title: "User Management",
-    description:
-      "Invite teammates, manage roles, enforce SSO, and review access history from a unified roster."
-  },
-  {
-    title: "Webhooks & Integrations",
-    description:
-      "Left-rail admin console that surfaces alert and recovery endpoints, sample cURL snippets, secret handling guidance, and Slack/Discord/Teams/Telegram notification settings alongside quick links to documentation and the public status page."
-  },
-  {
-    title: "Public Status Page",
-    description:
-      "Branded, cache-friendly status site with subscriptions, scheduled maintenance, and historical transparency."
-  }
-];
 
 const faqItems = [
   {
@@ -1245,29 +1211,8 @@ export default function DocumentationPage() {
               </div>
             </section>
 
-            <section id="ui" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={7} label="UI Guide" />
-              <div className="space-y-4">
-                <h2 className="text-3xl font-semibold text-slate-900">Screens built for clarity</h2>
-                <p className="text-base text-slate-600">
-                  Showcase the experience in portfolios or internal onboarding with annotated screenshots and captions.
-                </p>
-              </div>
-              <div className="grid gap-6 lg:grid-cols-2">
-                {uiScreens.map((screen) => (
-                  <figure key={screen.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <div className="h-40 rounded-xl border border-dashed border-slate-200 bg-gradient-to-br from-blue-50 via-white to-slate-50" />
-                    <figcaption className="mt-4">
-                      <h3 className="text-lg font-semibold text-slate-900">{screen.title}</h3>
-                      <p className="mt-2 text-sm text-slate-600">{screen.description}</p>
-                    </figcaption>
-                  </figure>
-                ))}
-              </div>
-            </section>
-
             <section id="faq" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={8} label="FAQ & Troubleshooting" />
+              <SectionBadge index={7} label="FAQ & Troubleshooting" />
               <div className="space-y-4">
                 <h2 className="text-3xl font-semibold text-slate-900">Answers to common questions</h2>
                 <p className="text-base text-slate-600">
@@ -1293,7 +1238,7 @@ export default function DocumentationPage() {
             </section>
 
             <section id="credits" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={9} label="Credits & License" />
+              <SectionBadge index={8} label="Credits & License" />
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 className="text-2xl font-semibold text-slate-900">Open collaboration encouraged</h2>
                 <p className="mt-2 text-sm text-slate-600">

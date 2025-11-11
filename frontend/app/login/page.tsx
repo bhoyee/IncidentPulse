@@ -168,7 +168,7 @@ export default function LoginPage() {
               <p className="text-xs text-gray-500">
                 Need access?{" "}
                 <a
-                  href="mailto:team@incidentpulse.io"
+                  href="mailto:ades.salisu@gmail.com"
                   className="text-blue-600 hover:text-blue-500 font-medium"
                 >
                   Contact your administrator

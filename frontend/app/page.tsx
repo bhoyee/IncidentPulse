@@ -616,7 +616,7 @@ export default function HomePage() {
                         </li>
                         <li>
                           <a
-                            href="mailto:team@incidentpulse.io"
+                            href="mailto:ades.salisu@gmail.com"
                             className="text-gray-400 hover:text-white transition-colors"
                           >
                             Contact
