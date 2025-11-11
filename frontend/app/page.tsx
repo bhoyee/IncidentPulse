@@ -596,7 +596,7 @@ export default function HomePage() {
                         </li>
                         <li>
                           <a
-                            href="https://medium.com/@incidentpulse"
+                            href="#"
                             className="text-gray-400 hover:text-white transition-colors"
                             target="_blank"
                             rel="noreferrer"
@@ -606,7 +606,7 @@ export default function HomePage() {
                         </li>
                         <li>
                           <a
-                            href="https://www.linkedin.com/company/incidentpulse"
+                            href="#"
                             className="text-gray-400 hover:text-white transition-colors"
                             target="_blank"
                             rel="noreferrer"
