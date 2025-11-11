@@ -726,7 +726,7 @@ export default function DocumentationPage() {
 
   return (
     <>
-      <div className="relative mx-auto w-full max-w-6xl px-4 py-16 lg:py-20">
+      <div className="relative mx-auto w-full px-4 py-16 sm:px-6 lg:px-12 lg:py-20">
         <div className="flex flex-col gap-12 lg:flex-row">
           <aside className="hidden w-full shrink-0 lg:block lg:w-64">{nav}</aside>
           <div className="flex-1 space-y-20">
