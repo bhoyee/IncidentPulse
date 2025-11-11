@@ -17,6 +17,14 @@ export function AppFooter() {
           <Link className="hover:text-slate-200" href="/status">
             Public Status
           </Link>
+          <Link
+            className="hover:text-slate-200"
+            href="https://github.com/bhoyee/IncidentPulse/discussions"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Feedback & Ideas
+          </Link>
           <span className="text-slate-500">&copy; {year} IncidentPulse</span>
         </div>
       </div>
