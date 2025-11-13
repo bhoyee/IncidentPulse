@@ -261,7 +261,7 @@ export default function ForgotPasswordPage() {
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
               <p className="text-sm text-slate-300">Need help?</p>
-              <p className="mt-2 text-lg font-semibold">team@incidentpulse.io</p>
+              <p className="mt-2 text-lg font-semibold">binsalith@gmail.com</p>
               <p className="mt-1 text-sm text-slate-400">We respond within one business day.</p>
             </div>
           </div>
