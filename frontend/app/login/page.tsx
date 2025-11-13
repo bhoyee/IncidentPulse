@@ -45,10 +45,10 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen flex-col lg:flex-row">
         {/* Left side - Form */}
-        <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24">
-          <div className="mx-auto w-full max-w-sm lg:max-w-md">
+        <div className="flex flex-1 flex-col justify-center py-10 px-4 sm:px-6 lg:px-20 xl:px-24">
+          <div className="mx-auto w-full max-w-md">
             {/* Header */}
             <div className="text-center mb-8">
               <Link href="/" className="inline-flex items-center space-x-3">
@@ -114,7 +114,7 @@ export default function LoginPage() {
                             key={account.role}
                             className="border border-gray-200 rounded-lg p-3 hover:border-blue-300 transition-colors"
                           >
-                            <div className="flex items-start justify-between">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                               <div className="flex items-start space-x-3">
                                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
                                   <Icon className="h-4 w-4 text-blue-600" />
@@ -127,20 +127,20 @@ export default function LoginPage() {
                                     {account.description}
                                   </p>
                                   <div className="mt-2 space-y-1">
-                                    <div className="flex items-center space-x-2">
-                                      <span className="text-xs font-medium text-gray-500">Email:</span>
-                                      <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-800">
-                                        {account.email}
-                                      </code>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                      <span className="text-xs font-medium text-gray-500">Password:</span>
-                                      <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-800">
-                                        {account.password}
-                                      </code>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-xs font-medium text-gray-500">Email:</span>
+                                        <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-800 break-all">
+                                          {account.email}
+                                        </code>
+                                      </div>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-xs font-medium text-gray-500">Password:</span>
+                                        <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-800 break-all">
+                                          {account.password}
+                                        </code>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
                               </div>
                               <button
                                 onClick={() => copyCredentials(account)}
