@@ -123,6 +123,53 @@ The stack exposes:
 
 Environment variables (JWT secret, email settings, webhook secrets, etc.) are configured inside `docker-compose.yml`. Adjust them before pushing to production.
 
+### Use published Docker images
+
+Want to skip building locally? Pull the prebuilt images from Docker Hub:
+
+```bash
+docker pull binsalith/incidentpulse-backend:latest
+docker pull binsalith/incidentpulse-frontend:latest
+```
+
+Then run them (example using Docker Desktop):
+
+```bash
+# Postgres
+docker run -d --name incidentpulse-db \
+  -e POSTGRES_USER=incidentpulse \
+  -e POSTGRES_PASSWORD=incidentpulse \
+  -e POSTGRES_DB=incidentpulse \
+  -p 5432:5432 \
+  postgres:16-alpine
+
+# Backend API
+docker run -d --name incidentpulse-api \
+  --link incidentpulse-db \
+  -p 4000:4000 \
+  -e DATABASE_URL=postgresql://incidentpulse:incidentpulse@incidentpulse-db:5432/incidentpulse?schema=public \
+  -e FRONTEND_URL=http://localhost:3000 \
+  -e COOKIE_DOMAIN=localhost \
+  -e JWT_SECRET=change-me-please-32-characters!!! \
+  -e RESEND_API_KEY=demo-key \
+  -e SMTP_FROM_ADDRESS=no-reply@example.com \
+  -e SMTP_FROM_NAME="IncidentPulse Demo" \
+  -e WEBHOOK_HMAC_SECRET=demo-hmac \
+  -e WEBHOOK_SHARED_TOKEN=demo-token \
+  -e WEBHOOK_SYSTEM_USER_ID=00000000-0000-0000-0000-000000000000 \
+  -e DEMO_USER_EMAILS="admin@demo.incidentpulse.com,operator@demo.incidentpulse.com" \
+  binsalith/incidentpulse-backend:latest
+
+# Frontend
+docker run -d --name incidentpulse-web \
+  --link incidentpulse-api \
+  -p 3000:3000 \
+  -e NEXT_PUBLIC_API_BASE=http://incidentpulse-api:4000 \
+  binsalith/incidentpulse-frontend:latest
+```
+
+You can also reference these images directly in your own `docker-compose.yml` by replacing the `build:` sections with `image: binsalith/incidentpulse-backend:latest` / `image: binsalith/incidentpulse-frontend:latest`.
+
 ## Environment Variables
 
 ### Backend (`backend/.env`)
