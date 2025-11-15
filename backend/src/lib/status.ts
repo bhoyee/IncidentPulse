@@ -5,6 +5,7 @@ import {
   serializeMaintenanceEvent,
   transitionMaintenanceEvents
 } from "./maintenance";
+import { emitStatusSnapshot } from "./realtime";
 
 export type PublicIncident = {
   id: string;
@@ -237,6 +238,7 @@ export async function refreshStatusCache(prisma: PrismaClient = defaultPrisma): 
     }
   });
 
+  emitStatusSnapshot(snapshot);
   return snapshot;
 }
 

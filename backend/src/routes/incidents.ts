@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyBaseLogger } from "fastify";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/db";
 import {
@@ -22,8 +22,53 @@ import {
   removeIncidentUploads
 } from "../lib/storage";
 import { recordAuditLog } from "../lib/audit";
+import { emitIncidentEvent, onIncidentEvent } from "../lib/realtime";
+import { refreshStatusCache } from "../lib/status";
+import type { IncidentNotificationContext } from "../lib/incident-notifier";
+import type { IncidentRealtimePayload } from "../lib/realtime";
 
 const MAX_ATTACHMENTS_PER_UPDATE = 5;
+
+function serializeIncidentRealtime(
+  incident: IncidentNotificationContext
+): IncidentRealtimePayload {
+  return {
+    id: incident.id,
+    title: incident.title,
+    severity: incident.severity,
+    status: incident.status,
+    service: incident.service
+      ? {
+          id: incident.service.id,
+          name: incident.service.name,
+          slug: incident.service.slug
+        }
+      : null,
+    assignedTo: incident.assignedTo
+      ? {
+          id: incident.assignedTo.id,
+          name: incident.assignedTo.name,
+          email: incident.assignedTo.email
+        }
+      : null,
+    createdBy: {
+      id: incident.createdBy.id,
+      name: incident.createdBy.name,
+      email: incident.createdBy.email
+    },
+    createdAt: incident.createdAt,
+    updatedAt: incident.updatedAt,
+    resolvedAt: incident.resolvedAt
+  };
+}
+
+async function refreshStatusSnapshot(log: FastifyBaseLogger) {
+  try {
+    await refreshStatusCache();
+  } catch (error) {
+    log.error({ err: error }, "Failed to refresh status snapshot");
+  }
+}
 
 const attachmentInclude = {
   uploadedBy: {
@@ -273,6 +318,12 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           serviceId: incident.serviceId
         }
       });
+
+      emitIncidentEvent({
+        type: "incident.created",
+        incident: serializeIncidentRealtime(incident)
+      });
+      await refreshStatusSnapshot(fastify.log);
 
       return reply.status(201).send({
         error: false,
@@ -614,6 +665,12 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       });
 
+      emitIncidentEvent({
+        type: "incident.updated",
+        incident: serializeIncidentRealtime(incident)
+      });
+      await refreshStatusSnapshot(fastify.log);
+
       return reply.send({
         error: false,
         data: incident
@@ -892,7 +949,46 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       });
 
+      emitIncidentEvent({
+        type: "incident.deleted",
+        incidentId: params.id
+      });
+      await refreshStatusSnapshot(fastify.log);
+
       return reply.status(204).send();
+    }
+  );
+
+  fastify.get(
+    "/stream",
+    { preHandler: [fastify.authenticate, fastify.authorize(["admin", "operator", "viewer"])] },
+    async (request, reply) => {
+      reply.raw.setHeader("Content-Type", "text/event-stream");
+      reply.raw.setHeader("Cache-Control", "no-cache");
+      reply.raw.setHeader("Connection", "keep-alive");
+      reply.raw.setHeader("X-Accel-Buffering", "no");
+      if (typeof reply.raw.flushHeaders === "function") {
+        reply.raw.flushHeaders();
+      }
+      reply.hijack();
+
+      const sendHeartbeat = setInterval(() => {
+        reply.raw.write(": heartbeat\n\n");
+      }, 15000);
+
+      const detach = onIncidentEvent((event) => {
+        reply.raw.write(`event: incident\n`);
+        reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+      });
+
+      const closeStream = () => {
+        clearInterval(sendHeartbeat);
+        detach();
+        reply.raw.end();
+      };
+
+      request.raw.on("close", closeStream);
+      request.raw.on("aborted", closeStream);
     }
   );
 };

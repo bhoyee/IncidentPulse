@@ -12,8 +12,16 @@ import {
   transitionMaintenanceEvents
 } from "../lib/maintenance";
 import { recordAuditLog } from "../lib/audit";
+import { refreshStatusCache } from "../lib/status";
 
 const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
+  const refreshStatusSnapshot = async () => {
+    try {
+      await refreshStatusCache();
+    } catch (error) {
+      fastify.log.error({ err: error }, "Failed to refresh status snapshot after maintenance change");
+    }
+  };
   fastify.get(
     "/",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
@@ -114,6 +122,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
         }
       });
 
+      await refreshStatusSnapshot();
       return reply.status(201).send({
         error: false,
         data: serializeMaintenanceEvent(event)
@@ -176,6 +185,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
         }
       });
 
+      await refreshStatusSnapshot();
       return reply.send({
         error: false,
         data: serializeMaintenanceEvent(event)
@@ -227,6 +237,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
         }
       });
 
+      await refreshStatusSnapshot();
       return reply.send({
         error: false,
         data: serializeMaintenanceEvent(updated)

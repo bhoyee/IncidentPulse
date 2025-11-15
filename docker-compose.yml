@@ -24,12 +24,28 @@ services:
       FRONTEND_URL: http://localhost:3000
       COOKIE_DOMAIN: localhost
       JWT_SECRET: change-me-in-env
-      PORT: 4000
+      RESEND_API_KEY: demo-resend-key
+      SMTP_FROM_ADDRESS: demo@incidentpulse.local
+      SMTP_FROM_NAME: IncidentPulse Demo
+      WEBHOOK_HMAC_SECRET: demo-hmac-secret
+      WEBHOOK_SHARED_TOKEN: demo-shared-token
+      WEBHOOK_SYSTEM_USER_ID: 00000000-0000-0000-0000-000000000000
+      DEMO_USER_EMAILS: admin@demo.incidentpulse.com,operator@demo.incidentpulse.com
     ports:
       - "4000:4000"
     depends_on:
       postgres:
         condition: service_healthy
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      NEXT_PUBLIC_API_BASE: http://backend:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
 
 volumes:
   postgres-data:

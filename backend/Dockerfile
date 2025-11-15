@@ -1,23 +1,27 @@
-FROM node:20-alpine AS base
-WORKDIR /usr/src/app
-
+# Stage 1: install full dependencies for building
+FROM node:20-alpine AS deps
+WORKDIR /app
 COPY package*.json ./
-RUN npm install --production=false
+RUN npm ci
 
-COPY prisma ./prisma
-COPY tsconfig*.json ./
-COPY src ./src
-
-RUN npx prisma generate
+# Stage 2: build the TypeScript project
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
 RUN npm run build
 
+# Stage 3: production runtime with only prod deps + build output
 FROM node:20-alpine AS runner
-WORKDIR /usr/src/app
+WORKDIR /app
 ENV NODE_ENV=production
 
-COPY --from=base /usr/src/app/package*.json ./
-COPY --from=base /usr/src/app/node_modules ./node_modules
-COPY --from=base /usr/src/app/dist ./dist
-COPY --from=base /usr/src/app/prisma ./prisma
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/.env.example ./.env.example
+
+EXPOSE 4000
 CMD ["node", "dist/server.js"]

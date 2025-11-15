@@ -29,7 +29,7 @@ export default function LoginPage() {
     {
       role: "Operator",
       email: "operator@demo.incidentpulse.com", 
-      password: "demo123456",
+      password: "demo123",
       description: "Incident management and response access",
       icon: UserGroupIcon,
       features: ["Create incidents", "Update status", "Team collaboration"]

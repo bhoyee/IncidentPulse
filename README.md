@@ -34,6 +34,7 @@ A modern incident-response stack that pairs an authenticated operations console 
 - **Multi-channel notifications** – email plus Slack, Discord, Microsoft Teams, and Telegram webhooks keep every stakeholder informed on create, assign, and resolve.
 - **Analytics** – MTTR/MTTA snapshots, severity breakdown, and weekly trends for leadership-ready reporting.
 - **Audit log** – every admin/user/incident action is captured with filters + pagination for compliance reviews.
+- **Realtime streams (SSE)** – dashboards and the public status page subscribe to incident + status updates without manual refreshes.
 
 ## Architecture
 
@@ -105,6 +106,22 @@ npm run dev            # http://localhost:3000
 ```
 
 Log in at `/login` with the seeded admin account, then explore the dashboard and public status page.
+
+## Run with Docker
+
+Prefer containers? Build both services with a single command:
+
+```bash
+docker compose up --build
+```
+
+The stack exposes:
+
+- API on `http://localhost:4000`
+- Frontend on `http://localhost:3000`
+- PostgreSQL on `localhost:5432` (credentials defined in `docker-compose.yml`)
+
+Environment variables (JWT secret, email settings, webhook secrets, etc.) are configured inside `docker-compose.yml`. Adjust them before pushing to production.
 
 ## Environment Variables
 

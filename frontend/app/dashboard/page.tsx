@@ -59,6 +59,7 @@ import {
 import { useAnalytics } from "@hooks/useAnalytics";
 import { useAuditLogs } from "@hooks/useAuditLogs";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
+import { useIncidentStream } from "@hooks/useIncidentStream";
 import { apiClient } from "@lib/api-client";
 import {
   MAX_ATTACHMENTS_PER_BATCH,
@@ -603,6 +604,7 @@ function DashboardPageContent() {
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
 
   const { data: session } = useSession();
+  useIncidentStream(Boolean(session));
   const isAdmin = session?.role === "admin";
   const createTeamUser = useCreateTeamUser();
   const updateTeamUser = useUpdateTeamUser();
