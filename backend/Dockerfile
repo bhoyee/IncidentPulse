@@ -73,11 +73,12 @@ ENV DATABASE_URL=$DATABASE_URL \
 
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
-RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/.env.example ./.env.example
+
+RUN npx prisma generate
 
 EXPOSE 4000
 CMD ["node", "dist/server.js"]
