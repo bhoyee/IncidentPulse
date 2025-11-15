@@ -37,6 +37,7 @@ ENV DATABASE_URL=$DATABASE_URL \
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN npx prisma generate
 RUN npm run build
 
 # Stage 3: production runtime with only prod deps + build output
@@ -72,6 +73,7 @@ ENV DATABASE_URL=$DATABASE_URL \
 
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
+RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
