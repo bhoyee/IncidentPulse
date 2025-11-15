@@ -140,6 +140,7 @@ Environment variables (JWT secret, email settings, webhook secrets, etc.) are co
 | `WEBHOOK_SYSTEM_USER_ID`| Optional UUID of the “Automation” user that owns webhook-created incidents                 |
 | `UPLOAD_DIR`            | Directory for evidence attachments (default `uploads/`)                                    |
 | `DEMO_USER_EMAILS`      | Optional comma-separated list of emails that should be treated as read-only demo accounts |
+| `RESEND_API_KEY`        | Resend API key for transactional emails (used for password resets)                        |
 
 ### Frontend (`frontend/.env.local`)
 
