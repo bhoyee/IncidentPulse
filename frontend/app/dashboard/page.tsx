@@ -71,6 +71,7 @@ import { useAnalytics } from "@hooks/useAnalytics";
 import { useAuditLogs } from "@hooks/useAuditLogs";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { useIncidentStream } from "@hooks/useIncidentStream";
+import { useOpenBillingPortal, useStartCheckout, useInvoices } from "@hooks/useBilling";
 import { apiClient } from "@lib/api-client";
 import {
   MAX_ATTACHMENTS_PER_BATCH,
@@ -585,7 +586,24 @@ function DashboardPageContent() {
     { value: "maintenance_updated", label: "Maintenance updated" },
     { value: "maintenance_canceled", label: "Maintenance canceled" }
   ];
-  const [activeTab, setActiveTab] = useState<"incidents" | "team" | "maintenance" | "audit" | "analytics" | "webhooks" | "profile" | "password">("incidents");
+  const [activeTab, setActiveTab] = useState<
+    | "incidents"
+    | "team"
+    | "organizations"
+    | "services"
+    | "maintenance"
+    | "audit"
+    | "analytics"
+    | "webhooks"
+    | "billing"
+    | "support"
+    | "apiKeys"
+    | "profile"
+    | "password"
+    | "platformOps"
+    | "platformSupport"
+    | "platformBilling"
+  >("incidents");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -604,6 +622,8 @@ function DashboardPageContent() {
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [showPasswordReminder, setShowPasswordReminder] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState({
     title: "",
     description: "",
@@ -647,6 +667,9 @@ function DashboardPageContent() {
   const roleLabel = session ? session.role.charAt(0).toUpperCase() + session.role.slice(1) : "";
   const alertEndpoint = "https://your-backend.example.com/webhooks/incidents";
   const recoveryEndpoint = "https://your-backend.example.com/webhooks/incidents/recovery";
+  const openPortal = useOpenBillingPortal();
+  const startCheckout = useStartCheckout();
+  const invoicesQuery = useInvoices(isAdmin && activeTab === "billing");
 
   const incidentFilters = useMemo(
     () => ({
@@ -2071,6 +2094,110 @@ function DashboardPageContent() {
                     onPageChange={(nextPage) => setAuditPage(nextPage)}
                   />
                 ) : null}
+              </div>
+            )}
+
+            {activeTab === 'billing' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs uppercase tracking-wide text-blue-300">Billing</p>
+                  <h2 className="text-2xl font-bold text-white">Plan & usage</h2>
+                  <p className="text-sm text-gray-300">Manage your plan, open the portal, or upgrade.</p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        setPortalLoading(true);
+                        const url = await openPortal.mutateAsync();
+                        if (url) window.open(url, "_blank", "noreferrer");
+                      } finally {
+                        setPortalLoading(false);
+                      }
+                    }}
+                    disabled={portalLoading}
+                    className="inline-flex items-center gap-2 rounded-lg bg-gray-700 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-600 disabled:opacity-50"
+                  >
+                    <CreditCardIcon className="h-4 w-4" />
+                    {portalLoading ? "Opening portal..." : "Open billing portal"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        setCheckoutLoading(true);
+                        const url = await startCheckout.mutateAsync("pro");
+                        if (url) window.location.href = url;
+                      } finally {
+                        setCheckoutLoading(false);
+                      }
+                    }}
+                    disabled={checkoutLoading}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                  >
+                    {checkoutLoading ? "Redirecting..." : "Upgrade to Pro"}
+                  </button>
+                </div>
+                <div className="border border-gray-700 rounded-lg p-4 bg-gray-900">
+                  <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">Invoices</p>
+                  {invoicesQuery.isLoading ? (
+                    <p className="text-sm text-gray-400">Loading invoices...</p>
+                  ) : invoicesQuery.data && invoicesQuery.data.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm text-gray-200">
+                        <thead className="text-xs uppercase text-gray-400 border-b border-gray-700">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Number</th>
+                            <th className="px-3 py-2 text-left">Status</th>
+                            <th className="px-3 py-2 text-left">Total</th>
+                            <th className="px-3 py-2 text-left">Date</th>
+                            <th className="px-3 py-2 text-left">Link</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {invoicesQuery.data.map((inv) => (
+                            <tr key={inv.id}>
+                              <td className="px-3 py-2">{inv.number ?? inv.id}</td>
+                              <td className="px-3 py-2 capitalize">{inv.status}</td>
+                              <td className="px-3 py-2">
+                                {(inv.total / 100).toFixed(2)} {inv.currency.toUpperCase()}
+                              </td>
+                              <td className="px-3 py-2">
+                                {inv.createdAt ? new Date(inv.createdAt * 1000).toLocaleDateString() : ""}
+                              </td>
+                              <td className="px-3 py-2">
+                                {inv.hostedInvoiceUrl ? (
+                                  <a
+                                    href={inv.hostedInvoiceUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-blue-300 hover:text-blue-100"
+                                  >
+                                    View
+                                  </a>
+                                ) : inv.invoicePdf ? (
+                                  <a
+                                    href={inv.invoicePdf}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-blue-300 hover:text-blue-100"
+                                  >
+                                    PDF
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-500">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">No invoices found.</p>
+                  )}
+                </div>
               </div>
             )}
 
