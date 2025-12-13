@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { getIntegrationSettings, saveIntegrationSettings } from "../lib/integration-settings";
+import { getRequestOrgId } from "../lib/org";
+import { env } from "../env";
 
 const updateSchema = z.object({
   slackWebhookUrl: z
@@ -50,8 +52,9 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/settings",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
-    async (_request, reply) => {
-      const settings = await getIntegrationSettings();
+    async (request, reply) => {
+      const orgId = getRequestOrgId(request);
+      const settings = await getIntegrationSettings(orgId);
 
       return reply.send({
         error: false,
@@ -60,7 +63,8 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
           discordWebhookUrl: settings?.discordWebhookUrl ?? "",
           teamsWebhookUrl: settings?.teamsWebhookUrl ?? "",
           telegramBotToken: settings?.telegramBotToken ?? "",
-          telegramChatId: settings?.telegramChatId ?? ""
+          telegramChatId: settings?.telegramChatId ?? "",
+          stripePortalUrl: env.STRIPE_PORTAL_RETURN_URL ?? ""
         }
       });
     }
@@ -70,6 +74,7 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
     "/settings",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       const parsed = updateSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({
@@ -80,13 +85,16 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const payload = parsed.data;
 
-      const updated = await saveIntegrationSettings({
-        slackWebhookUrl: sanitizeInput(payload.slackWebhookUrl),
-        discordWebhookUrl: sanitizeInput(payload.discordWebhookUrl),
-        teamsWebhookUrl: sanitizeInput(payload.teamsWebhookUrl),
-        telegramBotToken: sanitizeInput(payload.telegramBotToken),
-        telegramChatId: sanitizeInput(payload.telegramChatId)
-      });
+      const updated = await saveIntegrationSettings(
+        {
+          slackWebhookUrl: sanitizeInput(payload.slackWebhookUrl),
+          discordWebhookUrl: sanitizeInput(payload.discordWebhookUrl),
+          teamsWebhookUrl: sanitizeInput(payload.teamsWebhookUrl),
+          telegramBotToken: sanitizeInput(payload.telegramBotToken),
+          telegramChatId: sanitizeInput(payload.telegramChatId)
+        },
+        orgId
+      );
 
       return reply.send({
         error: false,

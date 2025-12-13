@@ -8,9 +8,10 @@ type MailOptions = {
   subject: string;
   text: string;
   html?: string;
+  replyTo?: string | string[];
 };
 
-export async function sendMail({ to, subject, text, html }: MailOptions) {
+export async function sendMail({ to, subject, text, html, replyTo }: MailOptions) {
   const recipients = Array.isArray(to) ? to : [to];
 
   const response = await resend.emails.send({
@@ -18,7 +19,8 @@ export async function sendMail({ to, subject, text, html }: MailOptions) {
     to: recipients,
     subject,
     text,
-    html: html ?? text
+    html: html ?? text,
+    replyTo
   });
 
   if (response.error) {

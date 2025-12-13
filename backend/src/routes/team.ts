@@ -7,6 +7,8 @@ import { createUserSchema, teamUsersQuerySchema, updateUserSchema } from "../lib
 import { sendMail } from "../lib/mailer";
 import { env } from "../env";
 import { recordAuditLog } from "../lib/audit";
+import { getRequestOrgId } from "../lib/org";
+import { getPlanLimits } from "../lib/org-limits";
 
 const teamRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -49,8 +51,11 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
+      const orgId = getRequestOrgId(request);
       const where: Prisma.UserWhereInput =
-        filters.length > 0 ? { AND: filters } : {};
+        filters.length > 0
+          ? { AND: [{ memberships: { some: { organizationId: orgId } } }, ...filters] }
+          : { memberships: { some: { organizationId: orgId } } };
 
       const [users, total] = await Promise.all([
         prisma.user.findMany({
@@ -99,6 +104,23 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
 
       const { name, email, role, teamRoles, isActive, password } = parsedBody.data;
       const finalPassword = password ?? generatePassword();
+      const orgId = getRequestOrgId(request);
+
+      const org = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { plan: true }
+      });
+      const plan = org?.plan ?? "free";
+      const limits = getPlanLimits(plan);
+      if (limits.maxMembers !== undefined) {
+        const memberCount = await prisma.membership.count({ where: { organizationId: orgId } });
+        if (memberCount >= limits.maxMembers) {
+          return reply.status(402).send({
+            error: true,
+            message: `Member limit reached for ${plan} plan. Please upgrade to add more members.`
+          });
+        }
+      }
 
       try {
         const user = await prisma.user.create({
@@ -120,6 +142,25 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
             createdAt: true,
             updatedAt: true
           }
+        });
+
+        const membershipRole =
+          role === "admin" ? "owner" : role === "operator" ? "editor" : "viewer";
+
+        await prisma.membership.upsert({
+          where: {
+            userId_organizationId: {
+              userId: user.id,
+              organizationId: orgId
+            }
+          },
+          create: {
+            id: `m-${user.id}`,
+            userId: user.id,
+            organizationId: orgId,
+            role: membershipRole
+          },
+          update: {}
         });
 
         let emailStatus: "queued" | "delivered" | "failed" | "skipped" = "queued";

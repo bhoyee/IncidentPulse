@@ -6,6 +6,7 @@ import {
   transitionMaintenanceEvents
 } from "./maintenance";
 import { emitStatusSnapshot } from "./realtime";
+import { DEFAULT_ORG_ID } from "./org";
 
 export type PublicIncident = {
   id: string;
@@ -46,6 +47,7 @@ export type PublicMaintenanceEvent = {
 };
 
 export type StatusSnapshot = {
+  organizationId?: string;
   state: "operational" | "partial_outage" | "major_outage";
   uptime24h: number;
   payload: {
@@ -65,7 +67,10 @@ export type StatusSnapshot = {
 
 const STATUS_STALE_SECONDS = 15;
 
-export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma): Promise<StatusSnapshot> {
+export async function computeStatusSnapshot(
+  prisma: PrismaClient = defaultPrisma,
+  organizationId: string = DEFAULT_ORG_ID
+): Promise<StatusSnapshot> {
   const now = new Date();
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
@@ -74,6 +79,7 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
   const [activeIncidents, incidentsLast24hCount, services, maintenanceEvents] = await Promise.all([
     prisma.incident.findMany({
       where: {
+        organizationId,
         status: {
           not: "resolved"
         }
@@ -92,16 +98,19 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
     }),
     prisma.incident.count({
       where: {
+        organizationId,
         createdAt: {
           gte: since
         }
       }
     }),
     prisma.service.findMany({
+      where: { organizationId },
       orderBy: { name: "asc" }
     }),
     prisma.maintenanceEvent.findMany({
       where: {
+        organizationId,
         status: {
           in: ["scheduled", "in_progress"]
         },
@@ -163,6 +172,7 @@ export async function computeStatusSnapshot(prisma: PrismaClient = defaultPrisma
   const uptime24h = calculateUptime(activeIncidents);
 
   return {
+    organizationId,
     state: overallState,
     uptime24h,
     payload: {
@@ -220,13 +230,16 @@ function calculateUptime(incidents: Incident[]): number {
   return Math.max(0, 100 - Math.min(downtimeWeight, 95));
 }
 
-export async function refreshStatusCache(prisma: PrismaClient = defaultPrisma): Promise<StatusSnapshot> {
-  const snapshot = await computeStatusSnapshot(prisma);
+export async function refreshStatusCache(
+  prisma: PrismaClient = defaultPrisma,
+  organizationId: string = DEFAULT_ORG_ID
+): Promise<StatusSnapshot> {
+  const snapshot = await computeStatusSnapshot(prisma, organizationId);
 
   await prisma.statusCache.upsert({
-    where: { id: "global-status-cache" },
+    where: { id: `status-${organizationId}` },
     create: {
-      id: "global-status-cache",
+      id: `status-${organizationId}`,
       state: snapshot.state,
       uptime24h: snapshot.uptime24h,
       payload: snapshot.payload
@@ -242,21 +255,26 @@ export async function refreshStatusCache(prisma: PrismaClient = defaultPrisma): 
   return snapshot;
 }
 
-export async function fetchFreshStatus(prisma: PrismaClient = defaultPrisma): Promise<StatusSnapshot> {
+export async function fetchFreshStatus(
+  prisma: PrismaClient = defaultPrisma,
+  organizationId: string = DEFAULT_ORG_ID
+): Promise<StatusSnapshot> {
   const cache = await prisma.statusCache.findUnique({
-    where: { id: "global-status-cache" }
+    where: { id: `status-${organizationId}` }
   });
 
   if (!cache) {
-    return refreshStatusCache(prisma);
+    return refreshStatusCache(prisma, organizationId);
   }
 
   const [latestIncident, latestUpdate] = await Promise.all([
     prisma.incident.findFirst({
+      where: { organizationId },
       orderBy: { updatedAt: "desc" },
       select: { updatedAt: true }
     }),
     prisma.incidentUpdate.findFirst({
+      where: { incident: { organizationId } },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true }
     })
@@ -272,15 +290,16 @@ export async function fetchFreshStatus(prisma: PrismaClient = defaultPrisma): Pr
   const isTimerStale = Math.abs(Date.now() - cacheUpdatedAt) / 1000 > STATUS_STALE_SECONDS;
 
   if (isActivityStale || isTimerStale) {
-    return refreshStatusCache(prisma);
+    return refreshStatusCache(prisma, organizationId);
   }
 
   const payload = cache.payload as Record<string, unknown>;
   if (!("services" in payload) || !("scheduled_maintenance" in payload)) {
-    return refreshStatusCache(prisma);
+    return refreshStatusCache(prisma, organizationId);
   }
 
   return {
+    organizationId,
     state: cache.state,
     uptime24h: cache.uptime24h,
     payload: payload as StatusSnapshot["payload"]

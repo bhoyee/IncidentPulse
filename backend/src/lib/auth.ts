@@ -34,6 +34,9 @@ export type SessionTokenPayload = {
   role: User["role"];
   email: string;
   name: string;
+  orgId: string;
+  membershipRole: string;
+  isDemo?: boolean;
 };
 
 export function toSafeUser(

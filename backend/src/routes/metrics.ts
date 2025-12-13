@@ -2,18 +2,21 @@ import type { FastifyPluginAsync } from "fastify";
 import { prisma } from "../lib/db";
 import { refreshStatusCache } from "../lib/status";
 import { getWebhookMetrics } from "../lib/webhook-metrics";
+import { getRequestOrgId } from "../lib/org";
 
 const metricsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/sla",
     { preHandler: fastify.authenticate },
-    async (_request, reply) => {
+    async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       const now = new Date();
       const startOfDay = new Date(now);
       startOfDay.setHours(0, 0, 0, 0);
 
       const incidents = await prisma.incident.findMany({
         where: {
+          organizationId: orgId,
           createdAt: {
             gte: startOfDay
           }
@@ -46,7 +49,8 @@ const metricsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/analytics",
     { preHandler: fastify.authenticate },
-    async (_request, reply) => {
+    async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       const now = new Date();
       const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const last90Days = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
@@ -54,6 +58,7 @@ const metricsRoutes: FastifyPluginAsync = async (fastify) => {
       const [incidents, severityGroups, serviceGroups, weeklyTrend, monthlyTrend] = await Promise.all([
         prisma.incident.findMany({
           where: {
+            organizationId: orgId,
             createdAt: {
               gte: last30Days
             }
@@ -68,18 +73,20 @@ const metricsRoutes: FastifyPluginAsync = async (fastify) => {
         }),
         prisma.incident.groupBy({
           by: ["severity"],
+          where: { organizationId: orgId },
           _count: { _all: true }
         }),
         prisma.incident.groupBy({
           by: ["serviceId"],
+          where: { organizationId: orgId },
           _count: { _all: true }
         }),
         prisma.$queryRaw<
           Array<{ bucket: Date; count: number }>
-        >`SELECT DATE_TRUNC('week', "createdAt")::date AS bucket, COUNT(*)::int AS count FROM "Incident" WHERE "createdAt" >= ${last90Days} GROUP BY bucket ORDER BY bucket`,
+        >`SELECT DATE_TRUNC('week', "createdAt")::date AS bucket, COUNT(*)::int AS count FROM "Incident" WHERE "organizationId" = ${orgId} AND "createdAt" >= ${last90Days} GROUP BY bucket ORDER BY bucket`,
         prisma.$queryRaw<
           Array<{ bucket: Date; count: number }>
-        >`SELECT DATE_TRUNC('month', "createdAt")::date AS bucket, COUNT(*)::int AS count FROM "Incident" WHERE "createdAt" >= ${last90Days} GROUP BY bucket ORDER BY bucket`
+        >`SELECT DATE_TRUNC('month', "createdAt")::date AS bucket, COUNT(*)::int AS count FROM "Incident" WHERE "organizationId" = ${orgId} AND "createdAt" >= ${last90Days} GROUP BY bucket ORDER BY bucket`
       ]);
 
       const firstResponseDurations = incidents
@@ -92,6 +99,7 @@ const metricsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const services = await prisma.service.findMany({
         where: {
+          organizationId: orgId,
           id: {
             in: serviceGroups.map((group) => group.serviceId).filter(Boolean) as string[]
           }

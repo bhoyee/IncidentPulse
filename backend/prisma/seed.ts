@@ -1,5 +1,6 @@
 // backend/prisma/seed.ts
 import { PrismaClient, IncidentStatus, Severity } from "@prisma/client";
+import { ensureDefaultOrganization, DEFAULT_ORG_ID } from "../src/lib/org";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -33,6 +34,14 @@ const demoUsers = [
     role: "admin" as const,
     password: "admin123",
     teamRoles: ["Admin"]
+  },
+  {
+    email: "salisu.adeboye@gmail.com",
+    name: "Super Admin",
+    role: "admin" as const,
+    password: "Temp@1234",
+    teamRoles: ["Platform Admin"],
+    isSuperAdmin: true
   },
   {
     email: "admin@demo.incidentpulse.com",
@@ -187,6 +196,7 @@ async function seedUsers() {
         name: user.name,
         role: user.role,
         teamRoles: user.teamRoles,
+        isSuperAdmin: Boolean((user as any).isSuperAdmin),
         passwordHash,
         isActive: true
       },
@@ -196,6 +206,7 @@ async function seedUsers() {
         role: user.role,
         passwordHash,
         teamRoles: user.teamRoles,
+        isSuperAdmin: Boolean((user as any).isSuperAdmin),
         isActive: true
       }
     });
@@ -213,14 +224,19 @@ async function seedUsers() {
 
 async function seedServices() {
   const serviceRecords: Record<string, string> = {};
+  const defaultOrg = await ensureDefaultOrganization();
 
   for (const service of demoServices) {
     const record = await prisma.service.upsert({
-      where: { slug: service.slug },
+      where: { slug_organizationId: { slug: service.slug, organizationId: DEFAULT_ORG_ID } },
       update: {
+        organizationId: defaultOrg.id,
         description: service.description
       },
-      create: service
+      create: {
+        ...service,
+        organizationId: defaultOrg.id
+      }
     });
 
     serviceRecords[service.slug] = record.id;

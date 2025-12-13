@@ -5,6 +5,14 @@ export const loginSchema = z.object({
   password: z.string().min(8).max(128)
 });
 
+export const signupSchema = z.object({
+  name: z.string().min(2).max(120),
+  email: z.string().email(),
+  password: z.string().min(10).max(128),
+  orgName: z.string().min(2).max(120).optional(),
+  orgSlug: z.string().regex(/^[a-z0-9-]+$/i, "Slug can contain letters, numbers and dashes").min(2).max(64).optional()
+});
+
 export const createIncidentSchema = z.object({
   title: z.string().min(3).max(120),
   severity: z.enum(["low", "medium", "high", "critical"]),
@@ -170,4 +178,8 @@ export const auditLogQuerySchema = z.object({
   search: z.string().min(2).max(120).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25)
+});
+
+export const membershipUpdateSchema = z.object({
+  role: z.enum(["owner", "admin", "editor", "viewer"])
 });

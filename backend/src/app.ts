@@ -6,6 +6,7 @@ import rawBody from "fastify-raw-body";
 import fastifyJwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
+import rateLimit from "@fastify/rate-limit";
 import { env } from "./env";
 import { databaseHealthCheck } from "./lib/db";
 import { getSessionCookieName } from "./lib/auth";
@@ -16,10 +17,18 @@ import publicRoutes from "./routes/public";
 import metricsRoutes from "./routes/metrics";
 import teamRoutes from "./routes/team";
 import integrationsRoutes from "./routes/integrations";
+import apiKeysRoutes from "./routes/api-keys";
+import billingRoutes from "./routes/billing";
 import webhooksRoutes from "./routes/webhooks";
 import servicesRoutes from "./routes/services";
 import maintenanceRoutes from "./routes/maintenance";
 import auditRoutes from "./routes/audit";
+import organizationsRoutes from "./routes/organizations";
+import supportRoutes from "./routes/support";
+import platformRoutes from "./routes/platform";
+import { enforceOrgRateLimit } from "./lib/org-rate-limit";
+import { recordTraffic, persistTraffic } from "./lib/traffic-metrics";
+import { recordPublicVisit } from "./lib/visitor-metrics";
 import {
   ensureUploadsRootSync,
   MAX_ATTACHMENT_BYTES,
@@ -45,12 +54,18 @@ export function buildApp() {
   });
 
   fastify.register(sensible);
-  fastify.register(rawBody, {
-    field: "rawBody",
-    global: false,
-    encoding: false,
-    runFirst: true
+  fastify.register(rateLimit, {
+    max: 100,
+    timeWindow: "1 minute"
   });
+  if (process.env.NODE_ENV !== "test") {
+    fastify.register(rawBody, {
+      field: "rawBody",
+      global: false,
+      encoding: false,
+      runFirst: true
+    });
+  }
   fastify.register(cookie);
   fastify.register(cors, {
     origin: env.FRONTEND_URL,
@@ -74,6 +89,10 @@ export function buildApp() {
     root: uploadsRoot,
     prefix: "/uploads/",
     decorateReply: false
+  });
+
+  fastify.addHook("onRequest", async (request) => {
+    (request as any).startTime = Date.now();
   });
 
   if (hasDemoEmails()) {
@@ -118,6 +137,28 @@ export function buildApp() {
         message: "Unauthorized"
       });
     }
+
+    // Block access for suspended or deleted orgs (non-super-admins).
+    try {
+      if (request.user?.orgId && !request.user?.isSuperAdmin) {
+        const { prisma } = await import("./lib/db");
+        const org = (await prisma.organization.findUnique({
+          where: { id: request.user.orgId }
+        })) as any;
+        if (org && (org.isDeleted || org.status === "suspended")) {
+          return reply.status(403).send({
+            error: true,
+            message: "Organization is suspended"
+          });
+        }
+        const rateLimitResult = await enforceOrgRateLimit(request, reply);
+        if (rateLimitResult) {
+          return rateLimitResult;
+        }
+      }
+    } catch (err) {
+      request.log.warn({ err }, "Org status check failed");
+    }
   });
 
   fastify.decorate("authorize", (roles: Array<"admin" | "operator" | "viewer">) => {
@@ -133,6 +174,16 @@ export function buildApp() {
         });
       }
     };
+  });
+
+  fastify.decorate("requireSuperAdmin", async (request, reply) => {
+    if (!request.user?.isSuperAdmin) {
+      request.log.warn({ userId: request.user?.id }, "Super admin required");
+      return reply.status(403).send({
+        error: true,
+        message: "Forbidden"
+      });
+    }
   });
 
   fastify.get("/health", async (_request, reply) => {
@@ -151,9 +202,33 @@ export function buildApp() {
   fastify.register(teamRoutes, { prefix: "/team" });
   fastify.register(servicesRoutes, { prefix: "/services" });
   fastify.register(integrationsRoutes, { prefix: "/integrations" });
+  fastify.register(apiKeysRoutes, { prefix: "/api-keys" });
+  fastify.register(billingRoutes, { prefix: "/billing" });
   fastify.register(webhooksRoutes, { prefix: "/webhooks" });
   fastify.register(maintenanceRoutes, { prefix: "/maintenance" });
   fastify.register(auditRoutes, { prefix: "/audit" });
+  fastify.register(organizationsRoutes, { prefix: "/organizations" });
+  fastify.register(supportRoutes, { prefix: "/support" });
+  fastify.register(platformRoutes, { prefix: "/platform" });
+
+  fastify.addHook("onResponse", async (request, reply) => {
+    const route = request.routerPath || request.raw.url || "unknown";
+    const durationMs =
+      typeof reply.getResponseTime === "function" ? reply.getResponseTime() : Date.now() - (request as any).startTime || 0;
+    const orgId = (request as any).user?.orgId ?? undefined;
+    recordTraffic(route, reply.statusCode, durationMs, orgId);
+    void persistTraffic(route, reply.statusCode, durationMs, orgId);
+
+    // Lightweight public visit logging for anonymous GETs
+    if (request.method === "GET" && !request.user && route.startsWith("/")) {
+      // Avoid logging API routes; keep to public pages/status/docs
+      const skip = route.startsWith("/api") || route.startsWith("/metrics") || route.startsWith("/auth");
+      if (!skip) {
+        const ua = request.headers["user-agent"];
+        recordPublicVisit(route, request.ip, typeof ua === "string" ? ua : undefined);
+      }
+    }
+  });
 
   registerIncidentEscalationWatcher(fastify);
 

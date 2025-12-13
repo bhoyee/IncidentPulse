@@ -26,6 +26,8 @@ import { emitIncidentEvent, onIncidentEvent } from "../lib/realtime";
 import { refreshStatusCache } from "../lib/status";
 import type { IncidentNotificationContext } from "../lib/incident-notifier";
 import type { IncidentRealtimePayload } from "../lib/realtime";
+import { getRequestOrgId } from "../lib/org";
+import { getPlanLimits } from "../lib/org-limits";
 
 const MAX_ATTACHMENTS_PER_UPDATE = 5;
 
@@ -37,6 +39,7 @@ function serializeIncidentRealtime(
     title: incident.title,
     severity: incident.severity,
     status: incident.status,
+    organizationId: (incident as IncidentNotificationContext & { organizationId?: string }).organizationId,
     service: incident.service
       ? {
           id: incident.service.id,
@@ -102,6 +105,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
     "/",
     { preHandler: fastify.authenticate },
     async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       const parseQuery = incidentQuerySchema.safeParse(request.query);
       if (!parseQuery.success) {
         return reply.status(400).send({
@@ -186,7 +190,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const where: Prisma.IncidentWhereInput =
-        filters.length > 0 ? { AND: filters } : {};
+        filters.length > 0 ? { AND: [{ organizationId: orgId }, ...filters] } : { organizationId: orgId };
 
       const [incidents, total] = await Promise.all([
         prisma.incident.findMany({
@@ -242,6 +246,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
     "/",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin", "operator"])] },
     async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       const parsedBody = createIncidentSchema.safeParse(request.body);
       if (!parsedBody.success) {
         return reply.status(400).send({
@@ -253,6 +258,28 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       const { assignedToId, categories, impactScope, ...incidentPayload } = parsedBody.data;
 
       const admins = await loadActiveAdmins();
+
+      const org = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { plan: true }
+      });
+      const limits = getPlanLimits(org?.plan ?? "free");
+      if (limits.maxIncidentsPerMonth !== undefined) {
+        const since = new Date();
+        since.setDate(1);
+        const incidentCount = await prisma.incident.count({
+          where: {
+            organizationId: orgId,
+            createdAt: { gte: since }
+          }
+        });
+        if (incidentCount >= limits.maxIncidentsPerMonth) {
+          return reply.status(402).send({
+            error: true,
+            message: `Incident limit reached for this month on the ${org?.plan ?? "free"} plan. Please upgrade.`
+          });
+        }
+      }
 
       let resolvedAssignedToId: string | null = null;
       if (request.user.role === "admin") {
@@ -274,8 +301,8 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
 
-      const service = await prisma.service.findUnique({
-        where: { id: incidentPayload.serviceId }
+      const service = await prisma.service.findFirst({
+        where: { id: incidentPayload.serviceId, organizationId: orgId }
       });
 
       if (!service) {
@@ -287,6 +314,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const incident = await prisma.incident.create({
         data: {
+          organizationId: orgId,
           ...incidentPayload,
           ...(categories ? { categories } : {}),
           ...(impactScope ? { impactScope } : {}),
@@ -310,6 +338,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         actorId: request.user.id,
         actorEmail: request.user.email,
         actorName: request.user.name,
+        organizationId: orgId,
         targetType: "incident",
         targetId: incident.id,
         metadata: {
@@ -337,9 +366,10 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (request, reply) => {
       const id = request.params as { id: string };
+      const orgId = getRequestOrgId(request);
 
       const incident = await prisma.incident.findUnique({
-        where: { id: id.id },
+        where: { id: id.id, organizationId: orgId },
         include: {
           createdBy: {
             select: {
@@ -427,6 +457,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [fastify.authenticate, fastify.authorize(["admin", "operator"])] },
     async (request, reply) => {
       const id = request.params as { id: string };
+      const orgId = getRequestOrgId(request);
       const parsedBody = updateIncidentSchema.safeParse(request.body);
 
       if (!parsedBody.success) {
@@ -437,7 +468,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const existing = await prisma.incident.findUnique({
-        where: { id: id.id },
+        where: { id: id.id, organizationId: orgId },
         select: {
           id: true,
           status: true,
@@ -550,8 +581,8 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           });
         }
 
-        const service = await prisma.service.findUnique({
-          where: { id: incomingServiceId },
+        const service = await prisma.service.findFirst({
+          where: { id: incomingServiceId, organizationId: orgId },
           select: { id: true }
         });
 
@@ -587,7 +618,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         resolvedAssignedToId !== null;
 
       const incident = await prisma.incident.update({
-        where: { id: id.id },
+        where: { id: id.id, organizationId: orgId },
         data: {
           ...updatePayload,
           ...(parsedBody.data.categories === undefined ? {} : { categories: categories ?? [] }),
@@ -616,6 +647,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           actorId: request.user.id,
           actorEmail: request.user.email,
           actorName: request.user.name,
+          organizationId: orgId,
           targetType: "incident",
           targetId: incident.id,
           metadata: {
@@ -629,6 +661,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           actorId: request.user.id,
           actorEmail: request.user.email,
           actorName: request.user.name,
+          organizationId: orgId,
           targetType: "incident",
           targetId: incident.id,
           metadata: { status: incident.status }
@@ -639,6 +672,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
           actorId: request.user.id,
           actorEmail: request.user.email,
           actorName: request.user.name,
+          organizationId: orgId,
           targetType: "incident",
           targetId: incident.id,
           metadata: { status: incident.status }
@@ -657,6 +691,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         actorId: request.user.id,
         actorEmail: request.user.email,
         actorName: request.user.name,
+        organizationId: orgId,
         targetType: "incident",
         targetId: incident.id,
         metadata: {
@@ -913,9 +948,10 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
       const params = request.params as { id: string };
+      const orgId = getRequestOrgId(request);
 
       const existing = await prisma.incident.findUnique({
-        where: { id: params.id },
+        where: { id: params.id, organizationId: orgId },
         select: {
           id: true,
           severity: true,
@@ -941,6 +977,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         actorId: request.user.id,
         actorEmail: request.user.email,
         actorName: request.user.name,
+        organizationId: orgId,
         targetType: "incident",
         targetId: existing.id,
         metadata: {
@@ -963,6 +1000,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
     "/stream",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin", "operator", "viewer"])] },
     async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       reply.raw.setHeader("Content-Type", "text/event-stream");
       reply.raw.setHeader("Cache-Control", "no-cache");
       reply.raw.setHeader("Connection", "keep-alive");
@@ -977,6 +1015,13 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       }, 15000);
 
       const detach = onIncidentEvent((event) => {
+        // event may contain incident payload; only stream same-org events
+        if ("incident" in event) {
+          const evIncident = (event as { incident?: { organizationId?: string } }).incident;
+          if (evIncident?.organizationId && evIncident.organizationId !== orgId) {
+            return;
+          }
+        }
         reply.raw.write(`event: incident\n`);
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
       });

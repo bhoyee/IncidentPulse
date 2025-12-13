@@ -1,7 +1,7 @@
 import type { IntegrationSettings } from "@prisma/client";
 import { prisma } from "./db";
+import { DEFAULT_ORG_ID } from "./org";
 
-const SETTINGS_ID = "global-integrations";
 const CACHE_TTL_MS = 30 * 1000;
 
 type CachedSettings = {
@@ -9,21 +9,30 @@ type CachedSettings = {
   expiresAt: number;
 };
 
-let cache: CachedSettings = {
-  value: null,
-  expiresAt: 0
-};
+const cache: Record<string, CachedSettings> = {};
 
-export async function getIntegrationSettings(force = false): Promise<IntegrationSettings | null> {
-  if (!force && cache.expiresAt > Date.now()) {
-    return cache.value;
+function getCache(orgId: string): CachedSettings {
+  if (!cache[orgId]) {
+    cache[orgId] = { value: null, expiresAt: 0 };
+  }
+  return cache[orgId];
+}
+
+export async function getIntegrationSettings(
+  organizationId = DEFAULT_ORG_ID,
+  force = false
+): Promise<IntegrationSettings | null> {
+  const bucket = getCache(organizationId);
+
+  if (!force && bucket.expiresAt > Date.now()) {
+    return bucket.value;
   }
 
   const value = await prisma.integrationSettings.findUnique({
-    where: { id: SETTINGS_ID }
+    where: { organizationId }
   });
 
-  cache = {
+  cache[organizationId] = {
     value,
     expiresAt: Date.now() + CACHE_TTL_MS
   };
@@ -40,12 +49,13 @@ type IntegrationSettingsInput = {
 };
 
 export async function saveIntegrationSettings(
-  data: IntegrationSettingsInput
+  data: IntegrationSettingsInput,
+  organizationId = DEFAULT_ORG_ID
 ): Promise<IntegrationSettings> {
   const updated = await prisma.integrationSettings.upsert({
-    where: { id: SETTINGS_ID },
+    where: { organizationId },
     create: {
-      id: SETTINGS_ID,
+      organizationId,
       ...data
     },
     update: {
@@ -53,7 +63,7 @@ export async function saveIntegrationSettings(
     }
   });
 
-  cache = {
+  cache[organizationId] = {
     value: updated,
     expiresAt: Date.now() + CACHE_TTL_MS
   };

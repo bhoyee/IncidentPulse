@@ -7,6 +7,7 @@ declare module "fastify" {
     authorize: (
       roles: Array<"admin" | "operator" | "viewer">
     ) => import("fastify").RouteHandlerMethod;
+    requireSuperAdmin: import("fastify").RouteHandlerMethod;
   }
 
   interface FastifyRequest {
@@ -15,7 +16,10 @@ declare module "fastify" {
       role: "admin" | "operator" | "viewer";
       email: string;
       name: string;
+      orgId?: string;
+      membershipRole?: string;
       isDemo?: boolean;
+      isSuperAdmin?: boolean;
     };
     rawBody?: Buffer;
   }
@@ -28,14 +32,20 @@ declare module "@fastify/jwt" {
       role: "admin" | "operator" | "viewer";
       email: string;
       name: string;
+      orgId?: string;
+      membershipRole?: string;
       isDemo?: boolean;
+      isSuperAdmin?: boolean;
     };
     user: {
       id: string;
       role: "admin" | "operator" | "viewer";
       email: string;
       name: string;
+      orgId?: string;
+      membershipRole?: string;
       isDemo?: boolean;
+      isSuperAdmin?: boolean;
     };
   }
 }

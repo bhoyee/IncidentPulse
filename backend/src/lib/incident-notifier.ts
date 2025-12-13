@@ -3,9 +3,15 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { sendMail } from "./mailer";
 import { env } from "../env";
+import { DEFAULT_ORG_ID } from "./org";
 import { getIntegrationSettings } from "./integration-settings";
 
 export const incidentNotificationInclude = {
+  organization: {
+    select: {
+      id: true
+    }
+  },
   assignedTo: {
     select: {
       id: true,
@@ -220,7 +226,8 @@ export async function notifyIncidentIntegrations(
   event: IntegrationEvent,
   metadata: IntegrationMetadata = {}
 ): Promise<void> {
-  const settings = await getIntegrationSettings();
+  const orgId = incident.organization?.id ?? DEFAULT_ORG_ID;
+  const settings = await getIntegrationSettings(orgId);
   if (!settings) {
     return;
   }

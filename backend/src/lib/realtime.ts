@@ -7,6 +7,7 @@ export type IncidentRealtimePayload = {
   title: string;
   severity: Incident["severity"];
   status: Incident["status"];
+  organizationId?: string;
   service: {
     id: string;
     name: string;

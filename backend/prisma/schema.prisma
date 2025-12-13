@@ -40,6 +40,13 @@ enum MaintenanceStatus {
   canceled
 }
 
+enum MembershipRole {
+  owner
+  admin
+  editor
+  viewer
+}
+
 enum AuditAction {
   user_login
   user_created
@@ -54,6 +61,22 @@ enum AuditAction {
   maintenance_created
   maintenance_updated
   maintenance_canceled
+  platform_org_status_updated
+  platform_org_plan_updated
+  platform_org_deleted
+  platform_user_suspended
+  platform_user_password_reset
+}
+
+enum Plan {
+  free
+  pro
+  enterprise
+}
+
+enum OrgStatus {
+  active
+  suspended
 }
 
 model User {
@@ -61,6 +84,7 @@ model User {
   name         String
   email        String    @unique
   role         Role      @default(viewer)
+  isSuperAdmin Boolean   @default(false)
   passwordHash String
   teamRoles    String[]  @default([])
   isActive     Boolean   @default(true)
@@ -71,8 +95,78 @@ model User {
   maintenanceEvents MaintenanceEvent[] @relation("MaintenanceCreatedBy")
   auditLogs    AuditLog[] @relation("AuditActor")
   passwordResetTokens PasswordResetToken[]
+  memberships  Membership[]
+  supportTicketsCreated SupportTicket[] @relation("SupportTicketCreated")
+  supportTicketsAssigned SupportTicket[] @relation("SupportAssignee")
+  supportComments SupportComment[]
+  supportAttachments SupportAttachment[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+model Organization {
+  id        String        @id @default(uuid())
+  name      String
+  slug      String        @unique
+  plan      Plan          @default(free)
+  rateLimitPerMinute Int  @default(600)
+  status    OrgStatus     @default(active)
+  isDeleted Boolean       @default(false)
+  deletedAt DateTime?
+  stripeCustomerId String? @unique
+  members   Membership[]
+  services  Service[]
+  incidents Incident[]
+  maintenanceEvents MaintenanceEvent[]
+  auditLogs AuditLog[]
+  integrationSettings IntegrationSettings?
+  apiKeys   ApiKey[]
+  supportTickets SupportTicket[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model PublicVisit {
+  id         String   @id @default(uuid())
+  path       String
+  ip         String?
+  userAgent  String?
+  country    String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([path])
+}
+
+model TrafficStat {
+  id          Int       @id @default(autoincrement())
+  orgId       String?
+  route       String
+  bucket      DateTime
+  count       Int       @default(0)
+  errorCount  Int       @default(0)
+  totalMs     Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([orgId, route, bucket])
+  @@index([bucket])
+  @@index([orgId])
+}
+
+model Membership {
+  id             String        @id @default(uuid())
+  userId         String
+  organizationId String
+  role           MembershipRole @default(viewer)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
 }
 
 model Incident {
@@ -81,6 +175,8 @@ model Incident {
   severity        Severity         @default(medium)
   status          IncidentStatus   @default(open)
   description     String
+  organizationId  String  @default("org-default")
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdById     String
   createdBy       User             @relation("IncidentCreator", fields: [createdById], references: [id])
   assignedToId    String?
@@ -104,6 +200,7 @@ model Incident {
   @@index([createdAt])
   @@index([assignedToId])
   @@index([serviceId])
+  @@index([organizationId])
 }
 
 model IncidentUpdate {
@@ -130,6 +227,8 @@ model StatusCache {
 
 model IntegrationSettings {
   id               String   @id @default("global-integrations")
+  organizationId   String   @default("org-default")
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   slackWebhookUrl  String?
   discordWebhookUrl String?
   teamsWebhookUrl  String?
@@ -137,17 +236,24 @@ model IntegrationSettings {
   telegramChatId   String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@unique([organizationId])
 }
 
 model Service {
   id          String    @id @default(uuid())
   name        String
-  slug        String    @unique
+  slug        String
   description String?
+  organizationId String @default("org-default")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   incidents   Incident[]
   maintenance MaintenanceEvent[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([organizationId])
+  @@unique([slug, organizationId])
 }
 
 model MaintenanceEvent {
@@ -158,6 +264,8 @@ model MaintenanceEvent {
   startsAt      DateTime
   endsAt        DateTime
   appliesToAll  Boolean           @default(true)
+  organizationId String @default("org-default")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   serviceId     String?
   service       Service?          @relation(fields: [serviceId], references: [id])
   createdById   String?
@@ -168,6 +276,7 @@ model MaintenanceEvent {
   @@index([startsAt])
   @@index([endsAt])
   @@index([status])
+  @@index([organizationId])
 }
 
 model AuditLog {
@@ -177,6 +286,8 @@ model AuditLog {
   actor       User?       @relation("AuditActor", fields: [actorId], references: [id])
   actorEmail  String?
   actorName   String?
+  organizationId String @default("org-default")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   targetType  String?
   targetId    String?
   metadata    Json?
@@ -185,6 +296,21 @@ model AuditLog {
   @@index([createdAt])
   @@index([action])
   @@index([targetType, targetId])
+  @@index([organizationId])
+}
+
+model ApiKey {
+  id             String      @id @default(dbgenerated("gen_random_uuid()"))
+  organizationId String      @db.Text
+  name           String
+  hashedKey      String
+  lastUsedAt     DateTime?
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
 }
 
 model IncidentAttachment {
@@ -215,4 +341,82 @@ model PasswordResetToken {
   createdAt  DateTime @default(now())
 
   @@index([userId])
+}
+
+model InviteToken {
+  id             String   @id
+  organizationId String
+  email          String
+  role           String
+  codeHash       String
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime @default(now())
+}
+
+enum SupportStatus {
+  open
+  pending
+  closed
+}
+
+enum SupportPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+model SupportTicket {
+  id              String           @id @default(uuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById     String?
+  createdBy       User?            @relation("SupportTicketCreated", fields: [createdById], references: [id])
+  subject         String
+  body            String           @db.Text
+  status          SupportStatus    @default(open)
+  priority        SupportPriority  @default(medium)
+  category        String?
+  assigneeId      String?
+  assignee        User?            @relation("SupportAssignee", fields: [assigneeId], references: [id])
+  attachments     SupportAttachment[]
+  comments        SupportComment[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([priority])
+  @@index([assigneeId])
+}
+
+model SupportComment {
+  id          String        @id @default(uuid())
+  ticketId    String
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId    String?
+  author      User?         @relation(fields: [authorId], references: [id])
+  body        String        @db.Text
+  isInternal  Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+
+  @@index([ticketId])
+  @@index([authorId])
+}
+
+model SupportAttachment {
+  id          String        @id @default(uuid())
+  ticketId    String
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+  filename    String
+  mimeType    String
+  size        Int
+  path        String
+  createdAt   DateTime      @default(now())
+
+  @@index([ticketId])
+  @@index([uploadedById])
 }

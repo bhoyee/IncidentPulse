@@ -13,6 +13,7 @@ import {
 } from "../lib/maintenance";
 import { recordAuditLog } from "../lib/audit";
 import { refreshStatusCache } from "../lib/status";
+import { getRequestOrgId } from "../lib/org";
 
 const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
   const refreshStatusSnapshot = async () => {
@@ -26,6 +27,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
     "/",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       const parsedQuery = maintenanceQuerySchema.safeParse(request.query);
       if (!parsedQuery.success) {
         return reply.status(400).send({
@@ -39,7 +41,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       const { status, window = "upcoming", serviceId } = parsedQuery.data;
       const now = new Date();
 
-      const filters: Prisma.MaintenanceEventWhereInput = {};
+      const filters: Prisma.MaintenanceEventWhereInput = { organizationId: orgId };
       if (status) {
         filters.status = status;
       }
@@ -79,6 +81,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
     "/",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       const parsedBody = createMaintenanceSchema.safeParse(request.body);
       if (!parsedBody.success) {
         const flattened = parsedBody.error.flatten();
@@ -93,14 +96,27 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const payload = parsedBody.data;
+      const serviceId = payload.appliesToAll === false ? payload.serviceId ?? null : null;
+      if (serviceId) {
+        const service = await prisma.service.findFirst({
+          where: { id: serviceId, organizationId: orgId }
+        });
+        if (!service) {
+          return reply.status(400).send({
+            error: true,
+            message: "Service not found for this organization"
+          });
+        }
+      }
       const event = await prisma.maintenanceEvent.create({
         data: {
+          organizationId: orgId,
           title: payload.title,
           description: payload.description ?? null,
           startsAt: new Date(payload.startsAt),
           endsAt: new Date(payload.endsAt),
           appliesToAll: payload.appliesToAll ?? true,
-          serviceId: payload.appliesToAll === false ? payload.serviceId ?? null : null,
+          serviceId,
           createdById: request.user.id
         },
         include: maintenanceEventInclude
@@ -112,6 +128,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
         actorId: request.user.id,
         actorEmail: request.user.email,
         actorName: request.user.name,
+        organizationId: orgId,
         targetType: "maintenance",
         targetId: event.id,
         metadata: {
@@ -135,6 +152,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
       const params = request.params as { id: string };
+      const orgId = getRequestOrgId(request);
       const parsedBody = updateMaintenanceSchema.safeParse(request.body);
       if (!parsedBody.success) {
         const flattened = parsedBody.error.flatten();
@@ -149,8 +167,30 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const payload = parsedBody.data;
+      const existing = await prisma.maintenanceEvent.findFirst({
+        where: { id: params.id, organizationId: orgId }
+      });
+      if (!existing) {
+        return reply.status(404).send({
+          error: true,
+          message: "Maintenance event not found"
+        });
+      }
+
+      if (payload.serviceId) {
+        const service = await prisma.service.findFirst({
+          where: { id: payload.serviceId, organizationId: orgId }
+        });
+        if (!service) {
+          return reply.status(400).send({
+            error: true,
+            message: "Service not found for this organization"
+          });
+        }
+      }
+
       const event = await prisma.maintenanceEvent.update({
-        where: { id: params.id },
+        where: { id: params.id, organizationId: orgId },
         data: {
           ...(payload.title === undefined ? {} : { title: payload.title }),
           ...(payload.description === undefined ? {} : { description: payload.description ?? null }),
@@ -176,6 +216,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
         actorId: request.user.id,
         actorEmail: request.user.email,
         actorName: request.user.name,
+        organizationId: orgId,
         targetType: "maintenance",
         targetId: event.id,
         metadata: {
@@ -198,8 +239,9 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
       const params = request.params as { id: string };
+      const orgId = getRequestOrgId(request);
       const existing = await prisma.maintenanceEvent.findUnique({
-        where: { id: params.id },
+        where: { id: params.id, organizationId: orgId },
         include: maintenanceEventInclude
       });
 
@@ -218,7 +260,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const updated = await prisma.maintenanceEvent.update({
-        where: { id: params.id },
+        where: { id: params.id, organizationId: orgId },
         data: {
           status: "canceled"
         },
@@ -230,6 +272,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
         actorId: request.user.id,
         actorEmail: request.user.email,
         actorName: request.user.name,
+        organizationId: orgId,
         targetType: "maintenance",
         targetId: updated.id,
         metadata: {

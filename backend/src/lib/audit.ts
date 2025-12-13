@@ -22,6 +22,7 @@ export async function recordAuditLog(
     actorId?: string | null;
     actorEmail?: string | null;
     actorName?: string | null;
+    organizationId?: string | null;
     targetType?: string | null;
     targetId?: string | null;
     metadata?: AuditMetadata;
@@ -35,6 +36,7 @@ export async function recordAuditLog(
         actorId: params.actorId ?? null,
         actorEmail: params.actorEmail ?? null,
         actorName: params.actorName ?? null,
+        organizationId: params.organizationId ?? "org-default",
         targetType: params.targetType ?? null,
         targetId: params.targetId ?? null,
         metadata: params.metadata ?? Prisma.DbNull

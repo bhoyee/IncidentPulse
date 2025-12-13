@@ -1,10 +1,22 @@
 import type { FastifyPluginAsync } from "fastify";
 import { fetchFreshStatus } from "../lib/status";
 import { onStatusSnapshot } from "../lib/realtime";
+import { DEFAULT_ORG_ID, findOrgIdBySlug } from "../lib/org";
 
 const publicRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/status", async (_request, reply) => {
-    const snapshot = await fetchFreshStatus();
+    const { orgId: queryOrgId, orgSlug } =
+      (_request.query as { orgId?: string; orgSlug?: string } | undefined) ?? {};
+
+    let orgId: string | null = null;
+    if (orgSlug) {
+      orgId = await findOrgIdBySlug(orgSlug);
+    }
+    if (!orgId) {
+      orgId = queryOrgId && queryOrgId.length > 0 ? queryOrgId : DEFAULT_ORG_ID;
+    }
+
+    const snapshot = await fetchFreshStatus(undefined, orgId);
 
     return reply.send({
       error: false,
@@ -17,6 +29,17 @@ const publicRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get("/status/stream", async (_request, reply) => {
+    const { orgId: queryOrgId, orgSlug } =
+      (_request.query as { orgId?: string; orgSlug?: string } | undefined) ?? {};
+
+    let orgId: string | null = null;
+    if (orgSlug) {
+      orgId = await findOrgIdBySlug(orgSlug);
+    }
+    if (!orgId) {
+      orgId = queryOrgId && queryOrgId.length > 0 ? queryOrgId : DEFAULT_ORG_ID;
+    }
+
     reply.raw.setHeader("Content-Type", "text/event-stream");
     reply.raw.setHeader("Cache-Control", "no-cache");
     reply.raw.setHeader("Connection", "keep-alive");
@@ -26,7 +49,7 @@ const publicRoutes: FastifyPluginAsync = async (fastify) => {
     }
     reply.hijack();
 
-    const initial = await fetchFreshStatus();
+    const initial = await fetchFreshStatus(undefined, orgId);
     reply.raw.write(
       `event: status\n` +
         `data: ${JSON.stringify({
@@ -44,6 +67,9 @@ const publicRoutes: FastifyPluginAsync = async (fastify) => {
     }, 15000);
 
     const detach = onStatusSnapshot((snapshot) => {
+      if (snapshot.organizationId && snapshot.organizationId !== orgId) {
+        return;
+      }
       reply.raw.write(
         `event: status\n` +
           `data: ${JSON.stringify({

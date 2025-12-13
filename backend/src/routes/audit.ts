@@ -3,12 +3,14 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/db";
 import { auditLogQuerySchema } from "../lib/validation";
 import { onAuditLogCreated } from "../lib/audit";
+import { getRequestOrgId } from "../lib/org";
 
 const auditRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/logs",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       const parsedQuery = auditLogQuerySchema.safeParse(request.query);
       if (!parsedQuery.success) {
         return reply.status(400).send({
@@ -36,7 +38,10 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const where = filters.length > 0 ? { AND: filters } : undefined;
+      const where: Prisma.AuditLogWhereInput =
+        filters.length > 0
+          ? { AND: [{ organizationId: orgId }, ...filters] }
+          : { organizationId: orgId };
 
       const [logs, total] = await Promise.all([
         prisma.auditLog.findMany({
@@ -65,6 +70,7 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
     "/logs/stream",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
+      const orgId = getRequestOrgId(request);
       reply.raw.setHeader("Content-Type", "text/event-stream");
       reply.raw.setHeader("Cache-Control", "no-cache");
       reply.raw.setHeader("Connection", "keep-alive");
@@ -79,6 +85,9 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
       }, 15000);
 
       const detach = onAuditLogCreated((log) => {
+        if (log.organizationId !== orgId) {
+          return;
+        }
         reply.raw.write(`event: audit\n`);
         reply.raw.write(`data: ${JSON.stringify(log)}\n\n`);
       });
