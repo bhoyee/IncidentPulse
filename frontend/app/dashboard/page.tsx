@@ -13,7 +13,18 @@ import {
   MagnifyingGlassIcon,
   PencilSquareIcon,
   TrashIcon,
-  ArrowRightOnRectangleIcon
+  ArrowRightOnRectangleIcon,
+  HomeIcon,
+  UsersIcon,
+  BuildingOfficeIcon,
+  ServerStackIcon,
+  WrenchScrewdriverIcon,
+  ShieldCheckIcon,
+  ChartBarIcon,
+  CpuChipIcon,
+  CreditCardIcon,
+  LifebuoyIcon,
+  KeyIcon
 } from "@heroicons/react/24/solid";
 import {
   ResponsiveContainer,
@@ -883,6 +894,16 @@ function DashboardPageContent() {
   const criticalIncidents = incidents.filter(i => i.severity === 'critical').length;
   const activeIncidents = incidents.filter(i => i.status !== 'resolved').length;
   const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
+  const planLabel = session?.isSuperAdmin ? "super-admin" : "free";
+  const servicesUsed = servicesQuery.data ? servicesQuery.data.length : 0;
+  const membersUsed = teamUsers.length;
+  const incidentsUsed = incidents.length;
+  const planLimits =
+    planLabel === "free"
+      ? { services: 2, members: 3, incidents: 50, orgs: 1 }
+      : planLabel === "super-admin"
+      ? { services: undefined, members: undefined, incidents: undefined, orgs: undefined }
+      : { services: 20, members: 25, incidents: 1000, orgs: 5 };
 
   const statMappings = [
     { label: "Active Incidents", value: activeIncidents, colorClass: "bg-yellow-800/30 text-yellow-300", icon: "ACT" },
@@ -902,91 +923,72 @@ function DashboardPageContent() {
   };
 
   const navigation = [
-    {
-      id: "incidents",
-      name: "Incidents",
-      description: "Live incident feed",
-      icon: "INC",
-      current: activeTab === "incidents",
-      onClick: () => setActiveTab("incidents")
-    },
+    { id: "incidents", name: "Incidents", description: "Live incident feed", icon: "INC" },
     ...(isAdmin
       ? [
-          {
-            id: "team",
-            name: "Team Management",
-            description: "Manage roles & assignments",
-            icon: "TEAM",
-            current: activeTab === "team",
-            onClick: () => setActiveTab("team")
-          }
+          { id: "team", name: "Team Management", description: "Manage roles & assignments", icon: "TEAM" },
+          { id: "organizations", name: "Organizations", description: "Switch orgs & invites", icon: "ORG" },
+          { id: "services", name: "Services", description: "Manage monitored services", icon: "SRV" },
+          { id: "maintenance", name: "Maintenance", description: "Planned downtime & notices", icon: "MAINT" },
+          { id: "audit", name: "System Audit", description: "Track logins & changes", icon: "AUD" },
+          { id: "analytics", name: "Analytics", description: "Trends & reporting", icon: "DATA" },
+          { id: "webhooks", name: "Automation", description: "Webhooks & notifications", icon: "AUTO" },
+          { id: "billing", name: "Billing", description: "Plan & usage", icon: "BILL" },
+          { id: "support", name: "Support", description: "Support tickets", icon: "SUP" },
+          { id: "apiKeys", name: "API Keys", description: "Org keys", icon: "KEY" }
         ]
       : []),
-    ...(isAdmin
+    { id: "profile", name: "Profile", description: "Your account", icon: "USER" },
+    { id: "password", name: "Security", description: "Update password", icon: "SEC" },
+    ...(session?.isSuperAdmin
       ? [
-          {
-            id: "maintenance",
-            name: "Maintenance",
-            description: "Planned downtime & notices",
-            icon: "MAINT",
-            current: activeTab === "maintenance",
-            onClick: () => setActiveTab("maintenance")
-          }
+          { id: "platformOps", name: "Platform", description: "Super-admin controls", icon: "OPS" },
+          { id: "platformSupport", name: "Platform Support", description: "All tenant tickets", icon: "SADM" },
+          { id: "platformBilling", name: "Platform Billing", description: "Tenant billing", icon: "BILL" }
         ]
-      : []),
-    ...(isAdmin
-      ? [
-          {
-            id: "audit",
-            name: "System Audit",
-            description: "Track logins & changes",
-            icon: "AUD",
-            current: activeTab === "audit",
-            onClick: () => setActiveTab("audit")
-          }
-        ]
-      : []),
-    ...(isAdmin
-      ? [
-          {
-            id: "analytics",
-            name: "Analytics",
-            description: "Trends & reporting",
-            icon: "DATA",
-            current: activeTab === "analytics",
-            onClick: () => setActiveTab("analytics")
-          }
-        ]
-      : []),
-    ...(isAdmin
-      ? [
-          {
-            id: "webhooks",
-            name: "Automation",
-            description: "Webhooks & notifications",
-            icon: "AUTO",
-            current: activeTab === "webhooks",
-            onClick: () => setActiveTab("webhooks")
-          }
-        ]
-      : []),
-    {
-      id: "profile",
-      name: "Profile",
-      description: "Your account",
-      icon: "USER",
-      current: activeTab === "profile",
-      onClick: () => setActiveTab("profile")
-    },
-    {
-      id: "password",
-      name: "Security",
-      description: "Update password",
-      icon: "SEC",
-      current: activeTab === "password",
-      onClick: () => setActiveTab("password")
+      : [])
+  ].map((item) => ({
+    ...item,
+    current: activeTab === item.id,
+    onClick: () => setActiveTab(item.id as typeof activeTab)
+  }));
+
+  const iconFor = (id: string, current: boolean) => {
+    const base = "h-5 w-5";
+    const cls = current ? "text-white" : "text-gray-500 group-hover:text-blue-400";
+    switch (id) {
+      case "incidents":
+        return <HomeIcon className={`${base} ${cls}`} />;
+      case "team":
+        return <UsersIcon className={`${base} ${cls}`} />;
+      case "organizations":
+        return <BuildingOfficeIcon className={`${base} ${cls}`} />;
+      case "services":
+        return <ServerStackIcon className={`${base} ${cls}`} />;
+      case "maintenance":
+        return <WrenchScrewdriverIcon className={`${base} ${cls}`} />;
+      case "audit":
+        return <ShieldCheckIcon className={`${base} ${cls}`} />;
+      case "analytics":
+        return <ChartBarIcon className={`${base} ${cls}`} />;
+      case "webhooks":
+        return <CpuChipIcon className={`${base} ${cls}`} />;
+      case "billing":
+        return <CreditCardIcon className={`${base} ${cls}`} />;
+      case "support":
+        return <LifebuoyIcon className={`${base} ${cls}`} />;
+      case "apiKeys":
+        return <KeyIcon className={`${base} ${cls}`} />;
+      case "platformOps":
+        return <ShieldCheckIcon className={`${base} ${cls}`} />;
+      case "platformSupport":
+        return <LifebuoyIcon className={`${base} ${cls}`} />;
+      case "platformBilling":
+        return <CreditCardIcon className={`${base} ${cls}`} />;
+      default:
+        return <HomeIcon className={`${base} ${cls}`} />;
     }
-  ];
+  };
 
   const handleCreateTeamMember = async (payload: NewTeamMemberPayload) => {
     if (!payload.name || !payload.email) {
@@ -1134,26 +1136,21 @@ function DashboardPageContent() {
               <button
                 key={item.id}
                 onClick={item.onClick}
-                className={`w-full text-left py-3 px-3 rounded-xl transition duration-200 flex items-center group ${
-                  item.current
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/40'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                }`}
-              >
-                <span className={`mr-3 w-5 h-5 font-bold flex items-center justify-center ${
-                  item.current ? 'text-white' : 'text-gray-500 group-hover:text-blue-400'
-                }`}>
-                  {item.icon}
-                </span>
-                <div>
-                  <span className="text-sm font-semibold block">{item.name}</span>
-                  <span className={`text-xs ${item.current ? 'text-blue-200' : 'text-gray-500'}`}>
-                    {item.description}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </nav>
+          className={`w-full text-left py-3 px-3 rounded-xl transition duration-200 flex items-center group ${
+            item.current
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/40'
+              : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+          }`}
+        >
+          <span className="mr-3 flex h-5 w-5 items-center justify-center">
+            {iconFor(item.id, item.current)}
+          </span>
+          <div>
+            <span className="text-sm font-semibold block">{item.name}</span>
+          </div>
+        </button>
+      ))}
+    </nav>
           <div className="px-4 pb-6">
             <button
               type="button"
@@ -1293,6 +1290,45 @@ function DashboardPageContent() {
                     </div>
                   </div>
                 ))}
+                <div className="bg-gray-800 border border-blue-700 rounded-xl p-5 shadow-lg flex items-start justify-between col-span-full lg:col-span-4">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-400">Plan</p>
+                    <p className="text-2xl font-bold text-white capitalize">{planLabel}</p>
+                    <div className="grid grid-cols-2 gap-3 text-xs text-blue-200">
+                      <div>
+                        <p className="font-semibold text-gray-300">Services</p>
+                        <p className="font-mono text-sm">
+                          {servicesUsed}
+                          {planLimits.services ? ` / ${planLimits.services}` : " (no cap)"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-300">Members</p>
+                        <p className="font-mono text-sm">
+                          {membersUsed}
+                          {planLimits.members ? ` / ${planLimits.members}` : " (no cap)"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-300">Incidents</p>
+                        <p className="font-mono text-sm">
+                          {incidentsUsed}
+                          {planLimits.incidents ? ` / ${planLimits.incidents}` : " (no cap)"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-300">Orgs</p>
+                        <p className="font-mono text-sm">
+                          1
+                          {planLimits.orgs ? ` / ${planLimits.orgs}` : " (no cap)"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-blue-900/40 text-blue-200">
+                    <CreditCardIcon className="h-6 w-6" />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -2387,4 +2423,3 @@ export default function DashboardPage() {
     </Suspense>
   );
 }
-
