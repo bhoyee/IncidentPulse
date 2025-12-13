@@ -14,10 +14,12 @@ A modern incident-response stack that pairs an authenticated operations console 
 2. [Architecture](#architecture)
 3. [Screenshots & Demo](#screenshots--demo)
 4. [Quick Start](#quick-start)
+5. [Admin Onboarding](#admin-onboarding)
 5. [Environment Variables](#environment-variables)
 6. [Automation & Webhooks](#automation--webhooks)
 7. [Testing & Tooling](#testing--tooling)
 8. [Deployment Checklist](#deployment-checklist)
+9. [Scaling Notes](#scaling-notes)
 9. [Roadmap](#roadmap)
 10. [Community & Feedback](#community--feedback)
 11. [Contributing](#contributing)
@@ -84,6 +86,11 @@ cp frontend/.env.local.example frontend/.env.local
 
 Fill the variables described below (JWT secret, database URL, etc.).
 
+### Single-tenant vs multi-tenant
+- Default (single-tenant): no flag needed; a default org is seeded; org switching/limits are effectively off.
+- Multi-tenant: set `MULTI_TENANT_ENABLED=true` on the backend. Sessions/JWT include `orgId`; org switcher appears; plan limits apply (Free 2 services/3 members/50 incidents, Pro 20/25/1000, Enterprise uncapped).
+- Public status per tenant: `/status/[slug]` (preferred) or `/status?orgId=`/`?orgSlug=`. Invites are created in the Organizations tab; accept at `/accept-invite?code=...`.
+
 ### 3. Run database + migrations
 
 ```bash
@@ -106,6 +113,10 @@ npm run dev            # http://localhost:3000
 ```
 
 Log in at `/login` with the seeded admin account, then explore the dashboard and public status page.
+
+## Admin Onboarding
+
+New to IncidentPulse? Start with the step-by-step admin guide in [`docs/admin-onboarding.md`](docs/admin-onboarding.md). It covers setting up your org, services, invites, incidents, maintenance, public status pages, billing (if enabled), API keys, and audit checks.
 
 ## Run with Docker
 
@@ -187,6 +198,8 @@ You can also reference these images directly in your own `docker-compose.yml` by
 | `WEBHOOK_SYSTEM_USER_ID`| Optional UUID of the “Automation” user that owns webhook-created incidents                 |
 | `UPLOAD_DIR`            | Directory for evidence attachments (default `uploads/`)                                    |
 | `DEMO_USER_EMAILS`      | Optional comma-separated list of emails that should be treated as read-only demo accounts |
+| `STRIPE_SECRET_KEY` / `STRIPE_PRICE_PRO` / `STRIPE_PRICE_ENTERPRISE` | Enable Stripe checkout/portal/invoices in Billing tab |
+| `STRIPE_PORTAL_RETURN_URL` | Where Stripe should return users after portal/checkout (e.g., `http://localhost:3000/dashboard#billing`) |
 | `RESEND_API_KEY`        | Resend API key for transactional emails (used for password resets)                        |
 
 ### Frontend (`frontend/.env.local`)
@@ -194,6 +207,19 @@ You can also reference these images directly in your own `docker-compose.yml` by
 | Variable                 | Description                                       |
 |--------------------------|---------------------------------------------------|
 | `NEXT_PUBLIC_API_BASE`   | Base URL of the backend (e.g. `http://localhost:4000`) |
+| `NEXT_PUBLIC_STATUS_STREAM` | Optional override for status SSE URL               |
+| `MULTI_TENANT_ENABLED`   | Enable multi-tenant UI surfaces (org switcher, etc.) |
+
+More details: [docs/multi-tenant.md](docs/multi-tenant.md).
+
+### Data export (per org)
+
+```
+cd backend
+npm run export:org -- --org <org-id> --out ./org-export.json
+```
+
+Uses the configured `DATABASE_URL`; override before running if you want a separate export database.
 
 ## Automation & Webhooks
 
@@ -230,6 +256,10 @@ CI (`.github/workflows/*.yml`) runs lint, type-check, build, and Playwright suit
   - Run `npx prisma db seed` (or custom seed) for sample services / incidents.
 - Status page cron
   - Schedule the SLA recompute task (hit `/metrics/recompute` or invoke the internal job) to refresh uptime snapshots.
+
+## Scaling Notes
+
+See the lightweight guidance in [`docs/scaling.md`](docs/scaling.md). Most of the heavier infra (PgBouncer, Redis/queues, pub/sub, caching, partitioning) is optional until you see real load.
 
 ## Roadmap
 

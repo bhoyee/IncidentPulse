@@ -1,0 +1,69 @@
+Here’s a pragmatic milestone plan to add multi-tenant without breaking the single-tenant track, plus how to handle pricing and the landing page.
+
+Milestones (multi-tenant branch)
+
+M0: Architecture stub
+Add multi-tenant branch, doc an RFC (org/workspace model, tenant isolation rules, auth/roles, billing approach).
+Introduce feature flag MULTI_TENANT_ENABLED (no behavior change yet).
+M1: Data model & auth scoping
+Add organizations, memberships, roles tables.
+Add org_id to incidents, services, maintenance, audit logs, etc.
+Update queries to scope by org_id; seed migration for default org in single-tenant mode.
+Update JWT/session to carry org_id; enforce on every request.
+M2: Org provisioning & switching
+Routes/UI to create orgs (admin-only) and invite users (email + role).
+Org switcher in UI; display current org in header; guard all pages by org.
+Update audit log to include org_id.
+M3: Billing-ready hooks (no processor yet)
+Track plan on org (free, pro, enterprise), seats, and limits (incidents per month, services, webhooks).
+Enforce soft limits in API; return informative errors.
+Add “Upgrade” surface in UI; stub webhooks for billing events.
+M4: Pricing & self-serve (Stripe-ready)
+Integrate Stripe Customer+Subscription webhooks (test keys), map to org plans.
+Add “Manage billing” link (Stripe portal), update limits enforcement.
+Admin billing page: plan status, usage meters, invoices.
+M5: Shared features parity
+Ensure incidents/maintenance/audit/analytics paginate and filter per org.
+Update automation/webhooks to sign with org context.
+Add org-scoped API keys.
+M6: Hardening & release
+Tenant isolation tests (cannot cross-org read/write).
+Load-test basic paths; data export per org.
+Docs for deployment (single vs multi-tenant toggle), migration guide.
+Tag branch release (e.g., tenant-v0.1.0).
+Pricing model (suggested)
+
+Free: 1 org, 3 users, 2 services, capped incidents/month, no SSO, no audit exports.
+Pro: up to 20 users, more services, webhooks/integrations, audit export, uptime SLA-lite.
+Enterprise: SSO/SAML, custom limits, dedicated support.
+Graceful degradation: API returns 402-style errors with upgrade CTA; UI shows usage meters.
+Landing page approach
+
+Keep a single landing page with a “Self-host free” + “Cloud (multi-tenant)” toggle.
+Add a “Pricing” section (even simple) to set expectations for the cloud path; self-host stays MIT/Apache.
+Add a “Multi-tenant cloud coming soon” ribbon now; when live, add “Start free trial” CTA.
+Update hero/feature grid to mention “Workspaces/organizations” and “Role-based access.”
+Add a docs link for single-tenant self-host + a “Cloud” link (or waitlist form) for multi-tenant.
+Coexistence strategy
+
+Keep main as single-tenant; multi-tenant branch accumulates changes.
+Use MULTI_TENANT_ENABLED to allow one codebase to run either mode at deploy time.
+Tag releases separately (v0.x for single-tenant, tenant-v0.x for multi-tenant).
+Landing page can serve both audiences with two CTAs (self-host vs cloud).
+If you want, I can: 1) draft the M0 RFC and env flag, 2) scaffold migrations for org/membership, or 3) mock the landing page updates (copy + layout) on a branch for review. Let me know which to start with.###
+
+
+
+================================
+=============================
+
+M3: “Upgrade” surface is basic (banner/warning); no billing event stubs yet.
+M4: No Stripe or billing portal links; no admin billing page/invoices.
+M5: Org-scoped API keys not added.
+M6: Tenant isolation test exists but needs Postgres running to pass; no load tests/data export; no tagged release yet.
+If you want full completion:
+
+Wire billing stubs (Stripe test keys, portal link, billing page, usage meters) and/or API-key scoping.
+Add org-scoped API keys.
+Ensure tests run by bringing up Postgres on 5433 and running npm test.
+Optional: docs menu link + release tag.
