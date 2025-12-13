@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@lib/api-client";
+import { useSession } from "./useSession";
 import type { AuditLog } from "@lib/types";
 
 type AuditLogResponse = {
@@ -24,8 +25,9 @@ export type AuditLogFilters = {
 };
 
 export function useAuditLogs(enabled: boolean, filters: AuditLogFilters) {
+  const { data: session } = useSession();
   return useQuery({
-    queryKey: ["audit-logs", filters],
+    queryKey: ["audit-logs", session?.orgId, filters],
     queryFn: async () => {
       const response = await apiClient.get<AuditLogResponse>("/audit/logs", {
         params: {

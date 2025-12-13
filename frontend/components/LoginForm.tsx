@@ -22,7 +22,7 @@ type FormState = {
   password: string;
 };
 
-export function LoginForm() {
+export function LoginForm({ onModeChange }: { onModeChange?: (mode: "login" | "signup") => void }) {
   const router = useRouter();
   const invalidateSession = useInvalidateSession();
   const [form, setForm] = useState<FormState>({ email: "", password: "" });
@@ -102,6 +102,13 @@ export function LoginForm() {
         >
           Forgot password?
         </Link>
+        <button
+          type="button"
+          onClick={() => onModeChange?.("signup")}
+          className="ml-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+        >
+          Create account
+        </button>
       </div>
     </form>
   );

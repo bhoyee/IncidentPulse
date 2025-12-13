@@ -8,9 +8,12 @@ export type SessionUser = {
   name: string;
   email: string;
   role: "admin" | "operator" | "viewer";
+  orgId?: string;
+  membershipRole?: string;
   teamRoles: string[];
   isActive: boolean;
   isDemo?: boolean;
+  isSuperAdmin?: boolean;
 };
 
 type SessionResponse = {
@@ -31,7 +34,10 @@ export function useSession() {
   return useQuery({
     queryKey: ["session"],
     queryFn: fetchSession,
-    staleTime: 1000 * 60 * 5
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    retry: false
   });
 }
 

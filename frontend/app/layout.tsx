@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AppShell } from "@components/AppShell";
 import { Providers } from "./providers";
+import { ToastProvider } from "@components/Toast";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,9 +20,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.className}>
       <body className="min-h-screen bg-[#0f1729] text-slate-100">
-        <Providers>
-          <AppShell>{children}</AppShell>
-        </Providers>
+        <ToastProvider>
+          <Providers>
+            <AppShell>{children}</AppShell>
+          </Providers>
+        </ToastProvider>
       </body>
     </html>
   );

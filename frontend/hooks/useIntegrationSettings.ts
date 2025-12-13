@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@lib/api-client";
+import { useSession } from "./useSession";
 
 export type IntegrationSettings = {
   slackWebhookUrl: string;
@@ -7,6 +8,7 @@ export type IntegrationSettings = {
   teamsWebhookUrl: string;
   telegramBotToken: string;
   telegramChatId: string;
+  stripePortalUrl?: string;
 };
 
 type SettingsResponse = {
@@ -23,8 +25,9 @@ type UpdatePayload = {
 };
 
 export function useIntegrationSettings(enabled: boolean) {
+  const { data: session } = useSession();
   return useQuery({
-    queryKey: ["integration-settings"],
+    queryKey: ["integration-settings", session?.orgId],
     queryFn: fetchIntegrationSettings,
     enabled
   });

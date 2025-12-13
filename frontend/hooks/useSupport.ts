@@ -1,0 +1,132 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@lib/api-client";
+
+export type SupportTicket = {
+  id: string;
+  subject: string;
+  body: string;
+  status: "open" | "pending" | "closed";
+  priority: "low" | "medium" | "high" | "urgent";
+  category?: string | null;
+  organizationId: string;
+  organization?: { id: string; name: string; slug?: string; plan?: string } | null;
+  assignee?: { id: string; name: string; email: string } | null;
+  createdBy?: { id: string; name: string; email: string } | null;
+  createdAt: string;
+  updatedAt: string;
+  comments?: Array<{
+    id: string;
+    body: string;
+    isInternal?: boolean;
+    createdAt: string;
+    author?: { id: string; name: string; email: string } | null;
+  }>;
+  attachments?: Array<{
+    id: string;
+    filename: string;
+    mimeType: string;
+    size: number;
+    path: string;
+    createdAt: string;
+  }>;
+};
+
+type TicketResponse = { error: boolean; data: SupportTicket[] };
+type TicketCreatePayload = { subject: string; body: string; priority?: string; category?: string };
+
+export function useOrgSupportTickets() {
+  return useQuery({
+    queryKey: ["support", "org"],
+    queryFn: async () => {
+      const res = await apiClient.get<TicketResponse>("/support");
+      return res.data.data;
+    }
+  });
+}
+
+export function usePlatformSupportTickets(
+  enabled: boolean,
+  filters?: { status?: string; orgId?: string }
+) {
+  return useQuery({
+    queryKey: ["support", "platform", filters?.status ?? "", filters?.orgId ?? ""],
+    queryFn: async () => {
+      const res = await apiClient.get<TicketResponse>("/support/platform", {
+        params: {
+          status: filters?.status || undefined,
+          orgId: filters?.orgId || undefined
+        }
+      });
+      return res.data.data;
+    },
+    enabled
+  });
+}
+
+export function useCreateSupportTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: TicketCreatePayload) => {
+      const res = await apiClient.post<{ error: boolean; data: SupportTicket }>("/support", payload);
+      return res.data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["support"] });
+    }
+  });
+}
+
+export function useAddSupportComment(scope: "org" | "platform" = "org") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { ticketId: string; body: string; isInternal?: boolean }) => {
+      const base = scope === "platform" ? "/support/platform" : "/support";
+      const res = await apiClient.post<{ error: boolean; data: { id: string } }>(
+        `${base}/${payload.ticketId}/comments`,
+        { body: payload.body, isInternal: payload.isInternal }
+      );
+      return res.data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["support"] });
+    }
+  });
+}
+
+export function useUpdateSupportStatus(scope: "org" | "platform" = "org") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { ticketId: string; status: "open" | "pending" | "closed" }) => {
+      const endpoint =
+        scope === "platform"
+          ? `/support/platform/${payload.ticketId}/status`
+          : `/support/${payload.ticketId}/status`;
+      const res = await apiClient.patch<{ error: boolean; message?: string; data?: SupportTicket }>(
+        endpoint,
+        { status: payload.status }
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["support"] });
+    }
+  });
+}
+
+export function useAssignSupportTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { ticketId: string; assigneeId?: string | null }) => {
+      const res = await apiClient.patch<{ error: boolean; data: SupportTicket }>(
+        `/support/platform/${payload.ticketId}/assign`,
+        { assigneeId: payload.assigneeId ?? null }
+      );
+      return res.data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["support"] });
+    }
+  });
+}

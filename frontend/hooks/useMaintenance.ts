@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@lib/api-client";
+import { useSession } from "./useSession";
 import type { MaintenanceEvent } from "@lib/types";
 
 type MaintenanceListResponse = {
@@ -27,8 +28,9 @@ export function useMaintenanceEvents(
   window: "upcoming" | "past" | "all" = "upcoming",
   options?: { enabled?: boolean }
 ) {
+  const { data: session } = useSession();
   return useQuery({
-    queryKey: ["maintenance-events", window],
+    queryKey: ["maintenance-events", session?.orgId, window],
     queryFn: async () => {
       const response = await apiClient.get<MaintenanceListResponse>("/maintenance", {
         params: { window }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowPathIcon,
   BoltIcon,
@@ -20,6 +20,7 @@ import { StatusBanner } from "@components/StatusBanner";
 import { PublicIncidentCard } from "@components/PublicIncidentCard";
 import { useStatus } from "@hooks/useStatus";
 import { useSession } from "@hooks/useSession";
+import { useRouter } from "next/navigation";
 
 const heroHighlights = [
   "Enterprise-grade incident management",
@@ -128,6 +129,9 @@ const platformHighlights = [
 export default function HomePage() {
   const { data, isLoading } = useStatus();
   const { data: session } = useSession();
+  const router = useRouter();
+  const [navLoading, setNavLoading] = useState(false);
+  const [heroLoading, setHeroLoading] = useState(false);
 
   const activeCount = useMemo(() => data?.data.active_incidents.length ?? 0, [data]);
   const maintenance = data?.data?.scheduled_maintenance ?? { active: [], upcoming: [] };
@@ -135,12 +139,17 @@ export default function HomePage() {
   const overallState = data?.meta.state;
   const year = new Date().getFullYear();
   const isAuthenticated = Boolean(session);
-  const primaryNavLabel = isAuthenticated ? "Dashboard" : "Sign In";
+  const statusHref = isAuthenticated && session?.orgId ? `/status?orgId=${session.orgId}` : "/status";
+  const statusLink =
+    isAuthenticated && session?.orgId
+      ? { pathname: "/status", query: { orgId: session.orgId } }
+      : "/status";
+  const primaryNavLabel = isAuthenticated ? "Dashboard" : "Start Free";
   const primaryNavHref = isAuthenticated ? "/dashboard" : "/login";
-  const heroPrimaryLabel = isAuthenticated ? "Open Dashboard" : "View Docs";
-  const heroPrimaryHref = isAuthenticated ? "/dashboard" : "/docs";
-  const heroSecondaryLabel = isAuthenticated ? "View Status Page" : "Star on GitHub";
-  const heroSecondaryHref = isAuthenticated ? "/status" : "https://github.com/bhoyee/IncidentPulse";
+  const heroPrimaryLabel = isAuthenticated ? "Open Dashboard" : "Create Workspace";
+  const heroPrimaryHref = isAuthenticated ? "/dashboard" : "/login";
+  const heroSecondaryLabel = isAuthenticated ? "View Status Page" : "View Docs";
+  const heroSecondaryHref = isAuthenticated ? statusHref : "/docs";
 
   return (
     <div className="min-h-screen bg-white w-full">
@@ -162,7 +171,7 @@ export default function HomePage() {
 
               {/* Navigation */}
               <nav className="hidden items-center space-x-8 md:flex">
-                <Link href="/status" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                <Link href={statusLink} className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
                   Status
                 </Link>
                 <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
@@ -170,6 +179,9 @@ export default function HomePage() {
                 </a>
                 <a href="#platform" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
                   Platform
+                </a>
+                <a href="#pricing" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+                  Pricing
                 </a>
                 <Link href="/docs" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
                   Documentation
@@ -187,17 +199,27 @@ export default function HomePage() {
               {/* Auth Buttons */}
               <div className="flex items-center space-x-4">
                 <Link
-                  href="/status"
+                  href={statusLink}
                   className="hidden text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors md:block"
                 >
                   View Status
                 </Link>
-                <Link
-                  href={primaryNavHref}
-                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors"
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (navLoading) return;
+                    setNavLoading(true);
+                    try {
+                      await router.push(primaryNavHref);
+                    } finally {
+                      setNavLoading(false);
+                    }
+                  }}
+                  className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-60 active:translate-y-px"
+                  disabled={navLoading}
                 >
-                  {primaryNavLabel}
-                </Link>
+                  {navLoading ? "Opening..." : primaryNavLabel}
+                </button>
               </div>
             </div>
           </div>
@@ -231,12 +253,22 @@ export default function HomePage() {
 
                 {/* CTA Buttons */}
                 <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
-                  <Link
-                    href={heroPrimaryHref}
-                    className="rounded-lg bg-blue-600 px-8 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors text-center"
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (heroLoading) return;
+                      setHeroLoading(true);
+                      try {
+                        await router.push(heroPrimaryHref);
+                      } finally {
+                        setHeroLoading(false);
+                      }
+                    }}
+                    className="rounded-lg bg-blue-600 px-8 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 text-center disabled:opacity-60 active:translate-y-px"
+                    disabled={heroLoading}
                   >
-                    {heroPrimaryLabel}
-                  </Link>
+                    {heroLoading ? "Opening..." : heroPrimaryLabel}
+                  </button>
                   <a
                     href={heroSecondaryHref}
                     className="rounded-lg border border-gray-300 bg-white px-8 py-3.5 text-base font-semibold text-gray-900 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors text-center"
@@ -320,13 +352,83 @@ export default function HomePage() {
                     </div>
                   )}
                   <Link
-                    href="/status"
+                    href={statusLink}
                     className="mt-4 flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     View Detailed Status
                     <PlayCircleIcon className="ml-2 h-4 w-4" />
                   </Link>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="bg-gray-50 py-20 w-full">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="w-full max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Simple pricing that scales</h2>
+              <p className="mt-3 text-lg text-gray-600">
+                Start free for self-host, upgrade when you need more services, members, and incidents.
+              </p>
+            </div>
+            <div className="grid gap-6 md:grid-cols-3">
+              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <p className="text-sm font-semibold text-blue-600">Free</p>
+                <p className="mt-2 text-3xl font-bold text-gray-900">$0</p>
+                <p className="text-sm text-gray-500 mb-4">Self-host & evaluate</p>
+                  <ul className="space-y-2 text-sm text-gray-700 mb-6">
+                    <li>- 2 services, 3 members</li>
+                    <li>- 50 incidents/month</li>
+                    <li>- Status page + maintenance</li>
+                    <li>- API keys & webhooks</li>
+                  </ul>
+                <Link
+                  href={heroPrimaryHref}
+                  className="block text-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                >
+                  Start free
+                </Link>
+              </div>
+              <div className="rounded-2xl border-2 border-blue-600 bg-white p-6 shadow-md relative">
+                <span className="absolute -top-3 right-4 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
+                  Most popular
+                </span>
+                <p className="text-sm font-semibold text-blue-600">Pro</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900">$29</p>
+                <p className="text-sm text-gray-500 mb-4">Stripe checkout in Billing tab</p>
+                  <ul className="space-y-2 text-sm text-gray-700 mb-6">
+                    <li>- 20 services, 25 members</li>
+                    <li>- 1,000 incidents/month</li>
+                    <li>- Priority support</li>
+                    <li>- Portal & invoices</li>
+                  </ul>
+                <a
+                  href="/dashboard#billing"
+                  className="block text-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700"
+                >
+                  Upgrade in app
+                </a>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <p className="text-sm font-semibold text-blue-600">Enterprise</p>
+                <p className="mt-2 text-3xl font-bold text-gray-900">Custom</p>
+                <p className="text-sm text-gray-500 mb-4">Tailored limits & support</p>
+                <ul className="space-y-2 text-sm text-gray-700 mb-6">
+                    <li>- Unlimited services & seats</li>
+                    <li>- SSO/SAML, audit exports</li>
+                    <li>- Dedicated support</li>
+                    <li>- Uptime SLA</li>
+                </ul>
+                <a
+                  href="mailto:team@incidentpulse.io"
+                  className="block text-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                >
+                  Talk to us
+                </a>
               </div>
             </div>
           </div>
@@ -425,7 +527,7 @@ export default function HomePage() {
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-semibold text-gray-900">Live Status Feed</h3>
                   <Link
-                    href="/status"
+                    href={statusLink}
                     className="text-sm font-medium text-blue-600 hover:text-blue-500 transition-colors"
                   >
                     View Full History
@@ -492,7 +594,7 @@ export default function HomePage() {
                 Everything you need for calm incident response
               </h2>
               <p className="mt-4 text-lg text-slate-300 max-w-3xl mx-auto">
-                Status pages, automation, evidence, analytics, and audits—all powered by the same backend so teams and customers stay aligned.
+                Status pages, automation, evidence, analytics, and audits - all powered by the same backend so teams and customers stay aligned.
               </p>
             </div>
 
@@ -571,7 +673,7 @@ export default function HomePage() {
                       <ul className="space-y-2 text-sm">
                         <li><a href="#features" className="text-gray-400 hover:text-white transition-colors">Features</a></li>
                         <li><a href="#platform" className="text-gray-400 hover:text-white transition-colors">Platform</a></li>
-                        <li><Link href="/status" className="text-gray-400 hover:text-white transition-colors">Status</Link></li>
+                        <li><Link href={statusLink} className="text-gray-400 hover:text-white transition-colors">Status</Link></li>
                         <li><Link href="/docs" className="text-gray-400 hover:text-white transition-colors">Documentation</Link></li>
                         <li>
                           <a

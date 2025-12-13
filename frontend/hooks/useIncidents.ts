@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@lib/api-client";
+import { useSession } from "./useSession";
 import type {
   Incident,
   IncidentAttachment,
@@ -67,9 +68,10 @@ export type IncidentPagination = {
 };
 
 export function useIncidents(filters?: IncidentFilters, pagination?: IncidentPagination) {
+  const { data: session } = useSession();
   const query = useMemo(
-    () => ["incidents", filters, pagination?.page, pagination?.pageSize] as const,
-    [filters, pagination?.page, pagination?.pageSize]
+    () => ["incidents", session?.orgId, filters, pagination?.page, pagination?.pageSize] as const,
+    [session?.orgId, filters, pagination?.page, pagination?.pageSize]
   );
   return useQuery({
     queryKey: query,
@@ -101,8 +103,9 @@ async function fetchIncidents(filters?: IncidentFilters, pagination?: IncidentPa
 }
 
 export function useIncidentDetail(id?: string) {
+  const { data: session } = useSession();
   return useQuery({
-    queryKey: ["incident", id],
+    queryKey: ["incident", session?.orgId, id],
     queryFn: () => fetchIncidentDetail(id!),
     enabled: Boolean(id)
   });

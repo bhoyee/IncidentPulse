@@ -1,13 +1,12 @@
 "use client";
 
-import { format } from "date-fns";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { useStatus } from "@hooks/useStatus";
 import { StatusBanner } from "@components/StatusBanner";
 import { PublicIncidentCard } from "@components/PublicIncidentCard";
 import type { MaintenanceEvent, StatusSnapshot } from "@lib/types";
-import { useOrganizations } from "@hooks/useOrganizations";
+import Link from "next/link";
+import { format } from "date-fns";
 
 const serviceTone: Record<StatusSnapshot["overall_state"], string> = {
   operational: "text-emerald-700 bg-emerald-50 border-emerald-100",
@@ -15,49 +14,15 @@ const serviceTone: Record<StatusSnapshot["overall_state"], string> = {
   major_outage: "text-red-700 bg-red-50 border-red-100"
 };
 
-export default function StatusPage() {
-  const { data: orgs } = useOrganizations();
-  const searchParams = useSearchParams();
-  const [orgFilter, setOrgFilter] = useState<string | undefined>(undefined);
+export default function StatusSlugPage({ params }: { params: { slug: string } }) {
+  const { slug } = params;
   const [orgSlug, setOrgSlug] = useState<string | undefined>(undefined);
-  const [shareLink, setShareLink] = useState<string>("");
-  const [initialized, setInitialized] = useState(false);
 
-  // Initialize org selection from URL (?orgId=) or localStorage.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const fromQuery = searchParams?.get("orgId") || undefined;
-    const fromSlug = searchParams?.get("orgSlug") || undefined;
-    const fromStorage = localStorage.getItem("status.orgId") || undefined;
-    setOrgFilter(fromQuery ?? fromStorage ?? undefined);
-    setOrgSlug(fromSlug ?? undefined);
-    setInitialized(true);
-  }, [searchParams]);
+    setOrgSlug(slug);
+  }, [slug]);
 
-  // Persist selection and keep the URL shareable.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!initialized) return;
-    const url = new URL(window.location.href);
-    if (orgFilter) {
-      url.searchParams.set("orgId", orgFilter);
-      localStorage.setItem("status.orgId", orgFilter);
-    } else {
-      url.searchParams.delete("orgId");
-      localStorage.removeItem("status.orgId");
-    }
-    if (orgSlug) {
-      url.searchParams.set("orgSlug", orgSlug);
-    } else {
-      url.searchParams.delete("orgSlug");
-    }
-    const nextUrl = url.toString();
-    window.history.replaceState(null, "", nextUrl);
-    setShareLink(nextUrl);
-  }, [initialized, orgFilter, orgSlug]);
-
-  const { data, isLoading } = useStatus(orgFilter, orgSlug);
-
+  const { data, isLoading, isError } = useStatus(undefined, orgSlug);
   const snapshot = data?.data;
   const services = snapshot?.services ?? [];
   const uptime = data?.meta.uptime24h ?? snapshot?.last_24h.uptime_percent ?? 100;
@@ -93,7 +58,7 @@ export default function StatusPage() {
           <p className="mt-2 text-xs text-slate-600">{event.description}</p>
         ) : null}
         <p className="mt-3 text-xs text-slate-500">
-          {start} → {end}
+          {start} – {end}
         </p>
       </div>
     );
@@ -102,40 +67,22 @@ export default function StatusPage() {
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Status</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              We keep this page updated in real-time to share the current health of our services.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500">Workspace</label>
-            <select
-              value={orgFilter ?? ""}
-              onChange={(e) => setOrgFilter(e.target.value || undefined)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">Default</option>
-              {(orgs ?? []).map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold text-slate-900">Status</h1>
+          <p className="text-sm text-slate-600">
+            Workspace: {slug}
+          </p>
+          <Link href={`/status?orgSlug=${encodeURIComponent(slug)}`} className="text-xs text-blue-600 underline">
+            Switch to selector view
+          </Link>
         </div>
-        <p className="text-xs text-slate-500">
-          Share this status page for the selected workspace:{" "}
-          {initialized && shareLink ? (
-            <span className="font-mono text-slate-700 break-all">{shareLink}</span>
-          ) : (
-            <span className="font-mono text-slate-500">Select a workspace to generate a link</span>
-          )}
-        </p>
       </div>
 
-      {isLoading || !snapshot ? (
+      {isError ? (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          Not found or unavailable.
+        </div>
+      ) : isLoading || !snapshot ? (
         <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
           Loading latest status...
         </div>
@@ -151,7 +98,7 @@ export default function StatusPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900">Scheduled maintenance</h2>
               <p className="text-xs text-slate-500">
-                {maintenance.active.length} active · {maintenance.upcoming.length} upcoming
+                {maintenance.active.length} active • {maintenance.upcoming.length} upcoming
               </p>
             </div>
             {maintenance.active.length === 0 && maintenance.upcoming.length === 0 ? (

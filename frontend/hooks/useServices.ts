@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@lib/api-client";
+import { useSession } from "./useSession";
 
 export type ServiceRecord = {
   id: string;
@@ -36,8 +37,9 @@ type UpdatePayload = {
 };
 
 export function useServices(enabled: boolean) {
+  const { data: session } = useSession();
   return useQuery({
-    queryKey: ["services"],
+    queryKey: ["services", session?.orgId],
     queryFn: fetchServices,
     enabled
   });
@@ -47,8 +49,16 @@ export function useCreateService() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: CreatePayload) => {
-      const response = await apiClient.post<ServiceResponse>("/services", payload);
-      return response.data.data;
+      try {
+        const response = await apiClient.post<ServiceResponse>("/services", payload);
+        return response.data.data;
+      } catch (error: unknown) {
+        const maybeError = error as { response?: { status?: number; data?: { message?: string } } };
+        if (maybeError?.response?.status === 402) {
+          throw new Error(maybeError.response.data?.message ?? "Service limit reached for your plan.");
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["services"] });
@@ -60,8 +70,16 @@ export function useUpdateService() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...payload }: UpdatePayload) => {
-      const response = await apiClient.patch<ServiceResponse>(`/services/${id}`, payload);
-      return response.data.data;
+      try {
+        const response = await apiClient.patch<ServiceResponse>(`/services/${id}`, payload);
+        return response.data.data;
+      } catch (error: unknown) {
+        const maybeError = error as { response?: { status?: number; data?: { message?: string } } };
+        if (maybeError?.response?.status === 402) {
+          throw new Error(maybeError.response.data?.message ?? "Service limit reached for your plan.");
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["services"] });

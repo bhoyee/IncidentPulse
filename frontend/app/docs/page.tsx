@@ -29,6 +29,7 @@ const docSections = [
   { id: "setup", label: "Setup Guide" },
   { id: "webhooks", label: "Webhook Automation" },
   { id: "api", label: "API Reference" },
+  { id: "multi-tenant", label: "Multi-tenant" },
   { id: "faq", label: "FAQ" },
   { id: "credits", label: "Credits" }
 ] as const;
@@ -438,6 +439,101 @@ X-Signature: <hex-hmac-from-WEBHOOK_HMAC_SECRET>
   }
 }`;
 
+const apiKeyNodeSample = `import fetch from "node-fetch";
+
+const apiKey = "ipk_xxxxxx";
+
+async function sendAlert() {
+  const res = await fetch("https://your-backend.com/webhooks/incidents", {
+    method: "POST",
+    headers: {
+      "Authorization": \`Bearer \${apiKey}\`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      service: "checkout",
+      severity: "high",
+      message: "Error rate exceeded 5%"
+    })
+  });
+  if (!res.ok) throw new Error(\`Failed: \${res.status}\`);
+}
+
+sendAlert();`;
+
+const apiKeyPythonSample = `import requests
+
+api_key = "ipk_xxxxxx"
+url = "https://your-backend.com/webhooks/incidents"
+
+payload = {
+    "service": "checkout",
+    "severity": "high",
+    "message": "Error rate exceeded 5%"
+}
+
+resp = requests.post(
+    url,
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    },
+    json=payload,
+    timeout=10,
+)
+resp.raise_for_status()`;
+
+const apiKeyGoSample = `package main
+
+import (
+  "bytes"
+  "encoding/json"
+  "net/http"
+)
+
+func main() {
+  body, _ := json.Marshal(map[string]string{
+    "service": "checkout",
+    "severity": "high",
+    "message": "Error rate exceeded 5%",
+  })
+  req, _ := http.NewRequest("POST", "https://your-backend.com/webhooks/incidents", bytes.NewBuffer(body))
+  req.Header.Set("Authorization", "Bearer ipk_xxxxxx")
+  req.Header.Set("Content-Type", "application/json")
+  http.DefaultClient.Do(req)
+}`;
+
+const apiKeyPhpSample = `$apiKey = "ipk_xxxxxx";
+$url = "https://your-backend.com/webhooks/incidents";
+
+$payload = [
+  "service" => "checkout",
+  "severity" => "high",
+  "message" => "Error rate exceeded 5%",
+];
+
+$ch = curl_init($url);
+curl_setopt_array($ch, [
+  CURLOPT_POST => true,
+  CURLOPT_HTTPHEADER => [
+    "Authorization: Bearer $apiKey",
+    "Content-Type: application/json",
+  ],
+  CURLOPT_POSTFIELDS => json_encode($payload),
+  CURLOPT_RETURNTRANSFER => true,
+]);
+$resp = curl_exec($ch);
+curl_close($ch);`;
+
+const apiKeyCSharpSample = `using var client = new HttpClient();
+
+var req = new HttpRequestMessage(HttpMethod.Post, "https://your-backend.com/webhooks/incidents");
+req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "ipk_xxxxxx");
+req.Content = new StringContent("{\\\"service\\\":\\\"checkout\\\",\\\"severity\\\":\\\"high\\\",\\\"message\\\":\\\"Error rate exceeded 5%\\\"}", System.Text.Encoding.UTF8, "application/json");
+
+var resp = await client.SendAsync(req);
+resp.EnsureSuccessStatusCode();`;
+
 const githubActionsSnippet = `- name: Notify IncidentPulse when workflow fails
   if: failure()
   env:
@@ -509,7 +605,8 @@ const credits = {
   owner: "Developed by the IncidentPulse team for demonstration and portfolio scenarios.",
   links: [
     { label: "Backend README", href: "https://github.com/your-org/incident-pulse/blob/main/README.md" },
-    { label: "Report an issue", href: "mailto:team@incidentpulse.io" }
+    { label: "Report an issue", href: "mailto:team@incidentpulse.io" },
+    { label: "Multi-tenant guide", href: "https://github.com/your-org/incident-pulse/blob/main/docs/multi-tenant.md" }
   ]
 };
 
@@ -1103,11 +1200,11 @@ export default function DocumentationPage() {
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
                     Endpoints & authentication
                   </h3>
-                  <ul className="mt-4 space-y-2 text-sm text-slate-600">
-                    <li>
-                      <strong className="font-semibold text-slate-800">POST /webhooks/incidents</strong> &ndash; create, dedupe, or escalate incidents.
-                    </li>
-                    <li>
+                    <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                      <li>
+                        <strong className="font-semibold text-slate-800">POST /webhooks/incidents</strong> &ndash; create, dedupe, or escalate incidents.
+                      </li>
+                      <li>
                       <strong className="font-semibold text-slate-800">POST /webhooks/incidents/recovery</strong> &ndash; resolve the matching incident once service is healthy.
                     </li>
                     <li>
@@ -1115,11 +1212,25 @@ export default function DocumentationPage() {
                       Trusted internal tools can fall back to <code className="font-mono text-xs text-slate-500">X-Webhook-Token</code>.
                     </li>
                     <li>
-                      Support for <code className="font-mono text-xs text-slate-500">X-Idempotency-Key</code>, a 60 requests/minute rate limit per token, and a &plusmn;10 minute skew window on
-                      <code className="font-mono text-xs text-slate-500">occurredAt</code> keeps integrations reliable.
-                    </li>
-                  </ul>
-                </div>
+                        Support for <code className="font-mono text-xs text-slate-500">X-Idempotency-Key</code>, a 60 requests/minute rate limit per token, and a &plusmn;10 minute skew window on
+                        <code className="font-mono text-xs text-slate-500">occurredAt</code> keeps integrations reliable.
+                      </li>
+                    </ul>
+                    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2">
+                      <p className="text-sm font-semibold text-slate-900">Authenticate with API keys</p>
+                      <p className="text-xs text-slate-600">
+                        Create an org-scoped key in <strong>Dashboard → API Keys</strong>. Include it on every automation request:
+                      </p>
+                      <pre className="overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
+                        <code>
+{`POST https://your-backend.com/webhooks/incidents
+Authorization: Bearer ipk_xxxxxx
+Content-Type: application/json`}
+                        </code>
+                      </pre>
+                      <p className="text-xs text-slate-600">Rotate by deleting the old key and issuing a new one.</p>
+                    </div>
+                  </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
                     Environment variables
@@ -1149,14 +1260,27 @@ export default function DocumentationPage() {
 
                 </div>
               </div>
-              <div className="grid gap-6 lg:grid-cols-2">
-                <CodeBlock label="Alert webhook request" value={webhookAlertSample} />
-                <CodeBlock label="Recovery webhook request" value={webhookRecoverySample} />
-              </div>
-              <div className="grid gap-6 lg:grid-cols-2">
-                <CodeBlock label="GitHub Actions failure hook" value={githubActionsSnippet} />
-                <CodeBlock label="UptimeRobot payload template" value={uptimeRobotDocSnippet} />
-              </div>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <CodeBlock label="Alert webhook request" value={webhookAlertSample} />
+                  <CodeBlock label="Recovery webhook request" value={webhookRecoverySample} />
+                </div>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <CodeBlock label="GitHub Actions failure hook" value={githubActionsSnippet} />
+                  <CodeBlock label="UptimeRobot payload template" value={uptimeRobotDocSnippet} />
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">API key examples</h3>
+                  <p className="text-sm text-slate-600">
+                    Pass <code className="font-mono text-xs text-slate-500">Authorization: Bearer ipk_xxxxxx</code> with your org-scoped key. Here are quick starts in popular languages:
+                  </p>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <CodeBlock label="Node / JS (fetch)" value={apiKeyNodeSample} />
+                    <CodeBlock label="Python (requests)" value={apiKeyPythonSample} />
+                    <CodeBlock label="Go (net/http)" value={apiKeyGoSample} />
+                    <CodeBlock label="PHP (cURL)" value={apiKeyPhpSample} />
+                    <CodeBlock label="C# (HttpClient)" value={apiKeyCSharpSample} />
+                  </div>
+                </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
                   Platform behaviour

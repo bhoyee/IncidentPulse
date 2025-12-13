@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "@lib/api-client";
 import type { IncidentSeverity } from "@lib/types";
 import { useInvalidateIncidents } from "@hooks/useIncidents";
 import type { TeamUser } from "@hooks/useTeamUsers";
+import { useState } from "react";
 
 type FormState = {
   title: string;
@@ -40,6 +40,7 @@ export function NewIncidentForm({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(defaultState);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const invalidateIncidents = useInvalidateIncidents();
 
   const mutation = useMutation({
@@ -49,21 +50,34 @@ export function NewIncidentForm({
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean) ?? [];
-      const response = await apiClient.post("/incidents", {
-        title: payload.title,
-        severity: payload.severity,
-        description: payload.description,
-        ...(payload.impactScope ? { impactScope: payload.impactScope } : {}),
-        ...(categories.length > 0 ? { categories } : {}),
-        ...(canAssign ? { assignedToId: payload.assignedToId ?? undefined } : {})
-      });
-      return response.data;
+      try {
+        const response = await apiClient.post("/incidents", {
+          title: payload.title,
+          severity: payload.severity,
+          description: payload.description,
+          ...(payload.impactScope ? { impactScope: payload.impactScope } : {}),
+          ...(categories.length > 0 ? { categories } : {}),
+          ...(canAssign ? { assignedToId: payload.assignedToId ?? undefined } : {})
+        });
+        return response.data;
+      } catch (error: unknown) {
+        const maybeError = error as { response?: { status?: number; data?: { message?: string } } };
+        if (maybeError?.response?.status === 402) {
+          const msg = maybeError.response.data?.message ?? "Incident limit reached for your plan.";
+          throw new Error(msg);
+        }
+        throw error;
+      }
     },
     onSuccess: async () => {
+      setErrorMessage(null);
       setForm(defaultState);
       setOpen(false);
       await invalidateIncidents();
       onSuccess?.();
+    },
+    onError: (error) => {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to create incident.");
     }
   });
 
@@ -107,8 +121,13 @@ export function NewIncidentForm({
         </button>
       </div>
 
-      {open ? (
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          {open ? (
+            <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+              {errorMessage ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {errorMessage}
+                </div>
+              ) : null}
           <div>
             <label className="block text-sm font-medium text-slate-700">
               Title

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { LoginForm } from "@components/LoginForm";
+import { SignupForm } from "@components/SignupForm";
 import { useSession } from "@hooks/useSession";
 import { 
   ShieldCheckIcon, 
@@ -16,6 +17,7 @@ import { useState } from "react";
 export default function LoginPage() {
   const { data: session } = useSession();
   const [copiedRole, setCopiedRole] = useState<string | null>(null);
+  const [mode, setMode] = useState<"login" | "signup">("login");
 
   const demoAccounts = [
     {
@@ -68,8 +70,8 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* Login Form Card */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+            {/* Auth Card */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 space-y-4">
               {session ? (
                 <div className="text-center">
                   <CheckCircleIcon className="mx-auto h-12 w-12 text-green-500 mb-4" />
@@ -89,8 +91,37 @@ export default function LoginPage() {
                 </div>
               ) : (
                 <>
-                  <LoginForm />
-                  
+                  <div className="flex items-center justify-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setMode("login")}
+                      className={`w-1/2 rounded-lg border px-3 py-2 text-sm font-semibold ${
+                        mode === "login"
+                          ? "border-blue-600 bg-blue-50 text-blue-700"
+                          : "border-gray-200 text-gray-600 hover:border-blue-200"
+                      }`}
+                    >
+                      Sign in
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode("signup")}
+                      className={`w-1/2 rounded-lg border px-3 py-2 text-sm font-semibold ${
+                        mode === "signup"
+                          ? "border-blue-600 bg-blue-50 text-blue-700"
+                          : "border-gray-200 text-gray-600 hover:border-blue-200"
+                      }`}
+                    >
+                      Create account
+                    </button>
+                  </div>
+
+                  {mode === "login" ? (
+                    <LoginForm onModeChange={setMode} />
+                  ) : (
+                    <SignupForm />
+                  )}
+
                   {/* Demo Accounts Section */}
                   <div className="mt-8 pt-8 border-t border-gray-200">
                     <div className="flex items-center mb-4">

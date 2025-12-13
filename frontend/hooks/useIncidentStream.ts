@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSession } from "./useSession";
 
 type IncidentStreamEvent =
   | {
@@ -24,6 +25,7 @@ function buildUrl(path: string) {
 
 export function useIncidentStream(enabled: boolean) {
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
 
   useEffect(() => {
     if (!enabled || typeof window === "undefined") {
@@ -43,11 +45,11 @@ export function useIncidentStream(enabled: boolean) {
       }
       try {
         const payload = JSON.parse(event.data) as IncidentStreamEvent;
-        queryClient.invalidateQueries({ queryKey: ["incidents"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["incidents", session?.orgId], exact: false });
         if ("incident" in payload) {
-          queryClient.invalidateQueries({ queryKey: ["incident", payload.incident.id] });
+          queryClient.invalidateQueries({ queryKey: ["incident", session?.orgId, payload.incident.id] });
         } else if (payload.incidentId) {
-          queryClient.removeQueries({ queryKey: ["incident", payload.incidentId] });
+          queryClient.removeQueries({ queryKey: ["incident", session?.orgId, payload.incidentId] });
         }
       } catch (error) {
         console.warn("Failed to process incident stream event", error);
@@ -68,5 +70,5 @@ export function useIncidentStream(enabled: boolean) {
       eventSource.removeEventListener("error", handleError);
       eventSource.close();
     };
-  }, [enabled, queryClient]);
+  }, [enabled, queryClient, session?.orgId]);
 }
