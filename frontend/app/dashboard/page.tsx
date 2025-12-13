@@ -1290,38 +1290,38 @@ function DashboardPageContent() {
                     </div>
                   </div>
                 ))}
-                <div className="bg-gray-800 border border-blue-700 rounded-xl p-5 shadow-lg flex items-start justify-between col-span-full lg:col-span-4">
+                <div className="bg-gray-800 border border-blue-700 rounded-xl p-5 shadow-lg flex items-center justify-between col-span-full lg:col-span-4">
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-gray-400">Plan</p>
                     <p className="text-2xl font-bold text-white capitalize">{planLabel}</p>
-                    <div className="grid grid-cols-2 gap-3 text-xs text-blue-200">
-                      <div>
-                        <p className="font-semibold text-gray-300">Services</p>
-                        <p className="font-mono text-sm">
+                    <div className="flex flex-wrap gap-4 text-xs text-blue-200">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-300">Services</span>
+                        <span className="font-mono text-sm">
                           {servicesUsed}
                           {planLimits.services ? ` / ${planLimits.services}` : " (no cap)"}
-                        </p>
+                        </span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-300">Members</p>
-                        <p className="font-mono text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-300">Members</span>
+                        <span className="font-mono text-sm">
                           {membersUsed}
                           {planLimits.members ? ` / ${planLimits.members}` : " (no cap)"}
-                        </p>
+                        </span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-300">Incidents</p>
-                        <p className="font-mono text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-300">Incidents</span>
+                        <span className="font-mono text-sm">
                           {incidentsUsed}
                           {planLimits.incidents ? ` / ${planLimits.incidents}` : " (no cap)"}
-                        </p>
+                        </span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-300">Orgs</p>
-                        <p className="font-mono text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-300">Orgs</span>
+                        <span className="font-mono text-sm">
                           1
                           {planLimits.orgs ? ` / ${planLimits.orgs}` : " (no cap)"}
-                        </p>
+                        </span>
                       </div>
                     </div>
                   </div>
