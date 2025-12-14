@@ -2814,6 +2814,25 @@ function DashboardPageContent() {
             </div>
           </div>
         )}
+        {billingLocked ? (
+          <div className="fixed top-0 left-0 right-0 z-40 bg-amber-900/90 backdrop-blur-sm border-b border-amber-500/60">
+            <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 text-amber-100 text-sm">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full border border-amber-300 bg-amber-800/70 text-xs font-bold uppercase">
+                  Billing
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">
+                    Billing issue on this workspace ({billingStatus}). Writes are blocked until payment is updated.
+                  </p>
+                  <p className="text-xs text-amber-200/90">
+                    Open Billing → Portal to retry payment, or contact support if you need help.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </AuthGuard>
   );
