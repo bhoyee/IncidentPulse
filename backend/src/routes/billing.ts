@@ -41,6 +41,35 @@ const billingRoutes: FastifyPluginAsync = async (fastify) => {
     return customer.id as string;
   }
 
+  function planFromPrice(priceId?: string | null): "pro" | "enterprise" | null {
+    if (!priceId) return null;
+    if (priceId === env.STRIPE_PRICE_PRO) return "pro";
+    if (env.STRIPE_PRICE_ENTERPRISE && priceId === env.STRIPE_PRICE_ENTERPRISE) return "enterprise";
+    return null;
+  }
+
+  async function syncOrgPlanFromStripe(customerId: string, orgId: string) {
+    if (!stripe) return null;
+    const subs = await stripe.subscriptions.list({
+      customer: customerId,
+      status: "all",
+      expand: ["data.items.data.price"],
+      limit: 5
+    });
+    const active = subs.data
+      .filter((s: any) => ["active", "trialing", "past_due"].includes(s.status))
+      .sort((a: any, b: any) => b.created - a.created)[0];
+    const priceId = active?.items?.data?.[0]?.price?.id as string | undefined;
+    const plan = planFromPrice(priceId);
+    if (plan) {
+      await prisma.organization.update({
+        where: { id: orgId },
+        data: { plan }
+      });
+    }
+    return plan;
+  }
+
   fastify.get(
     "/portal",
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
@@ -56,6 +85,7 @@ const billingRoutes: FastifyPluginAsync = async (fastify) => {
       if (!customerId) {
         return reply.status(400).send({ error: true, message: "No Stripe customer available for this org." });
       }
+      await syncOrgPlanFromStripe(customerId, orgId);
 
       const session = await stripe.billingPortal.sessions.create({
         customer: customerId,
@@ -141,6 +171,7 @@ const billingRoutes: FastifyPluginAsync = async (fastify) => {
       if (!customerId) {
         return reply.status(400).send({ error: true, message: "No Stripe customer available for this org." });
       }
+      await syncOrgPlanFromStripe(customerId, orgId);
       const invoices = await stripe.invoices.list({ customer: customerId, limit: 10 });
       const data = invoices.data.map((inv: any) => ({
         id: inv.id,
