@@ -534,6 +534,48 @@ req.Content = new StringContent("{\\\"service\\\":\\\"checkout\\\",\\\"severity\
 var resp = await client.SendAsync(req);
 resp.EnsureSuccessStatusCode();`;
 
+const apiKeyJavaSample = `import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+public class Main {
+  public static void main(String[] args) throws Exception {
+    var client = HttpClient.newHttpClient();
+    var body = """
+    {\\"service\\":\\"checkout\\",\\"severity\\":\\"high\\",\\"message\\":\\"Error rate exceeded 5%\\"}
+    """;
+    var req = HttpRequest.newBuilder()
+      .uri(URI.create("https://your-backend.com/webhooks/incidents"))
+      .header("Authorization", "Bearer ipk_xxxxxx")
+      .header("Content-Type", "application/json")
+      .POST(HttpRequest.BodyPublishers.ofString(body))
+      .build();
+    var resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+    if (resp.statusCode() >= 400) throw new RuntimeException("Failed: " + resp.statusCode());
+  }
+}`;
+
+const apiKeyRustSample = `use reqwest::Client;
+use serde_json::json;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new();
+    let res = client
+        .post("https://your-backend.com/webhooks/incidents")
+        .bearer_auth("ipk_xxxxxx")
+        .json(&json!({
+            "service": "checkout",
+            "severity": "high",
+            "message": "Error rate exceeded 5%"
+        }))
+        .send()
+        .await?;
+    res.error_for_status()?;
+    Ok(())
+}`;
+
 const githubActionsSnippet = `- name: Notify IncidentPulse when workflow fails
   if: failure()
   env:
@@ -1279,6 +1321,8 @@ Content-Type: application/json`}
                     <CodeBlock label="Go (net/http)" value={apiKeyGoSample} />
                     <CodeBlock label="PHP (cURL)" value={apiKeyPhpSample} />
                     <CodeBlock label="C# (HttpClient)" value={apiKeyCSharpSample} />
+                    <CodeBlock label="Java (HttpClient)" value={apiKeyJavaSample} />
+                    <CodeBlock label="Rust (reqwest)" value={apiKeyRustSample} />
                   </div>
                 </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
