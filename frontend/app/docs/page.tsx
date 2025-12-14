@@ -557,10 +557,10 @@ public class Main {
 }`;
 
 const apiKeyRustSample = `use reqwest::Client;
-use serde_json::json;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+  use serde_json::json;
+  
+  #[tokio::main]
+  async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
     let res = client
         .post("https://your-backend.com/webhooks/incidents")
@@ -572,8 +572,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }))
         .send()
         .await?;
-    res.error_for_status()?;
-    Ok(())
+      res.error_for_status()?;
+      Ok(())
+  }`;
+
+const apiKeyResponseSample = `HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "error": false,
+  "message": "Webhook accepted",
+  "incidentId": "inc_12345",
+  "status": "investigating"
 }`;
 
 const githubActionsSnippet = `- name: Notify IncidentPulse when workflow fails
@@ -1309,11 +1319,16 @@ Content-Type: application/json`}
                 <div className="grid gap-6 lg:grid-cols-2">
                   <CodeBlock label="GitHub Actions failure hook" value={githubActionsSnippet} />
                   <CodeBlock label="UptimeRobot payload template" value={uptimeRobotDocSnippet} />
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">API key examples</h3>
+  </div>
+  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                  <h3
+                    id="api-keys"
+                    className="text-sm font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    API key examples
+                  </h3>
                   <p className="text-sm text-slate-600">
-                    Generate a key in <strong>Dashboard ? API Keys</strong>, then pass <code className="font-mono text-xs text-slate-500">Authorization: Bearer ipk_xxxxxx</code> on every API or webhook call. Here are quick starts in popular languages:
+                    Generate a key in <strong>Dashboard › API Keys</strong>, then pass <code className="font-mono text-xs text-slate-500">Authorization: Bearer ipk_xxxxxx</code> on every API or webhook call. Here are quick starts in popular languages:
                   </p>
                   <div className="grid gap-4 lg:grid-cols-2">
                     <CodeBlock label="Node / JS (fetch)" value={apiKeyNodeSample} />
@@ -1323,6 +1338,10 @@ Content-Type: application/json`}
                     <CodeBlock label="C# (HttpClient)" value={apiKeyCSharpSample} />
                     <CodeBlock label="Java (HttpClient)" value={apiKeyJavaSample} />
                     <CodeBlock label="Rust (reqwest)" value={apiKeyRustSample} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Sample JSON response</p>
+                    <CodeBlock label="Response" value={apiKeyResponseSample} />
                   </div>
                 </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
