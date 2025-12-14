@@ -35,6 +35,7 @@ export type SupportTicket = {
 
 type TicketResponse = { error: boolean; data: SupportTicket[] };
 type TicketCreatePayload = { subject: string; body: string; priority?: string; category?: string };
+type SupportAttachment = NonNullable<SupportTicket["attachments"]>[number];
 
 export function useOrgSupportTickets() {
   return useQuery({
@@ -122,6 +123,28 @@ export function useAssignSupportTicket() {
       const res = await apiClient.patch<{ error: boolean; data: SupportTicket }>(
         `/support/platform/${payload.ticketId}/assign`,
         { assigneeId: payload.assigneeId ?? null }
+      );
+      return res.data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["support"] });
+    }
+  });
+}
+
+export function useUploadSupportAttachments(scope: "org" | "platform" = "org") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { ticketId: string; files: File[] }) => {
+      const form = new FormData();
+      payload.files.forEach((file) => form.append("file", file));
+      const base = scope === "platform" ? "/support/platform" : "/support";
+      const res = await apiClient.post<{ error: boolean; data: SupportAttachment[] }>(
+        `${base}/${payload.ticketId}/attachments`,
+        form,
+        {
+          headers: { "Content-Type": "multipart/form-data" }
+        }
       );
       return res.data.data;
     },

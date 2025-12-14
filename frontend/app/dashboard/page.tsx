@@ -76,6 +76,13 @@ import {
 import { useAnalytics } from "@hooks/useAnalytics";
 import { useAuditLogs } from "@hooks/useAuditLogs";
 import {
+  useOrgSupportTickets,
+  useCreateSupportTicket,
+  useAddSupportComment,
+  useUploadSupportAttachments,
+  type SupportTicket
+} from "@hooks/useSupport";
+import {
   useOrganizations,
   useSwitchOrganization,
   useCreateOrganization,
@@ -822,6 +829,331 @@ function OrganizationsPanel({ session }: { session?: SessionUser | null }) {
         {isFetching ? (
           <p className="mt-2 text-xs text-gray-500">Syncing organizations...</p>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SupportPanel() {
+  const { data: tickets = [], isLoading } = useOrgSupportTickets();
+  const createTicket = useCreateSupportTicket();
+  const addComment = useAddSupportComment("org");
+  const uploadAttachments = useUploadSupportAttachments("org");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
+  const [category, setCategory] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [commentSubmitting, setCommentSubmitting] = useState<string | null>(null);
+  const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+
+  const statusClasses = (status: SupportTicket["status"]) => {
+    switch (status) {
+      case "closed":
+        return "bg-emerald-900/50 text-emerald-200 border border-emerald-500/40";
+      case "pending":
+        return "bg-amber-900/40 text-amber-200 border border-amber-500/40";
+      default:
+        return "bg-blue-900/40 text-blue-200 border border-blue-500/40";
+    }
+  };
+
+  const priorityClasses = (p: SupportTicket["priority"]) => {
+    switch (p) {
+      case "urgent":
+        return "bg-red-900/50 text-red-200 border border-red-500/50";
+      case "high":
+        return "bg-amber-900/50 text-amber-100 border border-amber-500/50";
+      case "low":
+        return "bg-slate-800 text-slate-200 border border-slate-600";
+      default:
+        return "bg-blue-900/40 text-blue-100 border border-blue-500/40";
+    }
+  };
+
+  const handleCreate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!subject.trim() || !body.trim()) {
+      setFormError("Subject and details are required.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await createTicket.mutateAsync({
+        subject: subject.trim(),
+        body: body.trim(),
+        priority,
+        category: category.trim() || undefined
+      });
+      setSubject("");
+      setBody("");
+      setCategory("");
+      setPriority("medium");
+      setFormError(null);
+    } catch (error) {
+      let message = "Failed to create ticket.";
+      if (isAxiosError(error)) {
+        message = error.response?.data?.message ?? error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleComment = async (ticketId: string) => {
+    const text = commentInputs[ticketId]?.trim();
+    if (!text) return;
+    setCommentSubmitting(ticketId);
+    try {
+      await addComment.mutateAsync({ ticketId, body: text });
+      setCommentInputs((prev) => ({ ...prev, [ticketId]: "" }));
+    } catch (error) {
+      let message = "Failed to add comment.";
+      if (isAxiosError(error)) {
+        message = error.response?.data?.message ?? error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      window.alert(message);
+    } finally {
+      setCommentSubmitting(null);
+    }
+  };
+
+  const handleAttachments = async (ticketId: string, fileList: FileList | null) => {
+    const files = fileList ? Array.from(fileList) : [];
+    if (!files.length) return;
+    setUploadingFor(ticketId);
+    try {
+      await uploadAttachments.mutateAsync({ ticketId, files });
+    } catch (error) {
+      let message = "Failed to upload attachments.";
+      if (isAxiosError(error)) {
+        message = error.response?.data?.message ?? error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      window.alert(message);
+    } finally {
+      setUploadingFor(null);
+    }
+  };
+
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-8 shadow-lg">
+      <div className="flex flex-col gap-2 border-b border-gray-700 pb-4">
+        <p className="text-xs uppercase tracking-wide text-blue-300">Support</p>
+        <h2 className="text-2xl font-bold text-white">Support tickets</h2>
+        <p className="text-sm text-gray-300">
+          Create support tickets, add comments, and attach evidence. Attachments open in a new tab.
+        </p>
+      </div>
+
+      <form onSubmit={handleCreate} className="grid gap-4 rounded-xl border border-gray-700 bg-gray-900/60 p-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="text-sm text-gray-300">
+            Subject
+            <input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="Example: Cannot send incident webhooks"
+              required
+            />
+          </label>
+          <label className="text-sm text-gray-300">
+            Category (optional)
+            <input
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="Integrations, Billing, Access"
+            />
+          </label>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="text-sm text-gray-300">
+            Priority
+            <select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as SupportTicket["priority"])}
+              className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </label>
+          <div className="text-sm text-gray-400">
+            Attachments can be added after creating a ticket. Max size: {Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))}MB per file.
+          </div>
+        </div>
+        <label className="text-sm text-gray-300">
+          Details
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={4}
+            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="Describe the issue, steps to reproduce, and expected behavior."
+            required
+          />
+        </label>
+        {formError ? <p className="text-sm text-red-400">{formError}</p> : null}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
+          >
+            {isSubmitting ? "Submitting…" : "Submit ticket"}
+          </button>
+        </div>
+      </form>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white">Your tickets</h3>
+          <span className="text-xs text-gray-400">{tickets.length} total</span>
+        </div>
+        {isLoading ? (
+          <LoadingState message="Loading tickets..." />
+        ) : tickets.length === 0 ? (
+          <EmptyState message="No support tickets yet. Create one above." />
+        ) : (
+          <div className="space-y-4">
+            {tickets.map((ticket) => (
+              <div
+                key={ticket.id}
+                className="rounded-xl border border-gray-700 bg-gray-900/60 p-4 space-y-3"
+              >
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClasses(ticket.status)}`}>
+                        {ticket.status.toUpperCase()}
+                      </span>
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${priorityClasses(ticket.priority)}`}>
+                        {ticket.priority.toUpperCase()}
+                      </span>
+                      {ticket.category ? (
+                        <span className="rounded-full border border-gray-600 px-2 py-1 text-xs text-gray-200">
+                          {ticket.category}
+                        </span>
+                      ) : null}
+                    </div>
+                    <h4 className="text-lg font-semibold text-white">{ticket.subject}</h4>
+                    <p className="text-xs text-gray-400">
+                      Opened {format(new Date(ticket.createdAt), "PP p")} by{" "}
+                      {ticket.createdBy?.name || "Unknown"}
+                    </p>
+                  </div>
+                  <div className="text-sm text-gray-300">
+                    Assignee:{" "}
+                    <span className="font-semibold">
+                      {ticket.assignee?.name || "Unassigned"}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="whitespace-pre-wrap text-sm text-gray-200">{ticket.body}</p>
+
+                {ticket.attachments && ticket.attachments.length > 0 ? (
+                  <div className="space-y-2 rounded-lg border border-gray-700 bg-gray-900/60 p-3">
+                    <p className="text-xs font-semibold uppercase text-gray-300">Attachments</p>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {ticket.attachments.map((att) => {
+                        const href = att.path?.startsWith("http")
+                          ? att.path
+                          : `/uploads/${att.path}`;
+                        return (
+                          <div
+                            key={att.id}
+                            className="flex items-center justify-between rounded border border-gray-700 bg-gray-950 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm text-white">{att.filename}</p>
+                              <p className="text-xs text-gray-400">
+                                {formatAttachmentSize(att.size ?? 0)}
+                              </p>
+                            </div>
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs font-semibold text-blue-400 hover:text-blue-200"
+                            >
+                              View
+                            </a>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase text-gray-300">Comments</p>
+                  <div className="space-y-2 rounded-lg border border-gray-800 bg-gray-950/80 p-3">
+                    {ticket.comments && ticket.comments.length > 0 ? (
+                      ticket.comments.map((comment) => (
+                        <div key={comment.id} className="rounded border border-gray-800 bg-gray-900/80 p-2">
+                          <div className="flex items-center justify-between text-xs text-gray-400">
+                            <span>{comment.author?.name || "Unknown"}</span>
+                            <span>{format(new Date(comment.createdAt), "PP p")}</span>
+                          </div>
+                          <p className="mt-1 text-sm text-gray-200 whitespace-pre-wrap">{comment.body}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-gray-500">No comments yet.</p>
+                    )}
+                    <div className="space-y-2">
+                      <textarea
+                        value={commentInputs[ticket.id] || ""}
+                        onChange={(e) =>
+                          setCommentInputs((prev) => ({ ...prev, [ticket.id]: e.target.value }))
+                        }
+                        rows={2}
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="Add a reply"
+                      />
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <label className="text-xs text-gray-300">
+                          Attach files
+                          <input
+                            type="file"
+                            multiple
+                            onChange={(e) => {
+                              handleAttachments(ticket.id, e.target.files);
+                              e.target.value = "";
+                            }}
+                            className="mt-1 block w-full text-xs text-gray-200"
+                            disabled={uploadingFor === ticket.id}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleComment(ticket.id)}
+                          disabled={commentSubmitting === ticket.id}
+                          className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                        >
+                          {commentSubmitting === ticket.id ? "Sending…" : "Post reply"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2556,6 +2888,10 @@ function DashboardPageContent() {
                   )}
                 </div>
               </div>
+            )}
+
+            {activeTab === 'support' && (
+              <SupportPanel />
             )}
 
             {activeTab === 'services' && isAdmin && (
