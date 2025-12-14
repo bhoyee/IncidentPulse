@@ -1219,7 +1219,7 @@ export default function DocumentationPage() {
                     <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2">
                       <p className="text-sm font-semibold text-slate-900">Authenticate with API keys</p>
                       <p className="text-xs text-slate-600">
-                        Create an org-scoped key in <strong>Dashboard → API Keys</strong>. Include it on every automation request:
+                        Create an org-scoped key in <strong>Dashboard ? API Keys</strong>. Include it on every automation or webhook request:
                       </p>
                       <pre className="overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
                         <code>
@@ -1271,7 +1271,7 @@ Content-Type: application/json`}
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">API key examples</h3>
                   <p className="text-sm text-slate-600">
-                    Pass <code className="font-mono text-xs text-slate-500">Authorization: Bearer ipk_xxxxxx</code> with your org-scoped key. Here are quick starts in popular languages:
+                    Generate a key in <strong>Dashboard ? API Keys</strong>, then pass <code className="font-mono text-xs text-slate-500">Authorization: Bearer ipk_xxxxxx</code> on every API or webhook call. Here are quick starts in popular languages:
                   </p>
                   <div className="grid gap-4 lg:grid-cols-2">
                     <CodeBlock label="Node / JS (fetch)" value={apiKeyNodeSample} />
