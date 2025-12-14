@@ -2397,7 +2397,7 @@ function DashboardPageContent() {
                   </p>
                   {billingLocked ? (
                     <p className="text-xs text-amber-200">
-                      Subscription is past due or canceled. Open the billing portal to update payment and restore write access.
+                      Subscription is past due or canceled. Renew to restore write access.
                     </p>
                   ) : null}
                 </div>
@@ -2469,17 +2469,18 @@ function DashboardPageContent() {
                       type="button"
                       onClick={async () => {
                         try {
-                          setPortalLoading(true);
-                          const url = await openPortal.mutateAsync();
-                          if (url) window.open(url, "_blank", "noreferrer");
+                          const targetPlan = planLabel === "enterprise" ? "enterprise" : "pro";
+                          setCheckoutPlanLoading(targetPlan);
+                          const url = await startCheckout.mutateAsync(targetPlan);
+                          if (url) window.location.href = url;
                         } finally {
-                          setPortalLoading(false);
+                          setCheckoutPlanLoading(null);
                         }
                       }}
-                      disabled={portalLoading}
+                      disabled={checkoutPlanLoading !== null}
                       className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
                     >
-                      {portalLoading ? "Opening..." : "Pay / Renew"}
+                      {checkoutPlanLoading ? "Redirecting..." : "Pay / Renew"}
                     </button>
                   )}
                 </div>
@@ -2887,26 +2888,45 @@ function DashboardPageContent() {
                     Billing issue on this workspace ({billingStatus}). Writes are blocked until payment is updated.
                   </p>
                   <p className="text-xs text-amber-200/90">
-                    Open Billing → Portal to retry payment, or contact support if you need help.
+                    Retry payment to restore access, or contact support if you need help.
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    setPortalLoading(true);
-                    const url = await openPortal.mutateAsync();
-                    if (url) window.open(url, "_blank", "noreferrer");
-                  } finally {
-                    setPortalLoading(false);
-                  }
-                }}
-                disabled={portalLoading}
-                className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
-              >
-                {portalLoading ? "Opening..." : "Pay / Renew"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const targetPlan = planLabel === "enterprise" ? "enterprise" : "pro";
+                    try {
+                      setCheckoutPlanLoading(targetPlan);
+                      const url = await startCheckout.mutateAsync(targetPlan);
+                      if (url) window.location.href = url;
+                    } finally {
+                      setCheckoutPlanLoading(null);
+                    }
+                  }}
+                  disabled={checkoutPlanLoading !== null}
+                  className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
+                >
+                  {checkoutPlanLoading ? "Redirecting..." : "Pay / Renew"}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      setPortalLoading(true);
+                      const url = await openPortal.mutateAsync();
+                      if (url) window.open(url, "_blank", "noreferrer");
+                    } finally {
+                      setPortalLoading(false);
+                    }
+                  }}
+                  disabled={portalLoading}
+                  className="inline-flex items-center gap-2 rounded-lg bg-gray-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gray-600 disabled:opacity-60"
+                >
+                  {portalLoading ? "Opening portal..." : "Update payment method"}
+                </button>
+              </div>
             </div>
           </div>
         ) : null}
