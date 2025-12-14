@@ -2385,7 +2385,21 @@ function DashboardPageContent() {
                 <div className="flex flex-col gap-2">
                   <p className="text-xs uppercase tracking-wide text-blue-300">Billing</p>
                   <h2 className="text-2xl font-bold text-white">Plan & usage</h2>
-                  <p className="text-sm text-gray-300">Manage your plan, open the portal, or upgrade.</p>
+                  <p className="text-sm text-gray-300">
+                    Current plan: <span className="font-semibold capitalize">{planLabel}</span>{" "}
+                    <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${
+                      billingStatus === "active"
+                        ? "bg-green-900/60 text-green-200"
+                        : "bg-amber-900/70 text-amber-100"
+                    }`}>
+                      {billingStatus}
+                    </span>
+                  </p>
+                  {billingLocked ? (
+                    <p className="text-xs text-amber-200">
+                      Subscription is past due or canceled. Open the billing portal to update payment and restore write access.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <button
@@ -2405,22 +2419,24 @@ function DashboardPageContent() {
                     <CreditCardIcon className="h-4 w-4" />
                     {portalLoading ? "Opening portal..." : "Open billing portal"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        setCheckoutLoading(true);
-                        const url = await startCheckout.mutateAsync("pro");
-                        if (url) window.location.href = url;
-                      } finally {
-                        setCheckoutLoading(false);
-                      }
-                    }}
-                    disabled={checkoutLoading}
-                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
-                  >
-                    {checkoutLoading ? "Redirecting..." : "Upgrade to Pro"}
-                  </button>
+                  {planLabel === "free" ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setCheckoutLoading(true);
+                          const url = await startCheckout.mutateAsync("pro");
+                          if (url) window.location.href = url;
+                        } finally {
+                          setCheckoutLoading(false);
+                        }
+                      }}
+                      disabled={checkoutLoading}
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                    >
+                      {checkoutLoading ? "Redirecting..." : "Upgrade to Pro"}
+                    </button>
+                  ) : null}
                 </div>
                 <div className="border border-gray-700 rounded-lg p-4 bg-gray-900">
                   <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">Invoices</p>
