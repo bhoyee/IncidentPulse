@@ -848,6 +848,8 @@ function SupportPanel() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [commentSubmitting, setCommentSubmitting] = useState<string | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+  const [creationFiles, setCreationFiles] = useState<File[]>([]);
+  const [creationAttachmentError, setCreationAttachmentError] = useState<string | null>(null);
 
   const statusClasses = (status: SupportTicket["status"]) => {
     switch (status) {
@@ -873,6 +875,39 @@ function SupportPanel() {
     }
   };
 
+  const handleCreationFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (!files.length) return;
+
+    let message: string | null = null;
+    const accepted: File[] = [];
+    for (const file of files) {
+      const validation = validateAttachmentSize(file);
+      if (validation) {
+        message = validation;
+        break;
+      }
+      accepted.push(file);
+    }
+    const combined = [...creationFiles, ...accepted];
+    if (!message && combined.length > MAX_ATTACHMENTS_PER_BATCH) {
+      message = `You can attach up to ${MAX_ATTACHMENTS_PER_BATCH} files.`;
+    }
+
+    if (message) {
+      setCreationAttachmentError(message);
+    } else {
+      setCreationAttachmentError(null);
+      setCreationFiles(combined.slice(0, MAX_ATTACHMENTS_PER_BATCH));
+    }
+
+    event.target.value = "";
+  };
+
+  const handleRemoveCreationFile = (idx: number) => {
+    setCreationFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!subject.trim() || !body.trim()) {
@@ -881,16 +916,21 @@ function SupportPanel() {
     }
     setIsSubmitting(true);
     try {
-      await createTicket.mutateAsync({
+      const ticket = await createTicket.mutateAsync({
         subject: subject.trim(),
         body: body.trim(),
         priority,
         category: category.trim() || undefined
       });
+      if (creationFiles.length) {
+        await uploadAttachments.mutateAsync({ ticketId: ticket.id, files: creationFiles });
+      }
       setSubject("");
       setBody("");
       setCategory("");
       setPriority("medium");
+      setCreationFiles([]);
+      setCreationAttachmentError(null);
       setFormError(null);
     } catch (error) {
       let message = "Failed to create ticket.";
@@ -990,9 +1030,40 @@ function SupportPanel() {
               <option value="urgent">Urgent</option>
             </select>
           </label>
-          <div className="text-sm text-gray-400">
-            Attachments can be added after creating a ticket. Max size: {Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))}MB per file.
-          </div>
+          <label className="text-sm text-gray-300">
+            Attach files (optional)
+            <input
+              type="file"
+              multiple
+              onChange={handleCreationFileSelect}
+              className="mt-1 block w-full text-xs text-gray-200"
+            />
+            <span className="mt-1 block text-xs text-gray-500">
+              Up to {MAX_ATTACHMENTS_PER_BATCH} files, {Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))}MB each.
+            </span>
+            {creationFiles.length ? (
+              <div className="mt-2 space-y-1 rounded border border-gray-700 bg-gray-900/80 p-2">
+                {creationFiles.map((file, idx) => (
+                  <div key={`${file.name}-${idx}`} className="flex items-center justify-between text-xs text-gray-200">
+                    <span className="truncate">{file.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400">{formatAttachmentSize(file.size)}</span>
+                      <button
+                        type="button"
+                        className="text-amber-300 hover:text-amber-100"
+                        onClick={() => handleRemoveCreationFile(idx)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {creationAttachmentError ? (
+              <span className="block text-xs text-red-400">{creationAttachmentError}</span>
+            ) : null}
+          </label>
         </div>
         <label className="text-sm text-gray-300">
           Details
