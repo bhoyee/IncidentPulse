@@ -889,7 +889,6 @@ function DashboardPageContent() {
   const [showPasswordReminder, setShowPasswordReminder] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState({
     title: "",
     description: "",
@@ -935,6 +934,7 @@ function DashboardPageContent() {
   const recoveryEndpoint = "https://your-backend.example.com/webhooks/incidents/recovery";
   const openPortal = useOpenBillingPortal();
   const startCheckout = useStartCheckout();
+  const [checkoutPlanLoading, setCheckoutPlanLoading] = useState<"pro" | "enterprise" | null>(null);
   const invoicesQuery = useInvoices(isAdmin && activeTab === "billing");
 
   const incidentFilters = useMemo(
@@ -2419,24 +2419,69 @@ function DashboardPageContent() {
                     <CreditCardIcon className="h-4 w-4" />
                     {portalLoading ? "Opening portal..." : "Open billing portal"}
                   </button>
-                  {planLabel === "free" ? (
+                  {planLabel === "free" && (
                     <button
                       type="button"
                       onClick={async () => {
                         try {
-                          setCheckoutLoading(true);
+                          setCheckoutPlanLoading("pro");
                           const url = await startCheckout.mutateAsync("pro");
                           if (url) window.location.href = url;
                         } finally {
-                          setCheckoutLoading(false);
+                          setCheckoutPlanLoading(null);
                         }
                       }}
-                      disabled={checkoutLoading}
+                      disabled={checkoutPlanLoading !== null}
                       className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
                     >
-                      {checkoutLoading ? "Redirecting..." : "Upgrade to Pro"}
+                      {checkoutPlanLoading === "pro" ? "Redirecting..." : "Upgrade to Pro"}
                     </button>
-                  ) : null}
+                  )}
+                  {planLabel === "pro" && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setCheckoutPlanLoading("enterprise");
+                          const url = await startCheckout.mutateAsync("enterprise");
+                          if (url) window.location.href = url;
+                        } finally {
+                          setCheckoutPlanLoading(null);
+                        }
+                      }}
+                      disabled={checkoutPlanLoading !== null}
+                      className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-50"
+                    >
+                      {checkoutPlanLoading === "enterprise" ? "Redirecting..." : "Upgrade to Enterprise"}
+                    </button>
+                  )}
+                  {planLabel === "enterprise" && (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-2 rounded-lg bg-gray-700 px-4 py-2 text-sm font-semibold text-gray-300 opacity-60 cursor-not-allowed"
+                    >
+                      Enterprise active
+                    </button>
+                  )}
+                  {billingLocked && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setPortalLoading(true);
+                          const url = await openPortal.mutateAsync();
+                          if (url) window.open(url, "_blank", "noreferrer");
+                        } finally {
+                          setPortalLoading(false);
+                        }
+                      }}
+                      disabled={portalLoading}
+                      className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
+                    >
+                      {portalLoading ? "Opening..." : "Pay / Renew"}
+                    </button>
+                  )}
                 </div>
                 <div className="border border-gray-700 rounded-lg p-4 bg-gray-900">
                   <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">Invoices</p>
@@ -2846,6 +2891,22 @@ function DashboardPageContent() {
                   </p>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    setPortalLoading(true);
+                    const url = await openPortal.mutateAsync();
+                    if (url) window.open(url, "_blank", "noreferrer");
+                  } finally {
+                    setPortalLoading(false);
+                  }
+                }}
+                disabled={portalLoading}
+                className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
+              >
+                {portalLoading ? "Opening..." : "Pay / Renew"}
+              </button>
             </div>
           </div>
         ) : null}
