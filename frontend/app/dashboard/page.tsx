@@ -340,7 +340,7 @@ const NewIncidentForm = ({
         </select>
         {services.length === 0 ? (
           <p className="mt-1 text-xs text-red-400">
-            No services available. Ask an admin to add one on the Automation tab.
+            No services available. Ask an admin to add one on the Services tab.
           </p>
         ) : null}
       </div>
@@ -2546,6 +2546,26 @@ function DashboardPageContent() {
               </div>
             )}
 
+            {activeTab === 'services' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-2 border-b border-gray-700 pb-4">
+                  <p className="text-xs uppercase tracking-wide text-blue-300">Services</p>
+                  <h2 className="text-2xl font-bold text-white">Monitored services</h2>
+                  <p className="text-sm text-gray-300">
+                    Define the systems you monitor, and attach incidents and maintenance windows to them.
+                  </p>
+                </div>
+                <ServiceManagementPanel
+                  services={servicesQuery.data}
+                  isLoading={servicesQuery.isLoading}
+                  onCreate={handleCreateService}
+                  onUpdate={handleUpdateService}
+                  onDelete={handleDeleteService}
+                  isMutating={serviceMutationsPending}
+                />
+              </div>
+            )}
+
             {activeTab === 'webhooks' && isAdmin && (
               <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-8 shadow-lg">
                 <div className="rounded-xl border border-blue-500/50 bg-blue-900/40 p-6 space-y-4">
@@ -2586,15 +2606,6 @@ function DashboardPageContent() {
                     </div>
                   </div>
                 </div>
-
-                <ServiceManagementPanel
-                  services={servicesQuery.data}
-                  isLoading={servicesQuery.isLoading}
-                  onCreate={handleCreateService}
-                  onUpdate={handleUpdateService}
-                  onDelete={handleDeleteService}
-                  isMutating={serviceMutationsPending}
-                />
 
                 <div className="rounded-xl border border-gray-700 bg-gray-900 shadow-inner">
                   <IntegrationsPanel
