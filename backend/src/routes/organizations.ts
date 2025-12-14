@@ -270,28 +270,23 @@ const organizationsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      await prisma.$transaction(async (tx) => {
-        await tx.organization.update({
-          where: { id: params.orgId },
-          data: {
-            status: "suspended",
-            isDeleted: true,
-            deletedAt: new Date()
-          }
-        });
+      await prisma.organization.update({
+        where: { id: params.orgId },
+        data: {
+          status: "suspended",
+          isDeleted: true,
+          deletedAt: new Date()
+        }
+      });
 
-        await recordAuditLog(
-          {
-            action: "user_deleted",
-            actorId: request.user.id,
-            actorEmail: request.user.email,
-            actorName: request.user.name,
-            organizationId: params.orgId,
-            targetType: "organization",
-            targetId: params.orgId
-          },
-          tx
-        );
+      await recordAuditLog({
+        action: "user_deleted",
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        organizationId: params.orgId,
+        targetType: "organization",
+        targetId: params.orgId
       });
 
       return reply.status(204).send();
