@@ -42,7 +42,7 @@ import { IncidentDrawer } from "@components/IncidentDrawer";
 import { IntegrationsPanel } from "@components/IntegrationsPanel";
 import { ServiceManagementPanel } from "@components/ServiceManagementPanel";
 import { Pagination } from "@components/Pagination";
-import { useSession } from "@hooks/useSession";
+import { useSession, type SessionUser } from "@hooks/useSession";
 import { useIncidents, useInvalidateIncidents } from "@hooks/useIncidents";
 import {
   useTeamUsers,
@@ -69,6 +69,14 @@ import {
 } from "@hooks/useMaintenance";
 import { useAnalytics } from "@hooks/useAnalytics";
 import { useAuditLogs } from "@hooks/useAuditLogs";
+import {
+  useOrganizations,
+  useSwitchOrganization,
+  useCreateOrganization,
+  useUpdateOrganization,
+  useDeleteOrganization,
+  type Organization
+} from "@hooks/useOrganizations";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { useIncidentStream } from "@hooks/useIncidentStream";
 import { useOpenBillingPortal, useStartCheckout, useInvoices } from "@hooks/useBilling";
@@ -554,6 +562,264 @@ const AddTeamMemberForm = ({
     </form>
   );
 };
+
+const slugifyName = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+
+function OrganizationsPanel({ session }: { session?: SessionUser | null }) {
+  const { data: organizations = [], isLoading, isFetching } = useOrganizations();
+  const switchOrg = useSwitchOrganization();
+  const createOrg = useCreateOrganization();
+  const updateOrg = useUpdateOrganization();
+  const deleteOrg = useDeleteOrganization();
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [slugTouched, setSlugTouched] = useState(false);
+
+  useEffect(() => {
+    if (!slugTouched) {
+      setSlug(slugifyName(name));
+    }
+  }, [name, slugTouched]);
+
+  const resetForm = () => {
+    setName("");
+    setSlug("");
+    setEditingId(null);
+    setSlugTouched(false);
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFormError(null);
+    if (!name.trim() || !slug.trim()) {
+      setFormError("Name and slug are required.");
+      return;
+    }
+    try {
+      if (editingId) {
+        await updateOrg.mutateAsync({ id: editingId, name: name.trim(), slug: slug.trim() });
+      } else {
+        await createOrg.mutateAsync({ name: name.trim(), slug: slug.trim() });
+      }
+      resetForm();
+    } catch (error) {
+      if (isAxiosError(error)) {
+        setFormError(error.response?.data?.message ?? "Unable to save organization.");
+      } else {
+        setFormError("Unable to save organization.");
+      }
+    }
+  };
+
+  const handleEdit = (org: Organization) => {
+    setEditingId(org.id);
+    setName(org.name);
+    setSlug(org.slug);
+    setSlugTouched(true);
+    setFormError(null);
+  };
+
+  const handleDelete = async (orgId: string) => {
+    setFormError(null);
+    if (deleteConfirmId !== orgId) {
+      setDeleteConfirmId(orgId);
+      return;
+    }
+    try {
+      await deleteOrg.mutateAsync(orgId);
+      if (orgId === session?.orgId) {
+        const fallback = organizations.find((o) => o.id !== orgId);
+        if (fallback) {
+          await switchOrg.mutateAsync(fallback.id);
+        }
+      }
+      resetForm();
+    } catch (error) {
+      if (isAxiosError(error)) {
+        setFormError(error.response?.data?.message ?? "Unable to delete organization.");
+      } else {
+        setFormError("Unable to delete organization.");
+      }
+    } finally {
+      setDeleteConfirmId(null);
+    }
+  };
+
+  const handleSwitch = async (orgId: string) => {
+    setFormError(null);
+    try {
+      await switchOrg.mutateAsync(orgId);
+    } catch (error) {
+      if (isAxiosError(error)) {
+        setFormError(error.response?.data?.message ?? "Unable to switch organization.");
+      } else {
+        setFormError("Unable to switch organization.");
+      }
+    }
+  };
+
+  const isSaving = createOrg.isPending || updateOrg.isPending;
+  const isDeleting = deleteOrg.isPending;
+  const isSwitching = switchOrg.isPending;
+
+  return (
+    <div className="rounded-xl border border-gray-700 bg-gray-800 p-6 lg:p-8 shadow-lg">
+      <div className="flex flex-col gap-4 border-b border-gray-700 pb-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Organizations</h2>
+          <p className="text-sm text-gray-400">
+            Create new workspaces, rename them, switch contexts, or clean up old ones.
+          </p>
+        </div>
+      </div>
+
+      {formError ? (
+        <div className="mt-4 rounded-lg border border-red-500/50 bg-red-900/40 px-4 py-3 text-sm text-red-100">
+          {formError}
+        </div>
+      ) : null}
+
+      <form onSubmit={handleSubmit} className="mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+          <label className="text-sm font-semibold text-gray-200">Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Acme Corp"
+          />
+        </div>
+        <div className="lg:col-span-1">
+          <label className="text-sm font-semibold text-gray-200">Slug</label>
+          <input
+            type="text"
+            value={slug}
+            onChange={(e) => {
+              setSlugTouched(true);
+              setSlug(e.target.value);
+            }}
+            className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="acme-corp"
+          />
+        </div>
+        <div className="lg:col-span-1 flex items-end gap-2">
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSaving ? "Saving..." : editingId ? "Update Organization" : "Create Organization"}
+          </button>
+          {editingId ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-lg border border-gray-600 px-3 py-2 text-sm font-semibold text-gray-200 hover:border-gray-500 hover:text-white"
+            >
+              Cancel
+            </button>
+          ) : null}
+        </div>
+      </form>
+
+      <div className="mt-8">
+        {isLoading ? (
+          <LoadingState message="Loading organizations..." />
+        ) : organizations.length === 0 ? (
+          <EmptyState message="No organizations yet. Create your first workspace above." />
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-gray-700 shadow-xl">
+            <table className="min-w-full divide-y divide-gray-700">
+              <thead className="bg-gray-800">
+                <tr>
+                  {["Name", "Plan", "Members", "Services", "Role", "Status", "Actions"].map((header) => (
+                    <th
+                      key={header}
+                      scope="col"
+                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400"
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800 bg-gray-900">
+                {organizations.map((org) => {
+                  const isCurrent = org.id === session?.orgId;
+                  return (
+                    <tr key={org.id} className="hover:bg-gray-800/70 transition">
+                      <td className="px-4 py-3 text-sm text-white">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{org.name}</span>
+                          <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[11px] text-gray-300">
+                            {org.slug}
+                          </span>
+                          {isCurrent ? (
+                            <span className="rounded-full bg-green-800/60 px-2 py-0.5 text-[11px] font-semibold text-green-200">
+                              Current
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm capitalize text-gray-200">{org.plan ?? "free"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-200">{org.membersCount ?? 0}</td>
+                      <td className="px-4 py-3 text-sm text-gray-200">{org.servicesCount ?? 0}</td>
+                      <td className="px-4 py-3 text-sm capitalize text-blue-200">{org.membershipRole}</td>
+                      <td className="px-4 py-3 text-sm capitalize text-gray-300">
+                        {org.status ?? "active"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            disabled={isCurrent || isSwitching}
+                            onClick={() => handleSwitch(org.id)}
+                            className="rounded-md border border-gray-600 px-3 py-1 text-xs font-semibold text-gray-200 transition hover:border-blue-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isCurrent ? "Active" : isSwitching ? "Switching..." : "Switch"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(org)}
+                            className="inline-flex items-center gap-1 rounded-md border border-blue-500/40 px-3 py-1 text-xs font-semibold text-blue-300 transition hover:border-blue-400 hover:text-white"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isDeleting}
+                            onClick={() => handleDelete(org.id)}
+                            className="inline-flex items-center gap-1 rounded-md border border-red-500/40 px-3 py-1 text-xs font-semibold text-red-300 transition hover:border-red-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                            {deleteConfirmId === org.id ? "Confirm" : "Delete"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {isFetching ? (
+          <p className="mt-2 text-xs text-gray-500">Syncing organizations...</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function DashboardPageContent() {
   const router = useRouter();
@@ -1682,6 +1948,10 @@ function DashboardPageContent() {
                   ) : null}
                 </div>
               </div>
+            )}
+
+            {activeTab === 'organizations' && isAdmin && (
+              <OrganizationsPanel session={session} />
             )}
 
             {activeTab === 'maintenance' && isAdmin && (

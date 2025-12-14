@@ -13,6 +13,20 @@ const createOrgSchema = z.object({
   slug: z.string().regex(/^[a-z0-9-]+$/i, "Slug can contain letters, numbers and dashes").min(2).max(64)
 });
 
+const updateOrgSchema = z
+  .object({
+    name: z.string().min(2).max(120).optional(),
+    slug: z
+      .string()
+      .regex(/^[a-z0-9-]+$/i, "Slug can contain letters, numbers and dashes")
+      .min(2)
+      .max(64)
+      .optional()
+  })
+  .refine((data) => data.name || data.slug, {
+    message: "Provide a name or slug to update"
+  });
+
 const organizationsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/",
@@ -146,6 +160,141 @@ const organizationsRoutes: FastifyPluginAsync = async (fastify) => {
         }
         throw error;
       }
+    }
+  );
+
+  fastify.patch(
+    "/:orgId",
+    { preHandler: fastify.authenticate },
+    async (request, reply) => {
+      const params = request.params as { orgId: string };
+      const parsed = updateOrgSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: true,
+          message: parsed.error.flatten().formErrors.join(", ") || "Invalid organization payload"
+        });
+      }
+
+      const membership = await prisma.membership.findFirst({
+        where: {
+          organizationId: params.orgId,
+          userId: request.user.id,
+          role: { in: ["owner", "admin"] }
+        },
+        select: { role: true }
+      });
+
+      if (!membership) {
+        return reply.status(403).send({
+          error: true,
+          message: "Only organization owners or admins can update this organization."
+        });
+      }
+
+      const data: Prisma.OrganizationUpdateInput = {};
+      if (parsed.data.name) {
+        data.name = parsed.data.name.trim();
+      }
+      if (parsed.data.slug) {
+        data.slug = parsed.data.slug.trim().toLowerCase();
+      }
+
+      try {
+        const updated = await prisma.organization.update({
+          where: { id: params.orgId },
+          data,
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            plan: true,
+            status: true,
+            updatedAt: true
+          }
+        });
+
+        await recordAuditLog({
+          action: "user_updated",
+          actorId: request.user.id,
+          actorEmail: request.user.email,
+          actorName: request.user.name,
+          organizationId: params.orgId,
+          targetType: "organization",
+          targetId: params.orgId,
+          metadata: { name: updated.name, slug: updated.slug }
+        });
+
+        return reply.send({ error: false, data: updated });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          return reply.status(409).send({ error: true, message: "Organization slug already exists" });
+        }
+        throw error;
+      }
+    }
+  );
+
+  fastify.delete(
+    "/:orgId",
+    { preHandler: fastify.authenticate },
+    async (request, reply) => {
+      const params = request.params as { orgId: string };
+
+      const membership = await prisma.membership.findFirst({
+        where: {
+          organizationId: params.orgId,
+          userId: request.user.id,
+          role: "owner"
+        }
+      });
+
+      if (!membership) {
+        return reply.status(403).send({
+          error: true,
+          message: "Only organization owners can delete this organization."
+        });
+      }
+
+      const remainingOrgCount = await prisma.membership.count({
+        where: {
+          userId: request.user.id,
+          organization: { isDeleted: false }
+        }
+      });
+
+      if (params.orgId === getRequestOrgId(request) && remainingOrgCount <= 1) {
+        return reply.status(400).send({
+          error: true,
+          message: "You cannot delete your last organization. Create another workspace first."
+        });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.organization.update({
+          where: { id: params.orgId },
+          data: {
+            status: "suspended",
+            isDeleted: true,
+            deletedAt: new Date()
+          }
+        });
+
+        await recordAuditLog(
+          {
+            action: "user_deleted",
+            actorId: request.user.id,
+            actorEmail: request.user.email,
+            actorName: request.user.name,
+            organizationId: params.orgId,
+            targetType: "organization",
+            targetId: params.orgId
+          },
+          tx
+        );
+      });
+
+      return reply.status(204).send();
     }
   );
 

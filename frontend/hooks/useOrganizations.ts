@@ -11,6 +11,8 @@ export type Organization = {
   plan?: string;
   servicesCount?: number;
   membersCount?: number;
+  status?: string;
+  createdAt?: string;
 };
 
 export type OrgMember = {
@@ -38,6 +40,27 @@ type SwitchOrgResponse = {
 async function fetchOrganizations(): Promise<Organization[]> {
   const res = await apiClient.get<OrgListResponse>("/organizations");
   return res.data.data;
+}
+
+async function createOrganization(payload: { name: string; slug: string }): Promise<Organization> {
+  const res = await apiClient.post<{ error: boolean; data: Organization }>("/organizations", payload);
+  return res.data.data;
+}
+
+async function updateOrganization(params: {
+  id: string;
+  name?: string;
+  slug?: string;
+}): Promise<Organization> {
+  const res = await apiClient.patch<{ error: boolean; data: Organization }>(
+    `/organizations/${params.id}`,
+    { name: params.name, slug: params.slug }
+  );
+  return res.data.data;
+}
+
+async function deleteOrganization(id: string): Promise<void> {
+  await apiClient.delete(`/organizations/${id}`);
 }
 
 async function switchOrganization(organizationId: string): Promise<Organization> {
@@ -102,6 +125,39 @@ export function useSwitchOrganization(options?: SwitchOrgOptions) {
       if (options?.onSettled) {
         await options.onSettled();
       }
+    }
+  });
+}
+
+export function useCreateOrganization() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createOrganization,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["session"] });
+    }
+  });
+}
+
+export function useUpdateOrganization() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateOrganization,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["session"] });
+    }
+  });
+}
+
+export function useDeleteOrganization() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteOrganization,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["session"] });
     }
   });
 }
