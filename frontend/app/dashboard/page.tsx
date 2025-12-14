@@ -63,6 +63,12 @@ import {
   useDeleteService
 } from "@hooks/useServices";
 import {
+  useApiKeys,
+  useCreateApiKey,
+  useDeleteApiKey,
+  type ApiKey
+} from "@hooks/useApiKeys";
+import {
   useMaintenanceEvents,
   useCreateMaintenanceEvent,
   useCancelMaintenanceEvent
@@ -936,6 +942,12 @@ function DashboardPageContent() {
   const startCheckout = useStartCheckout();
   const [checkoutPlanLoading, setCheckoutPlanLoading] = useState<"pro" | "enterprise" | null>(null);
   const invoicesQuery = useInvoices(isAdmin && activeTab === "billing");
+  const apiKeysQuery = useApiKeys(Boolean(isAdmin));
+  const createApiKey = useCreateApiKey();
+  const deleteApiKey = useDeleteApiKey();
+  const [newApiKeyName, setNewApiKeyName] = useState("");
+  const [lastCreatedKey, setLastCreatedKey] = useState<string | null>(null);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   const incidentFilters = useMemo(
     () => ({
@@ -2563,6 +2575,150 @@ function DashboardPageContent() {
                   onDelete={handleDeleteService}
                   isMutating={serviceMutationsPending}
                 />
+              </div>
+            )}
+
+            {activeTab === 'apiKeys' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-2 border-b border-gray-700 pb-4">
+                  <p className="text-xs uppercase tracking-wide text-blue-300">API Keys</p>
+                  <h2 className="text-2xl font-bold text-white">Org-scoped API keys</h2>
+                  <p className="text-sm text-gray-300">
+                    Generate keys for automation and webhooks. Keys are shown only once—copy and store them securely.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href="/docs#api-keys"
+                      className="inline-flex items-center gap-2 rounded-full border border-blue-400 px-4 py-2 text-xs font-semibold text-blue-100 hover:border-blue-200 hover:text-white transition"
+                    >
+                      View API key docs
+                    </Link>
+                  </div>
+                </div>
+
+                {apiKeyError ? (
+                  <div className="rounded-lg border border-red-500/50 bg-red-900/40 px-4 py-2 text-sm text-red-100">
+                    {apiKeyError}
+                  </div>
+                ) : null}
+
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setApiKeyError(null);
+                    if (!newApiKeyName.trim()) {
+                      setApiKeyError("Name is required.");
+                      return;
+                    }
+                    try {
+                      const key = await createApiKey.mutateAsync(newApiKeyName.trim());
+                      setLastCreatedKey(key);
+                      setNewApiKeyName("");
+                    } catch (error) {
+                      if (isAxiosError(error)) {
+                        setApiKeyError(error.response?.data?.message ?? "Unable to create API key.");
+                      } else {
+                        setApiKeyError("Unable to create API key.");
+                      }
+                    }
+                  }}
+                  className="rounded-lg border border-gray-700 bg-gray-900 p-4 space-y-3"
+                >
+                  <label className="text-sm font-semibold text-gray-200">Key name</label>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <input
+                      type="text"
+                      value={newApiKeyName}
+                      onChange={(e) => setNewApiKeyName(e.target.value)}
+                      placeholder="Ops key, Monitoring key..."
+                      className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={createApiKey.isPending}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+                    >
+                      {createApiKey.isPending ? "Generating..." : "Generate key"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Keys inherit the current organization scope. Rotate regularly and delete unused keys.
+                  </p>
+                </form>
+
+                {lastCreatedKey ? (
+                  <div className="rounded-lg border border-green-500/40 bg-green-900/40 p-4 text-sm text-green-100 space-y-2">
+                    <p className="font-semibold text-white">New key created</p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <code className="rounded bg-green-950 px-3 py-2 text-green-100 break-all">
+                        {lastCreatedKey}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(lastCreatedKey);
+                          } catch {
+                            /* ignore */
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 rounded-md border border-green-400 px-3 py-2 text-xs font-semibold text-green-100 hover:border-green-200 hover:text-white"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <p className="text-xs text-green-200/80">
+                      Store this key securely. You will not be able to see it again.
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="rounded-lg border border-gray-700 bg-gray-900 shadow-inner">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+                    <h3 className="text-sm font-semibold text-gray-200">Existing keys</h3>
+                  </div>
+                  {apiKeysQuery.isLoading ? (
+                    <div className="p-4 text-sm text-gray-400">Loading keys...</div>
+                  ) : apiKeysQuery.data && apiKeysQuery.data.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm text-gray-200">
+                        <thead className="text-xs uppercase text-gray-400 border-b border-gray-700 bg-gray-800">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Name</th>
+                            <th className="px-3 py-2 text-left">Created</th>
+                            <th className="px-3 py-2 text-left">Last used</th>
+                            <th className="px-3 py-2 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {apiKeysQuery.data.map((key: ApiKey) => (
+                            <tr key={key.id}>
+                              <td className="px-3 py-2 font-semibold text-white">{key.name}</td>
+                              <td className="px-3 py-2 text-gray-300">
+                                {key.createdAt ? new Date(key.createdAt).toLocaleDateString() : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-gray-400">
+                                {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : "Never"}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => deleteApiKey.mutate(key.id)}
+                                  className="inline-flex items-center gap-2 rounded-md border border-red-500/40 px-3 py-1 text-xs font-semibold text-red-300 transition hover:border-red-400 hover:text-white"
+                                >
+                                  <TrashIcon className="h-4 w-4" />
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="p-4 text-sm text-gray-400">No API keys created yet.</div>
+                  )}
+                </div>
               </div>
             )}
 
