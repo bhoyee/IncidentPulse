@@ -32,10 +32,9 @@ const organizationsRoutes: FastifyPluginAsync = async (fastify) => {
     "/",
     { preHandler: fastify.authenticate },
     async (request, reply) => {
-      const memberships = await prisma.membership.findMany({
+      const memberships = (await prisma.membership.findMany({
         where: { userId: request.user.id },
-        select: {
-          role: true,
+        include: {
           organization: {
             select: {
               id: true,
@@ -43,20 +42,22 @@ const organizationsRoutes: FastifyPluginAsync = async (fastify) => {
               slug: true,
               createdAt: true,
               plan: true,
+              billingStatus: true,
               services: { select: { id: true } },
               members: { select: { id: true } }
-            }
+            } as any
           }
         },
         orderBy: { createdAt: "asc" }
-      });
+      })) as any[];
 
-      const data = memberships.map((m) => ({
+      const data = memberships.map((m: any) => ({
         id: m.organization.id,
         name: m.organization.name,
         slug: m.organization.slug,
         membershipRole: m.role,
         plan: m.organization.plan,
+        billingStatus: m.organization.billingStatus,
         servicesCount: m.organization.services.length,
         membersCount: m.organization.members.length
       }));

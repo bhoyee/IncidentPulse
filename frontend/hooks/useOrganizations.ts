@@ -13,6 +13,7 @@ export type Organization = {
   membersCount?: number;
   status?: string;
   createdAt?: string;
+  billingStatus?: string;
 };
 
 export type OrgMember = {

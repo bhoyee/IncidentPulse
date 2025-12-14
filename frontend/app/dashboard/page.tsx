@@ -1189,6 +1189,8 @@ function DashboardPageContent() {
   const activeIncidents = incidents.filter(i => i.status !== 'resolved').length;
   const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
   const planLabel = session?.isSuperAdmin ? "super-admin" : currentOrg?.plan ?? "free";
+  const billingStatus = currentOrg?.billingStatus ?? "active";
+  const billingLocked = !session?.isSuperAdmin && billingStatus !== "active";
   const servicesUsed = servicesQuery.data ? servicesQuery.data.length : 0;
   const membersUsed = teamUsers.length;
   const incidentsUsed = incidents.length;
@@ -1477,12 +1479,13 @@ function DashboardPageContent() {
                 {canCreate && activeTab === 'incidents' && (
                   <button
                     onClick={() => setIsNewIncidentOpen(true)}
-                    className="inline-flex items-center text-sm font-semibold py-2 px-4 rounded-full transition duration-150 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/50"
+                    disabled={billingLocked}
+                    className="inline-flex items-center text-sm font-semibold py-2 px-4 rounded-full transition duration-150 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <span className="w-4 h-4 mr-2 font-bold">➕</span>+ New Incident
+                    <span className="w-4 h-4 mr-2 font-bold">+</span>
+                    {billingLocked ? "Billing hold" : "+ New Incident"}
                   </button>
                 )}
-
                 <div className="relative group">
                   <div className="p-2 flex items-center space-x-2 cursor-pointer rounded-full hover:bg-gray-800 transition duration-150">
                     <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold text-white uppercase">
@@ -1618,6 +1621,11 @@ function DashboardPageContent() {
                         </span>
                       </div>
                     </div>
+                    {billingLocked ? (
+                      <div className="mt-3 rounded-lg border border-amber-500/50 bg-amber-900/40 px-3 py-2 text-xs text-amber-100">
+                        Billing issue: payments failed or subscription lapsed. Update billing to restore write access.
+                      </div>
+                    ) : null}
                   </div>
                   <div className="p-3 rounded-xl bg-blue-900/40 text-blue-200">
                     <CreditCardIcon className="h-6 w-6" />
@@ -2799,7 +2807,7 @@ function DashboardPageContent() {
                 </button>
               </div>
               <NewIncidentForm
-                disabled={!canCreate}
+                disabled={!canCreate || billingLocked}
                 onSuccess={() => setIsNewIncidentOpen(false)}
                 services={serviceOptions}
               />

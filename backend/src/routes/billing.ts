@@ -9,8 +9,9 @@ const billingRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       // Lazy require to avoid hard dependency when Stripe is not installed
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const Stripe = require("stripe");
-      stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
+      const StripeLib = require("stripe");
+      const StripeCtor = StripeLib.default || StripeLib;
+      stripe = new StripeCtor(env.STRIPE_SECRET_KEY);
     } catch (err) {
       fastify.log.warn({ err }, "Stripe not available; using stub billing links");
     }
@@ -68,6 +69,17 @@ const billingRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
     return plan;
+  }
+
+  async function updateOrgBilling(opts: { orgId: string; plan?: "pro" | "enterprise" | null; status?: "active" | "past_due" | "suspended" }) {
+    const data: Record<string, any> = {};
+    if (opts.plan) data.plan = opts.plan;
+    if (opts.status) data.billingStatus = opts.status;
+    if (Object.keys(data).length === 0) return;
+    await prisma.organization.update({
+      where: { id: opts.orgId },
+      data
+    });
   }
 
   fastify.get(
@@ -184,6 +196,66 @@ const billingRoutes: FastifyPluginAsync = async (fastify) => {
         invoicePdf: inv.invoice_pdf
       }));
       return reply.send({ error: false, data });
+    }
+  );
+
+  fastify.post(
+    "/webhook",
+    { config: { rawBody: true } },
+    async (request, reply) => {
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      if (!stripe || !webhookSecret) {
+        return reply.status(400).send({ error: true, message: "Stripe webhook not configured" });
+      }
+      const sig = request.headers["stripe-signature"];
+      if (!sig) {
+        return reply.status(400).send({ error: true, message: "Missing signature" });
+      }
+      let event: any;
+      try {
+        const raw = (request as any).rawBody;
+        event = stripe.webhooks.constructEvent(raw, sig, webhookSecret);
+      } catch (err) {
+        request.log.warn({ err }, "Invalid webhook signature");
+        return reply.status(400).send({ error: true, message: "Invalid signature" });
+      }
+
+      const object = event.data.object as any;
+      const customerId = object?.customer as string | undefined;
+
+      const org =
+        customerId &&
+        (await prisma.organization.findFirst({
+          where: { stripeCustomerId: customerId },
+          select: { id: true }
+        }));
+
+      if (!org) {
+        return reply.send({ received: true });
+      }
+
+      if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+        const subscription = object as any;
+        const priceId = (subscription.items?.data?.[0]?.price?.id as string | undefined) ?? null;
+        const plan = planFromPrice(priceId);
+        const status = subscription.status;
+        const billingStatus =
+          status === "active" || status === "trialing"
+            ? "active"
+            : status === "past_due"
+              ? "past_due"
+              : "suspended";
+        await updateOrgBilling({ orgId: org.id, plan, status: billingStatus });
+      } else if (event.type === "invoice.payment_failed") {
+        await updateOrgBilling({ orgId: org.id, status: "past_due" });
+      } else if (event.type === "invoice.payment_succeeded") {
+        const invoice = object as any;
+        const priceId = (invoice.lines?.data?.[0]?.price?.id as string | undefined) ?? null;
+        const plan = planFromPrice(priceId);
+        await updateOrgBilling({ orgId: org.id, plan, status: "active" });
+      }
+
+      return reply.send({ received: true });
     }
   );
 };

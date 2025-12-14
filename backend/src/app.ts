@@ -151,6 +151,17 @@ export function buildApp() {
             message: "Organization is suspended"
           });
         }
+        // Block writes for overdue billing.
+        const method = request.method.toUpperCase();
+        const routePath = (request.routerPath ?? request.raw.url ?? "").toString();
+        const isMutating = method !== "GET" && method !== "OPTIONS" && method !== "HEAD";
+        const isBillingRoute = routePath.includes("/billing");
+        if (org && org.billingStatus && org.billingStatus !== "active" && isMutating && !isBillingRoute) {
+          return reply.status(402).send({
+            error: true,
+            message: "Billing issue detected. Please update payment to continue."
+          });
+        }
         const rateLimitResult = await enforceOrgRateLimit(request, reply);
         if (rateLimitResult) {
           return rateLimitResult;

@@ -79,6 +79,12 @@ enum OrgStatus {
   suspended
 }
 
+enum BillingStatus {
+  active
+  past_due
+  suspended
+}
+
 model User {
   id           String    @id @default(uuid())
   name         String
@@ -109,6 +115,7 @@ model Organization {
   name      String
   slug      String        @unique
   plan      Plan          @default(free)
+  billingStatus BillingStatus @default(active)
   rateLimitPerMinute Int  @default(600)
   status    OrgStatus     @default(active)
   isDeleted Boolean       @default(false)
