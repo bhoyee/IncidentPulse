@@ -1166,6 +1166,11 @@ function DashboardPageContent() {
   const teamMeta = teamUsersQuery.data?.meta;
   const isTeamLoading = teamUsersQuery.isLoading && teamUsers.length === 0;
   const isTeamRefetching = teamUsersQuery.isFetching && !teamUsersQuery.isLoading;
+  const { data: orgs = [] } = useOrganizations();
+  const currentOrg = useMemo(
+    () => orgs.find((o) => o.id === session?.orgId),
+    [orgs, session?.orgId]
+  );
 
   useEffect(() => {
     if (incidentIdFromQuery) setSelectedIncidentId(incidentIdFromQuery);
@@ -1183,16 +1188,16 @@ function DashboardPageContent() {
   const criticalIncidents = incidents.filter(i => i.severity === 'critical').length;
   const activeIncidents = incidents.filter(i => i.status !== 'resolved').length;
   const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
-  const planLabel = session?.isSuperAdmin ? "super-admin" : "free";
+  const planLabel = session?.isSuperAdmin ? "super-admin" : currentOrg?.plan ?? "free";
   const servicesUsed = servicesQuery.data ? servicesQuery.data.length : 0;
   const membersUsed = teamUsers.length;
   const incidentsUsed = incidents.length;
   const planLimits =
     planLabel === "free"
       ? { services: 2, members: 3, incidents: 50, orgs: 1 }
-      : planLabel === "super-admin"
-      ? { services: undefined, members: undefined, incidents: undefined, orgs: undefined }
-      : { services: 20, members: 25, incidents: 1000, orgs: 5 };
+      : planLabel === "pro"
+        ? { services: 10, members: 15, incidents: 500, orgs: 5 }
+        : { services: undefined, members: undefined, incidents: undefined, orgs: undefined };
 
   const statMappings = [
     { label: "Active Incidents", value: activeIncidents, colorClass: "bg-yellow-800/30 text-yellow-300", icon: "ACT" },

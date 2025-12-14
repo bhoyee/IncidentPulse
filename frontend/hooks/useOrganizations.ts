@@ -112,7 +112,13 @@ export function useSwitchOrganization(options?: SwitchOrgOptions) {
         "maintenance",
         "metrics",
         "auditLogs",
-        "integration-settings"
+        "integration-settings",
+        "team-users",
+        "org-members",
+        "billing",
+        "api-keys",
+        "support-tickets",
+        "platform"
       ];
       keysToInvalidate.forEach((key) =>
         queryClient.invalidateQueries({ queryKey: [key] })
