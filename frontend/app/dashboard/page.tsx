@@ -79,6 +79,9 @@ import {
   useOrgSupportTickets,
   useCreateSupportTicket,
   useAddSupportComment,
+  usePlatformSupportTickets,
+  useUpdateSupportStatus,
+  useAssignSupportTicket,
   useUploadSupportAttachments,
   type SupportTicket
 } from "@hooks/useSupport";
@@ -90,6 +93,7 @@ import {
   useDeleteOrganization,
   type Organization
 } from "@hooks/useOrganizations";
+import { usePlatformOrgs, usePlatformUsers } from "@hooks/usePlatform";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { FirstStepsModal } from "@components/FirstStepsModal";
 import { useIncidentStream } from "@hooks/useIncidentStream";
@@ -1293,6 +1297,160 @@ function SupportPanel() {
   );
 }
 
+function PlatformSupportPanel({
+  orgs,
+  users
+}: {
+  orgs: Array<{ id: string; name: string; slug?: string }>;
+  users: Array<{ id: string; name: string; email: string }>;
+}) {
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [orgFilter, setOrgFilter] = useState<string>("");
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const { data: tickets = [], isLoading } = usePlatformSupportTickets(true, {
+    status: statusFilter || undefined,
+    orgId: orgFilter || undefined
+  });
+  const updateStatus = useUpdateSupportStatus("platform");
+  const assignTicket = useAssignSupportTicket();
+  const addComment = useAddSupportComment("platform");
+
+  const handleAssign = async (ticketId: string, assigneeId: string) => {
+    await assignTicket.mutateAsync({ ticketId, assigneeId });
+  };
+
+  const handleStatus = async (ticketId: string, status: "open" | "pending" | "closed") => {
+    await updateStatus.mutateAsync({ ticketId, status });
+  };
+
+  const handleAddNote = async (ticketId: string) => {
+    const body = (notes[ticketId] ?? "").trim();
+    if (!body) return;
+    await addComment.mutateAsync({ ticketId, body, isInternal: true });
+    setNotes((prev) => ({ ...prev, [ticketId]: "" }));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+        <label className="text-xs font-semibold uppercase text-gray-400">
+          Status
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+          >
+            <option value="">All</option>
+            <option value="open">Open</option>
+            <option value="pending">Pending</option>
+            <option value="closed">Closed</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold uppercase text-gray-400">
+          Organization
+          <select
+            value={orgFilter}
+            onChange={(e) => setOrgFilter(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+          >
+            <option value="">All orgs</option>
+            {orgs.map((org) => (
+              <option key={org.id} value={org.id}>
+                {org.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-gray-800 bg-gray-900 shadow-lg">
+        <table className="min-w-full divide-y divide-gray-800 text-sm">
+          <thead className="bg-gray-800/60 text-xs uppercase text-gray-400">
+            <tr>
+              <th className="px-4 py-3 text-left">Subject</th>
+              <th className="px-4 py-3 text-left">Org</th>
+              <th className="px-4 py-3 text-left">Priority</th>
+              <th className="px-4 py-3 text-left">Status</th>
+              <th className="px-4 py-3 text-left">Assignee</th>
+              <th className="px-4 py-3 text-left">Created</th>
+              <th className="px-4 py-3 text-left">Internal note</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-800 text-gray-100">
+            {isLoading ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                  Loading tickets...
+                </td>
+              </tr>
+            ) : tickets.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                  No tickets found.
+                </td>
+              </tr>
+            ) : (
+              tickets.map((ticket) => (
+                <tr key={ticket.id} className="hover:bg-gray-800/60">
+                  <td className="px-4 py-3 font-semibold text-white">{ticket.subject}</td>
+                  <td className="px-4 py-3 text-gray-300">{ticket.organization?.name ?? "—"}</td>
+                  <td className="px-4 py-3 capitalize text-gray-200">{ticket.priority}</td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={ticket.status}
+                      onChange={(e) => handleStatus(ticket.id, e.target.value as any)}
+                      className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                    >
+                      <option value="open">Open</option>
+                      <option value="pending">Pending</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={ticket.assignee?.id ?? ""}
+                      onChange={(e) => handleAssign(ticket.id, e.target.value)}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3 text-gray-300">
+                    {format(new Date(ticket.createdAt), "PP p")}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-2">
+                      <textarea
+                        rows={2}
+                        value={notes[ticket.id] ?? ""}
+                        onChange={(e) => setNotes((prev) => ({ ...prev, [ticket.id]: e.target.value }))}
+                        placeholder="Add internal note"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddNote(ticket.id)}
+                        className="self-start rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500"
+                      >
+                        Save note
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1309,6 +1467,8 @@ function DashboardPageContent() {
   const [auditPage, setAuditPage] = useState(1);
   const AUDIT_PAGE_SIZE = 20;
   const [isSimulatingIncident, setIsSimulatingIncident] = useState(false);
+  const [platformTicketStatus, setPlatformTicketStatus] = useState<string>("");
+  const [platformTicketOrg, setPlatformTicketOrg] = useState<string>("");
   const auditActionOptions = [
     { value: "", label: "All actions" },
     { value: "user_login", label: "User login" },
@@ -1656,6 +1816,8 @@ function DashboardPageContent() {
   const isTeamLoading = teamUsersQuery.isLoading && teamUsers.length === 0;
   const isTeamRefetching = teamUsersQuery.isFetching && !teamUsersQuery.isLoading;
   const { data: orgs = [] } = useOrganizations();
+  const platformOrgs = usePlatformOrgs(Boolean(session?.isSuperAdmin)).data ?? [];
+  const platformUsers = usePlatformUsers(Boolean(session?.isSuperAdmin)).data ?? [];
   const currentOrg = useMemo(
     () => orgs.find((o) => o.id === session?.orgId),
     [orgs, session?.orgId]
@@ -3088,6 +3250,19 @@ function DashboardPageContent() {
 
             {activeTab === 'support' && (
               <SupportPanel />
+            )}
+
+            {activeTab === 'platformSupport' && session?.isSuperAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-2 border-b border-gray-700 pb-4">
+                  <p className="text-xs uppercase tracking-wide text-blue-300">Platform Support</p>
+                  <h2 className="text-2xl font-bold text-white">All tenant tickets</h2>
+                  <p className="text-sm text-gray-300">
+                    Triage and respond to every organization’s tickets. Add internal notes, reassign, and update status.
+                  </p>
+                </div>
+                <PlatformSupportPanel orgs={platformOrgs} users={platformUsers} />
+              </div>
             )}
 
             {activeTab === 'services' && isAdmin && (
