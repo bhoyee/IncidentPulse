@@ -271,7 +271,12 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
         </fieldset>
 
         <fieldset className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <legend className="text-sm font-semibold text-amber-900">Log-based auto incidents (beta)</legend>
+          <legend className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+            <span>Log-based auto incidents</span>
+            <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-900">
+              Beta
+            </span>
+          </legend>
           <label className="flex items-center gap-3 text-sm font-medium text-amber-900">
             <input
               type="checkbox"
@@ -351,7 +356,7 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
               className="h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
               disabled={disabled}
             />
-            Attach AI log summary when auto-incident is created (requires provider key)
+            Attach AI log summary when auto-incident is created
           </label>
           <label className="text-sm text-amber-900">
             Lines to summarize (optional)
@@ -378,6 +383,7 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
           <p className="text-xs text-amber-800">
             We only ingest events for services defined in this org. Use the org API key to post logs to
             <code className="font-mono text-xs text-amber-900 ml-1">/logs/ingest</code> with <code className="font-mono text-xs text-amber-900">service</code>, <code className="font-mono text-xs text-amber-900">level</code>, and <code className="font-mono text-xs text-amber-900">message</code>.
+            If an AI provider key is not configured on the backend, summaries are simply skipped; keys are never shown in the UI.
           </p>
         </fieldset>
 
