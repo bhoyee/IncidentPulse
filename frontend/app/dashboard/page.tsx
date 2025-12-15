@@ -91,6 +91,7 @@ import {
   type Organization
 } from "@hooks/useOrganizations";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
+import { FirstStepsModal } from "@components/FirstStepsModal";
 import { useIncidentStream } from "@hooks/useIncidentStream";
 import { useOpenBillingPortal, useStartCheckout, useInvoices } from "@hooks/useBilling";
 import { apiClient } from "@lib/api-client";
@@ -126,6 +127,7 @@ type ServiceOption = {
 };
 
 
+const FIRST_STEPS_KEY = "incidentpulse.firstSteps.dismissed";
 const PASSWORD_PROMPT_KEY = "incidentpulse.passwordPrompt.dismissed";
 // Namespace the password reminder per-email so shared browsers don't bleed state.
 const getPasswordPromptKey = (email?: string | null) =>
@@ -1358,6 +1360,7 @@ function DashboardPageContent() {
   });
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [showPasswordReminder, setShowPasswordReminder] = useState(false);
+  const [showFirstSteps, setShowFirstSteps] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState({
@@ -1556,6 +1559,14 @@ function DashboardPageContent() {
     }
   };
 
+  const handleOpenFirstSteps = () => setShowFirstSteps(true);
+  const handleCloseFirstSteps = () => {
+    setShowFirstSteps(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(FIRST_STEPS_KEY, "1");
+    }
+  };
+
   const dismissPasswordReminder = () => {
     // Persist dismissal so we don't nag on every login.
     if (session?.email && typeof window !== "undefined") {
@@ -1654,6 +1665,12 @@ function DashboardPageContent() {
     if (incidentIdFromQuery) setSelectedIncidentId(incidentIdFromQuery);
     else setSelectedIncidentId(null);
   }, [incidentIdFromQuery]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const seen = window.localStorage.getItem(FIRST_STEPS_KEY);
+    if (!seen) setShowFirstSteps(true);
+  }, []);
 
   if (!session) {
     return (
@@ -2080,6 +2097,15 @@ function DashboardPageContent() {
           )}
 
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-8">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleOpenFirstSteps}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm font-semibold text-blue-200 hover:border-blue-500 hover:text-white"
+              >
+                Show setup tips
+              </button>
+            </div>
             {activeTab === 'incidents' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {statMappings.map(stat => (
@@ -3349,6 +3375,8 @@ function DashboardPageContent() {
             </div>
           </div>
         )}
+
+        <FirstStepsModal open={showFirstSteps} onClose={handleCloseFirstSteps} />
 
         <IncidentDrawer
           incidentId={selectedIncidentId ?? undefined}
