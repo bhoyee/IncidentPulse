@@ -838,12 +838,12 @@ function SupportPanel() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 10;
+  const [pageSize, setPageSize] = useState(10);
   const { data: supportResponse, isLoading } = useOrgSupportTickets({
     status: statusFilter || undefined,
     q: search || undefined,
     page,
-    pageSize: PAGE_SIZE
+    pageSize
   });
   const tickets = supportResponse?.data ?? [];
   const totalTickets = supportResponse?.meta?.total ?? tickets.length;
@@ -1130,6 +1130,20 @@ function SupportPanel() {
               <option value="pending">Pending</option>
               <option value="closed">Closed</option>
             </select>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                const next = Number(e.target.value) || 10;
+                setPageSize(next);
+                setPage(1);
+              }}
+              className="w-full md:w-40 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value={5}>5 per page</option>
+              <option value={10}>10 per page</option>
+              <option value={20}>20 per page</option>
+              <option value={50}>50 per page</option>
+            </select>
           </div>
         </div>
         {isLoading ? (
@@ -1262,10 +1276,10 @@ function SupportPanel() {
                 </div>
               </div>
             ))}
-            {totalTickets > PAGE_SIZE ? (
+            {totalTickets > pageSize ? (
               <Pagination
                 page={page}
-                pageSize={PAGE_SIZE}
+                pageSize={pageSize}
                 total={totalTickets}
                 onPageChange={(p) => setPage(p)}
               />
