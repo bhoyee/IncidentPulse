@@ -1307,6 +1307,9 @@ function PlatformSupportPanel({
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [orgFilter, setOrgFilter] = useState<string>("");
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [replyBody, setReplyBody] = useState<string>("");
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const { data: tickets = [], isLoading } = usePlatformSupportTickets(true, {
     status: statusFilter || undefined,
     orgId: orgFilter || undefined
@@ -1314,6 +1317,9 @@ function PlatformSupportPanel({
   const updateStatus = useUpdateSupportStatus("platform");
   const assignTicket = useAssignSupportTicket();
   const addComment = useAddSupportComment("platform");
+  const uploadAttachments = useUploadSupportAttachments("platform");
+
+  const selectedTicket = tickets.find((t) => t.id === selectedTicketId) ?? null;
 
   const handleAssign = async (ticketId: string, assigneeId: string) => {
     await assignTicket.mutateAsync({ ticketId, assigneeId });
@@ -1328,6 +1334,24 @@ function PlatformSupportPanel({
     if (!body) return;
     await addComment.mutateAsync({ ticketId, body, isInternal: true });
     setNotes((prev) => ({ ...prev, [ticketId]: "" }));
+  };
+
+  const handleReply = async (ticketId: string) => {
+    const body = replyBody.trim();
+    if (!body) return;
+    await addComment.mutateAsync({ ticketId, body, isInternal: false });
+    setReplyBody("");
+  };
+
+  const handleAttachments = async (ticketId: string, files: FileList | null) => {
+    const list = files ? Array.from(files) : [];
+    if (!list.length) return;
+    setUploadingFor(ticketId);
+    try {
+      await uploadAttachments.mutateAsync({ ticketId, files: list });
+    } finally {
+      setUploadingFor(null);
+    }
   };
 
   return (
@@ -1391,7 +1415,11 @@ function PlatformSupportPanel({
               </tr>
             ) : (
               tickets.map((ticket) => (
-                <tr key={ticket.id} className="hover:bg-gray-800/60">
+                <tr
+                  key={ticket.id}
+                  className={`hover:bg-gray-800/60 cursor-pointer ${selectedTicketId === ticket.id ? "bg-gray-800/80" : ""}`}
+                  onClick={() => setSelectedTicketId(ticket.id)}
+                >
                   <td className="px-4 py-3 font-semibold text-white">{ticket.subject}</td>
                   <td className="px-4 py-3 text-gray-300">{ticket.organization?.name ?? "—"}</td>
                   <td className="px-4 py-3 capitalize text-gray-200">{ticket.priority}</td>
@@ -1447,6 +1475,144 @@ function PlatformSupportPanel({
           </tbody>
         </table>
       </div>
+
+      {selectedTicket ? (
+        <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 shadow-lg">
+          <div className="flex flex-col gap-2 border-b border-gray-800 pb-3">
+            <p className="text-xs uppercase tracking-wide text-blue-300">Ticket detail</p>
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h4 className="text-xl font-semibold text-white">{selectedTicket.subject}</h4>
+                <p className="text-sm text-gray-300">
+                  Org: {selectedTicket.organization?.name ?? "—"} · Priority:{" "}
+                  <span className="capitalize">{selectedTicket.priority}</span>
+                </p>
+              </div>
+              <div className="text-xs text-gray-400">
+                Created {format(new Date(selectedTicket.createdAt), "PP p")}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-6">
+            <div>
+              <p className="text-xs uppercase text-gray-400">Description</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-gray-200">{selectedTicket.body}</p>
+            </div>
+
+            {selectedTicket.attachments && selectedTicket.attachments.length > 0 ? (
+              <div>
+                <p className="text-xs uppercase text-gray-400">Attachments</p>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  {selectedTicket.attachments.map((att) => {
+                    const href = att.path?.startsWith("http") ? att.path : `/uploads/${att.path}`;
+                    return (
+                      <div
+                        key={att.id}
+                        className="flex items-center justify-between rounded border border-gray-700 bg-gray-950 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-white">{att.filename}</p>
+                          <p className="text-xs text-gray-400">{formatAttachmentSize(att.size ?? 0)}</p>
+                        </div>
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-semibold text-blue-400 hover:text-blue-200"
+                        >
+                          View
+                        </a>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase text-gray-400">Thread</p>
+                <label className="text-xs text-gray-300">
+                  Attach files
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => handleAttachments(selectedTicket.id, e.target.files)}
+                    className="mt-1 block text-xs text-gray-300"
+                  />
+                </label>
+              </div>
+              <div className="space-y-3 rounded-lg border border-gray-800 bg-gray-900/60 p-3 max-h-72 overflow-y-auto">
+                {selectedTicket.comments && selectedTicket.comments.length > 0 ? (
+                  selectedTicket.comments.map((c) => (
+                    <div key={c.id} className="rounded border border-gray-800 bg-gray-950/60 p-3">
+                      <div className="flex items-center justify-between text-xs text-gray-400">
+                        <span>
+                          {c.author?.name ?? "System"}{" "}
+                          {c.isInternal ? (
+                            <span className="ml-2 rounded bg-amber-900/50 px-2 py-0.5 text-amber-200">
+                              Internal
+                            </span>
+                          ) : null}
+                        </span>
+                        <span>{format(new Date(c.createdAt), "PP p")}</span>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-gray-100">{c.body}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-400">No comments yet.</p>
+                )}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-xs uppercase text-gray-400">Public reply</p>
+                  <textarea
+                    rows={3}
+                    value={replyBody}
+                    onChange={(e) => setReplyBody(e.target.value)}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                    placeholder="Write a reply that notifies the requester."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleReply(selectedTicket.id)}
+                    className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+                  >
+                    Send reply
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase text-gray-400">Internal note</p>
+                  <textarea
+                    rows={3}
+                    value={notes[selectedTicket.id] ?? ""}
+                    onChange={(e) => setNotes((prev) => ({ ...prev, [selectedTicket.id]: e.target.value }))}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                    placeholder="Private note for the platform team."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddNote(selectedTicket.id)}
+                    className="rounded-md bg-slate-700 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-600"
+                  >
+                    Save internal note
+                  </button>
+                </div>
+              </div>
+              {uploadingFor === selectedTicket.id ? (
+                <p className="text-xs text-gray-400">Uploading attachments...</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 text-sm text-gray-400">
+          Select a ticket to view details, attachments, and thread.
+        </div>
+      )}
     </div>
   );
 }
