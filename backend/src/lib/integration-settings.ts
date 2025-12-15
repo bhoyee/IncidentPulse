@@ -50,6 +50,8 @@ type IntegrationSettingsInput = {
   autoIncidentErrorThreshold?: number | null;
   autoIncidentWindowSeconds?: number | null;
   autoIncidentCooldownSeconds?: number | null;
+  autoIncidentAiEnabled?: boolean;
+  autoIncidentSummaryLines?: number | null;
 };
 
 export async function saveIntegrationSettings(

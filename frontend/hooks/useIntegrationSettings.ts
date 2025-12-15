@@ -13,6 +13,8 @@ export type IntegrationSettings = {
   autoIncidentErrorThreshold?: number | null;
   autoIncidentWindowSeconds?: number | null;
   autoIncidentCooldownSeconds?: number | null;
+  autoIncidentAiEnabled?: boolean;
+  autoIncidentSummaryLines?: number | null;
 };
 
 type SettingsResponse = {

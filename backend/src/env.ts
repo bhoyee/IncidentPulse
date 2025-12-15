@@ -50,6 +50,15 @@ const envSchema = z.object({
   LOG_TRIGGER_WINDOW_MS: z.coerce.number().int().positive().optional(), // default 60s
   LOG_TRIGGER_ERROR_THRESHOLD: z.coerce.number().int().positive().optional(), // default 20
   LOG_TRIGGER_COOLDOWN_MS: z.coerce.number().int().positive().optional(), // default 5 minutes
+  AI_LOG_SUMMARY_ENABLED: z
+    .preprocess((value) => {
+      if (value === undefined) return false;
+      if (typeof value === "boolean") return value;
+      const normalized = String(value).toLowerCase().trim();
+      return ["1", "true", "yes", "y"].includes(normalized);
+    }, z.boolean())
+    .optional(),
+  DEEPSEEK_API_KEY: z.string().optional(),
   MULTI_TENANT_ENABLED: z.preprocess((value) => {
     if (value === undefined) return false;
     if (typeof value === "boolean") return value;

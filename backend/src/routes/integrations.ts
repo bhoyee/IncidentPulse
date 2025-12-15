@@ -41,7 +41,9 @@ const updateSchema = z.object({
   autoIncidentEnabled: z.boolean().optional(),
   autoIncidentErrorThreshold: z.coerce.number().int().positive().optional(),
   autoIncidentWindowSeconds: z.coerce.number().int().positive().optional(),
-  autoIncidentCooldownSeconds: z.coerce.number().int().positive().optional()
+  autoIncidentCooldownSeconds: z.coerce.number().int().positive().optional(),
+  autoIncidentAiEnabled: z.boolean().optional(),
+  autoIncidentSummaryLines: z.coerce.number().int().positive().optional()
 });
 
 const sanitizeInput = (value: string | undefined | ""): string | null | undefined => {
@@ -72,7 +74,9 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
           autoIncidentEnabled: settings?.autoIncidentEnabled ?? false,
           autoIncidentErrorThreshold: settings?.autoIncidentErrorThreshold ?? null,
           autoIncidentWindowSeconds: settings?.autoIncidentWindowSeconds ?? null,
-          autoIncidentCooldownSeconds: settings?.autoIncidentCooldownSeconds ?? null
+          autoIncidentCooldownSeconds: settings?.autoIncidentCooldownSeconds ?? null,
+          autoIncidentAiEnabled: settings?.autoIncidentAiEnabled ?? false,
+          autoIncidentSummaryLines: settings?.autoIncidentSummaryLines ?? null
         }
       });
     }
@@ -103,7 +107,9 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
           autoIncidentEnabled: payload.autoIncidentEnabled ?? undefined,
           autoIncidentErrorThreshold: payload.autoIncidentErrorThreshold ?? undefined,
           autoIncidentWindowSeconds: payload.autoIncidentWindowSeconds ?? undefined,
-          autoIncidentCooldownSeconds: payload.autoIncidentCooldownSeconds ?? undefined
+          autoIncidentCooldownSeconds: payload.autoIncidentCooldownSeconds ?? undefined,
+          autoIncidentAiEnabled: payload.autoIncidentAiEnabled ?? undefined,
+          autoIncidentSummaryLines: payload.autoIncidentSummaryLines ?? undefined
         },
         orgId
       );
@@ -119,7 +125,9 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
           autoIncidentEnabled: updated.autoIncidentEnabled ?? false,
           autoIncidentErrorThreshold: updated.autoIncidentErrorThreshold ?? null,
           autoIncidentWindowSeconds: updated.autoIncidentWindowSeconds ?? null,
-          autoIncidentCooldownSeconds: updated.autoIncidentCooldownSeconds ?? null
+          autoIncidentCooldownSeconds: updated.autoIncidentCooldownSeconds ?? null,
+          autoIncidentAiEnabled: updated.autoIncidentAiEnabled ?? false,
+          autoIncidentSummaryLines: updated.autoIncidentSummaryLines ?? null
         }
       });
     }

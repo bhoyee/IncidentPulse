@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../lib/db";
 import { env } from "../env";
+import { summarizeLogsWithAi } from "../lib/log-ai";
 import { getPlanLimits } from "../lib/org-limits";
 
 type LogEntry = {
@@ -114,6 +115,10 @@ const logsRoutes: FastifyPluginAsync = async (fastify) => {
       (integrationSettings?.autoIncidentWindowSeconds ?? TRIGGER_WINDOW_MS / 1000) * 1000;
     const cooldownMs =
       (integrationSettings?.autoIncidentCooldownSeconds ?? TRIGGER_COOLDOWN_MS / 1000) * 1000;
+    const summaryLines =
+      integrationSettings?.autoIncidentSummaryLines && integrationSettings.autoIncidentSummaryLines > 0
+        ? Math.min(200, integrationSettings.autoIncidentSummaryLines)
+        : 200;
 
     if (!orgEnabled) {
       return reply.send({ error: false, message: "Ingested (auto incidents disabled)" });
@@ -178,6 +183,30 @@ const logsRoutes: FastifyPluginAsync = async (fastify) => {
           createdById
         }
       });
+
+      // Optional AI summary if enabled and key present
+      const aiEnabled =
+        env.AI_LOG_SUMMARY_ENABLED && env.DEEPSEEK_API_KEY && integrationSettings?.autoIncidentAiEnabled;
+      if (aiEnabled) {
+        const summary = await summarizeLogsWithAi(
+          fastify.log,
+          buf.slice(-summaryLines),
+          service.name
+        );
+        if (summary) {
+          try {
+            await prisma.incidentUpdate.create({
+              data: {
+                incidentId: incident.id,
+                authorId: createdById,
+                message: `AI log summary:\n${summary}`
+              }
+            });
+          } catch (err) {
+            fastify.log.warn({ err }, "Failed to store AI log summary");
+          }
+        }
+      }
 
       lastTriggers.set(key, now);
       fastify.log.info(

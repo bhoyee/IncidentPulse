@@ -20,7 +20,9 @@ const defaultState: IntegrationSettings = {
   autoIncidentEnabled: false,
   autoIncidentErrorThreshold: null,
   autoIncidentWindowSeconds: null,
-  autoIncidentCooldownSeconds: null
+  autoIncidentCooldownSeconds: null,
+  autoIncidentAiEnabled: false,
+  autoIncidentSummaryLines: null
 };
 
 const githubWorkflowSample = `jobs:
@@ -340,6 +342,39 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
               <span className="mt-1 block text-xs text-amber-800">Wait before triggering again.</span>
             </label>
           </div>
+          <label className="flex items-center gap-3 text-sm font-medium text-amber-900">
+            <input
+              type="checkbox"
+              name="autoIncidentAiEnabled"
+              checked={Boolean(form.autoIncidentAiEnabled)}
+              onChange={(e) => setForm((prev) => ({ ...prev, autoIncidentAiEnabled: e.target.checked }))}
+              className="h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+              disabled={disabled}
+            />
+            Attach AI log summary when auto-incident is created (requires provider key)
+          </label>
+          <label className="text-sm text-amber-900">
+            Lines to summarize (optional)
+            <input
+              type="number"
+              min={10}
+              max={200}
+              name="autoIncidentSummaryLines"
+              value={form.autoIncidentSummaryLines ?? ""}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  autoIncidentSummaryLines: e.target.value ? Number(e.target.value) : null
+                }))
+              }
+              placeholder="200"
+              className="mt-1 w-full rounded-md border-amber-200 shadow-sm focus:border-amber-500 focus:ring-amber-500 text-sm"
+              disabled={disabled}
+            />
+            <span className="mt-1 block text-xs text-amber-800">
+              We cap size internally; fewer lines reduces token usage.
+            </span>
+          </label>
           <p className="text-xs text-amber-800">
             We only ingest events for services defined in this org. Use the org API key to post logs to
             <code className="font-mono text-xs text-amber-900 ml-1">/logs/ingest</code> with <code className="font-mono text-xs text-amber-900">service</code>, <code className="font-mono text-xs text-amber-900">level</code>, and <code className="font-mono text-xs text-amber-900">message</code>.
