@@ -1769,6 +1769,21 @@ function DashboardPageContent() {
   const { data: session } = useSession();
   useIncidentStream(Boolean(session));
   const isAdmin = session?.role === "admin";
+  const [supportLastSeen, setSupportLastSeen] = useState<number>(() => {
+    if (typeof window === "undefined") return Date.now();
+    const raw = window.localStorage.getItem("support:lastSeen");
+    return raw ? Number(raw) || Date.now() : Date.now();
+  });
+  const [platformSupportLastSeen, setPlatformSupportLastSeen] = useState<number>(() => {
+    if (typeof window === "undefined") return Date.now();
+    const raw = window.localStorage.getItem("platformSupport:lastSeen");
+    return raw ? Number(raw) || Date.now() : Date.now();
+  });
+  const supportBadge = useOrgSupportTickets({ page: 1, pageSize: 50 });
+  const platformBadge = usePlatformSupportTickets(Boolean(session?.isSuperAdmin), {
+    status: undefined,
+    orgId: undefined
+  });
   const createTeamUser = useCreateTeamUser();
   const updateTeamUser = useUpdateTeamUser();
   const deleteTeamUser = useDeleteTeamUser();
@@ -1781,6 +1796,27 @@ function DashboardPageContent() {
   const createMaintenanceEvent = useCreateMaintenanceEvent();
   const cancelMaintenanceEvent = useCancelMaintenanceEvent();
   const analyticsQuery = useAnalytics();
+  const supportUnread =
+    (supportBadge.data?.data ?? []).filter(
+      (t) => new Date(t.updatedAt).getTime() > supportLastSeen
+    ).length || 0;
+  const platformUnread =
+    (platformBadge.data ?? []).filter(
+      (t) => new Date(t.updatedAt).getTime() > platformSupportLastSeen
+    ).length || 0;
+  useEffect(() => {
+    if (activeTab === "support") {
+      const now = Date.now();
+      setSupportLastSeen(now);
+      if (typeof window !== "undefined") window.localStorage.setItem("support:lastSeen", String(now));
+    }
+    if (activeTab === "platformSupport") {
+      const now = Date.now();
+      setPlatformSupportLastSeen(now);
+      if (typeof window !== "undefined")
+        window.localStorage.setItem("platformSupport:lastSeen", String(now));
+    }
+  }, [activeTab]);
   const canCreate = Boolean(session && session.role !== "viewer");
   const firstName = session?.name?.split(" ")[0] || "Team";
   const integrationSettingsQuery = useIntegrationSettings(Boolean(isAdmin));
@@ -2148,7 +2184,13 @@ function DashboardPageContent() {
           { id: "analytics", name: "Analytics", description: "Trends & reporting", icon: "DATA" },
           { id: "webhooks", name: "Automation", description: "Webhooks & notifications", icon: "AUTO" },
           { id: "billing", name: "Billing", description: "Plan & usage", icon: "BILL" },
-          { id: "support", name: "Support", description: "Support tickets", icon: "SUP" },
+          {
+            id: "support",
+            name: "Support",
+            description: "Support tickets",
+            icon: "SUP",
+            badge: supportUnread
+          },
           { id: "apiKeys", name: "API Keys", description: "Org keys", icon: "KEY" }
         ]
       : []),
@@ -2157,7 +2199,13 @@ function DashboardPageContent() {
     ...(session?.isSuperAdmin
       ? [
           { id: "platformOps", name: "Platform", description: "Super-admin controls", icon: "OPS" },
-          { id: "platformSupport", name: "Platform Support", description: "All tenant tickets", icon: "SADM" },
+          {
+            id: "platformSupport",
+            name: "Platform Support",
+            description: "All tenant tickets",
+            icon: "SADM",
+            badge: platformUnread
+          },
           { id: "platformBilling", name: "Platform Billing", description: "Tenant billing", icon: "BILL" }
         ]
       : [])
@@ -2350,7 +2398,7 @@ function DashboardPageContent() {
               <button
                 key={item.id}
                 onClick={item.onClick}
-          className={`w-full text-left py-3 px-3 rounded-xl transition duration-200 flex items-center group ${
+      className={`w-full text-left py-3 px-3 rounded-xl transition duration-200 flex items-center group ${
             item.current
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/40'
               : 'text-gray-300 hover:bg-gray-800 hover:text-white'
@@ -2359,8 +2407,13 @@ function DashboardPageContent() {
           <span className="mr-3 flex h-5 w-5 items-center justify-center">
             {iconFor(item.id, item.current)}
           </span>
-          <div>
+          <div className="flex items-center gap-2">
             <span className="text-sm font-semibold block">{item.name}</span>
+            {item.badge ? (
+              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-500 px-2 text-[11px] font-bold text-white">
+                {item.badge > 99 ? "99+" : item.badge}
+              </span>
+            ) : null}
           </div>
         </button>
       ))}

@@ -474,7 +474,12 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         }
         const ticket = await prisma.supportTicket.findUnique({
           where: { id: ticketId },
-          select: { id: true, organizationId: true }
+          select: {
+            id: true,
+            organizationId: true,
+            createdBy: { select: { email: true } },
+            assignee: { select: { email: true } }
+          }
         });
         if (!ticket) {
           throw fastify.httpErrors.notFound("Ticket not found");
@@ -488,9 +493,14 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
           }
         });
         if (!isInternal) {
-          notifySupportComment(ticketId, request.user.email).catch((err) =>
-            request.log.warn({ err }, "Failed to send support comment notification")
-          );
+          const recipients = [ticket.createdBy?.email, ticket.assignee?.email]
+            .filter(Boolean)
+            .filter((email) => email !== request.user.email);
+          for (const email of recipients) {
+            notifySupportComment(ticketId, email as string).catch((err) =>
+              request.log.warn({ err }, "Failed to send support comment notification")
+            );
+          }
         }
         return { error: false, data: comment };
       }
