@@ -835,7 +835,18 @@ function OrganizationsPanel({ session }: { session?: SessionUser | null }) {
 }
 
 function SupportPanel() {
-  const { data: tickets = [], isLoading } = useOrgSupportTickets();
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+  const { data: supportResponse, isLoading } = useOrgSupportTickets({
+    status: statusFilter || undefined,
+    q: search || undefined,
+    page,
+    pageSize: PAGE_SIZE
+  });
+  const tickets = supportResponse?.data ?? [];
+  const totalTickets = supportResponse?.meta?.total ?? tickets.length;
   const createTicket = useCreateSupportTicket();
   const addComment = useAddSupportComment("org");
   const uploadAttachments = useUploadSupportAttachments("org");
@@ -932,6 +943,7 @@ function SupportPanel() {
       setCreationFiles([]);
       setCreationAttachmentError(null);
       setFormError(null);
+      setPage(1);
     } catch (error) {
       let message = "Failed to create ticket.";
       if (isAxiosError(error)) {
@@ -1089,9 +1101,36 @@ function SupportPanel() {
       </form>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Your tickets</h3>
-          <span className="text-xs text-gray-400">{tickets.length} total</span>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-semibold text-white">Your tickets</h3>
+            <span className="text-xs text-gray-400">{totalTickets} total</span>
+          </div>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search subject or details"
+              className="w-full md:w-64 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="w-full md:w-48 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All statuses</option>
+              <option value="open">Open</option>
+              <option value="pending">Pending</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
         </div>
         {isLoading ? (
           <LoadingState message="Loading tickets..." />
@@ -1223,6 +1262,14 @@ function SupportPanel() {
                 </div>
               </div>
             ))}
+            {totalTickets > PAGE_SIZE ? (
+              <Pagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={totalTickets}
+                onPageChange={(p) => setPage(p)}
+              />
+            ) : null}
           </div>
         )}
       </div>

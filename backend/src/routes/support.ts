@@ -153,29 +153,53 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       if (!request.user.orgId) {
         throw fastify.httpErrors.badRequest("Missing org context");
       }
-      const { status, priority } = request.query as { status?: string; priority?: string };
+      const { status, priority, q, page = "1", pageSize = "10" } = request.query as {
+        status?: string;
+        priority?: string;
+        q?: string;
+        page?: string;
+        pageSize?: string;
+      };
 
-      const tickets = await prisma.supportTicket.findMany({
-        where: {
-          organizationId: request.user.orgId,
-          status: (status as any) || undefined,
-          priority: (priority as any) || undefined
-        },
-        orderBy: { createdAt: "desc" },
-        include: {
-          createdBy: { select: { id: true, name: true, email: true } },
-          assignee: { select: { id: true, name: true, email: true } },
-          comments: {
-            orderBy: { createdAt: "asc" },
-            where: { isInternal: false },
-            include: {
-              author: { select: { id: true, name: true, email: true } }
-            }
-          },
-          attachments: true
-        }
-      });
-      return { error: false, data: tickets };
+      const pageNum = Math.max(1, parseInt(page || "1", 10) || 1);
+      const sizeNum = Math.min(50, Math.max(1, parseInt(pageSize || "10", 10) || 10));
+
+      const whereClause: any = {
+        organizationId: request.user.orgId,
+        status: (status as any) || undefined,
+        priority: (priority as any) || undefined
+      };
+
+      if (q?.trim()) {
+        whereClause.OR = [
+          { subject: { contains: q.trim(), mode: "insensitive" } },
+          { body: { contains: q.trim(), mode: "insensitive" } }
+        ];
+      }
+
+      const [total, tickets] = await Promise.all([
+        prisma.supportTicket.count({ where: whereClause }),
+        prisma.supportTicket.findMany({
+          where: whereClause,
+          orderBy: { createdAt: "desc" },
+          skip: (pageNum - 1) * sizeNum,
+          take: sizeNum,
+          include: {
+            createdBy: { select: { id: true, name: true, email: true } },
+            assignee: { select: { id: true, name: true, email: true } },
+            comments: {
+              orderBy: { createdAt: "asc" },
+              where: { isInternal: false },
+              include: {
+                author: { select: { id: true, name: true, email: true } }
+              }
+            },
+            attachments: true
+          }
+        })
+      ]);
+
+      return { error: false, data: tickets, meta: { page: pageNum, pageSize: sizeNum, total } };
     }
   );
 

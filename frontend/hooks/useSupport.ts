@@ -33,16 +33,23 @@ export type SupportTicket = {
   }>;
 };
 
-type TicketResponse = { error: boolean; data: SupportTicket[] };
+type TicketResponse = { error: boolean; data: SupportTicket[]; meta?: { page: number; pageSize: number; total: number } };
 type TicketCreatePayload = { subject: string; body: string; priority?: string; category?: string };
 type SupportAttachment = NonNullable<SupportTicket["attachments"]>[number];
 
-export function useOrgSupportTickets() {
+export function useOrgSupportTickets(filters?: { status?: string; q?: string; page?: number; pageSize?: number }) {
   return useQuery({
-    queryKey: ["support", "org"],
+    queryKey: ["support", "org", filters?.status ?? "", filters?.q ?? "", filters?.page ?? 1, filters?.pageSize ?? 10],
     queryFn: async () => {
-      const res = await apiClient.get<TicketResponse>("/support");
-      return res.data.data;
+      const res = await apiClient.get<TicketResponse>("/support", {
+        params: {
+          status: filters?.status || undefined,
+          q: filters?.q || undefined,
+          page: filters?.page || undefined,
+          pageSize: filters?.pageSize || undefined
+        }
+      });
+      return res.data;
     }
   });
 }
