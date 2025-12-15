@@ -1706,7 +1706,8 @@ function DashboardPageContent() {
         description: "Demo incident created from the Simulate button to show end-to-end flow.",
         severity: "medium",
         status: "investigating",
-        serviceId: defaultServiceId
+        serviceId: defaultServiceId,
+        simulate: true
       });
       await invalidateIncidentsMain();
       window.alert("Simulated incident created. Check the incident list.");

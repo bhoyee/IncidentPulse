@@ -255,7 +255,8 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const { assignedToId, categories, impactScope, ...incidentPayload } = parsedBody.data;
+      const { assignedToId, categories, impactScope, simulate, ...incidentPayload } = parsedBody.data;
+      const isSimulated = Boolean(simulate);
 
       const admins = await loadActiveAdmins();
 
@@ -324,15 +325,17 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         include: incidentNotificationInclude
       });
 
-      if (incident.assignedTo) {
+      if (incident.assignedTo && !isSimulated) {
         const assignedBy =
           request.user.name ?? request.user.email ?? "Administrator";
         await notifyAssigneeOfAssignment(fastify.log, incident, assignedBy);
         await notifyIncidentIntegrations(fastify.log, incident, "assigned", { assignedBy });
       }
 
-      await notifyAdminsOfIncident(fastify.log, incident, admins);
-      await notifyIncidentIntegrations(fastify.log, incident, "created");
+      if (!isSimulated) {
+        await notifyAdminsOfIncident(fastify.log, incident, admins);
+        await notifyIncidentIntegrations(fastify.log, incident, "created");
+      }
       await recordAuditLog({
         action: "incident_created",
         actorId: request.user.id,

@@ -20,7 +20,9 @@ export const createIncidentSchema = z.object({
   assignedToId: z.string().uuid().optional(),
   categories: z.array(z.string().min(2).max(50)).max(5).optional(),
   impactScope: z.string().min(3).max(200).optional(),
-  serviceId: z.string().uuid()
+  serviceId: z.string().uuid(),
+  // Optional flag used by the UI "Simulate incident" button to avoid sending notifications.
+  simulate: z.boolean().optional()
 });
 
 export const updateIncidentSchema = z
