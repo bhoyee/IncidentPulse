@@ -647,6 +647,43 @@ receivers:
             Authorization: Bearer ipk_xxxxxx
         send_resolved: true`;
 
+const fluentBitIngestSnippet = `[INPUT]
+    Name        tail
+    Path        /var/log/app.log
+    Tag         app
+    Refresh_Interval 5
+    Skip_Long_Lines On
+
+[FILTER]
+    Name   modify
+    Match  app
+    Add    service checkout
+    Add    level error
+
+[OUTPUT]
+    Name        http
+    Match       app
+    Host        your-api.com
+    URI         /logs/ingest
+    Header      Authorization Bearer ipk_xxxxxx
+    Format      json
+    Json_date_key timestamp`;
+
+const filebeatIngestSnippet = `filebeat.inputs:
+- type: filestream
+  id: app-logs
+  paths:
+    - /var/log/app.log
+  fields:
+    service: checkout
+    level: error
+
+output.http:
+  hosts: ["https://your-api.com/logs/ingest"]
+  headers:
+    Authorization: "Bearer ipk_xxxxxx"
+  format: json`;
+
 const githubActionsSnippet = `- name: Notify IncidentPulse when workflow fails
   if: failure()
   env:
@@ -1313,6 +1350,8 @@ export default function DocumentationPage() {
                 <CodeBlock label="Datadog webhook payload" value={datadogSnippet} />
                 <CodeBlock label="CloudWatch / EventBridge" value={cloudwatchSnippet} />
                 <CodeBlock label="Loki / Alertmanager" value={lokiSnippet} />
+                <CodeBlock label="Fluent Bit (log ingest)" value={fluentBitIngestSnippet} />
+                <CodeBlock label="Filebeat (log ingest)" value={filebeatIngestSnippet} />
                 <CodeBlock
                   label="Curl smoke test"
                   value={`curl -X POST https://your-api.com/webhooks/incidents \\
@@ -1323,6 +1362,7 @@ export default function DocumentationPage() {
               </div>
               <p className="text-sm text-slate-600">
                 Required fields: <code className="font-mono text-xs text-slate-600">service</code>, <code className="font-mono text-xs text-slate-600">severity</code>, <code className="font-mono text-xs text-slate-600">message</code>. Optional: <code className="font-mono text-xs text-slate-600">timestamp</code>, <code className="font-mono text-xs text-slate-600">context</code>. Use a valid org API key in the <code className="font-mono text-xs text-slate-600">Authorization: Bearer ...</code> header.
+                For raw logs, send <code className="font-mono text-xs text-slate-600">level</code> and <code className="font-mono text-xs text-slate-600">message</code> to <code className="font-mono text-xs text-slate-600">/logs/ingest</code> with the same API key header.
               </p>
             </section>
 
