@@ -20,10 +20,10 @@ const ingestSchema = z.object({
   context: z.record(z.any()).optional()
 });
 
-const BUFFER_TTL_MS = 10 * 60 * 1000; // keep up to 10 minutes
-const TRIGGER_WINDOW_MS = 60 * 1000; // look back 60s
-const ERROR_THRESHOLD = 20; // default threshold in window
-const TRIGGER_COOLDOWN_MS = 5 * 60 * 1000; // prevent rapid repeat incidents
+const BUFFER_TTL_MS = env.LOG_BUFFER_TTL_MS ?? 10 * 60 * 1000; // keep up to 10 minutes
+const TRIGGER_WINDOW_MS = env.LOG_TRIGGER_WINDOW_MS ?? 60 * 1000; // look back 60s
+const ERROR_THRESHOLD = env.LOG_TRIGGER_ERROR_THRESHOLD ?? 20; // default threshold in window
+const TRIGGER_COOLDOWN_MS = env.LOG_TRIGGER_COOLDOWN_MS ?? 5 * 60 * 1000; // prevent rapid repeat incidents
 
 const logBuffers = new Map<string, LogEntry[]>(); // key: orgId:serviceId
 const lastTriggers = new Map<string, number>(); // key: orgId:serviceId
