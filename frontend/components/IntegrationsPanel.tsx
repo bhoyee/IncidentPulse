@@ -16,7 +16,11 @@ const defaultState: IntegrationSettings = {
   discordWebhookUrl: "",
   teamsWebhookUrl: "",
   telegramBotToken: "",
-  telegramChatId: ""
+  telegramChatId: "",
+  autoIncidentEnabled: false,
+  autoIncidentErrorThreshold: null,
+  autoIncidentWindowSeconds: null,
+  autoIncidentCooldownSeconds: null
 };
 
 const githubWorkflowSample = `jobs:
@@ -96,7 +100,18 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
     setError(null);
 
     try {
-      await onSave(form);
+      await onSave({
+        ...form,
+        autoIncidentErrorThreshold: form.autoIncidentErrorThreshold
+          ? Number(form.autoIncidentErrorThreshold)
+          : null,
+        autoIncidentWindowSeconds: form.autoIncidentWindowSeconds
+          ? Number(form.autoIncidentWindowSeconds)
+          : null,
+        autoIncidentCooldownSeconds: form.autoIncidentCooldownSeconds
+          ? Number(form.autoIncidentCooldownSeconds)
+          : null
+      });
       setMessage("Integration settings saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings.");
@@ -250,6 +265,84 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
           <p className="text-xs text-gray-600">
             Use <code className="font-mono text-xs text-gray-600">BotFather</code> to create a bot,
             then message it to retrieve the chat ID (via <code className="font-mono text-xs text-gray-600">/getUpdates</code>).
+          </p>
+        </fieldset>
+
+        <fieldset className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <legend className="text-sm font-semibold text-amber-900">Log-based auto incidents (beta)</legend>
+          <label className="flex items-center gap-3 text-sm font-medium text-amber-900">
+            <input
+              type="checkbox"
+              name="autoIncidentEnabled"
+              checked={Boolean(form.autoIncidentEnabled)}
+              onChange={(e) => setForm((prev) => ({ ...prev, autoIncidentEnabled: e.target.checked }))}
+              className="h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+              disabled={disabled}
+            />
+            Enable auto-created incidents from log ingest (per org)
+          </label>
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="text-sm text-amber-900">
+              Error threshold
+              <input
+                type="number"
+                min={1}
+                name="autoIncidentErrorThreshold"
+                value={form.autoIncidentErrorThreshold ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    autoIncidentErrorThreshold: e.target.value ? Number(e.target.value) : null
+                  }))
+                }
+                placeholder="20"
+                className="mt-1 w-full rounded-md border-amber-200 shadow-sm focus:border-amber-500 focus:ring-amber-500 text-sm"
+                disabled={disabled}
+              />
+              <span className="mt-1 block text-xs text-amber-800">Errors in the window before triggering.</span>
+            </label>
+            <label className="text-sm text-amber-900">
+              Window (seconds)
+              <input
+                type="number"
+                min={10}
+                name="autoIncidentWindowSeconds"
+                value={form.autoIncidentWindowSeconds ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    autoIncidentWindowSeconds: e.target.value ? Number(e.target.value) : null
+                  }))
+                }
+                placeholder="60"
+                className="mt-1 w-full rounded-md border-amber-200 shadow-sm focus:border-amber-500 focus:ring-amber-500 text-sm"
+                disabled={disabled}
+              />
+              <span className="mt-1 block text-xs text-amber-800">Lookback window for counting errors.</span>
+            </label>
+            <label className="text-sm text-amber-900">
+              Cooldown (seconds)
+              <input
+                type="number"
+                min={30}
+                name="autoIncidentCooldownSeconds"
+                value={form.autoIncidentCooldownSeconds ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    autoIncidentCooldownSeconds: e.target.value ? Number(e.target.value) : null
+                  }))
+                }
+                placeholder="300"
+                className="mt-1 w-full rounded-md border-amber-200 shadow-sm focus:border-amber-500 focus:ring-amber-500 text-sm"
+                disabled={disabled}
+              />
+              <span className="mt-1 block text-xs text-amber-800">Wait before triggering again.</span>
+            </label>
+          </div>
+          <p className="text-xs text-amber-800">
+            We only ingest events for services defined in this org. Use the org API key to post logs to
+            <code className="font-mono text-xs text-amber-900 ml-1">/logs/ingest</code> with <code className="font-mono text-xs text-amber-900">service</code>, <code className="font-mono text-xs text-amber-900">level</code>, and <code className="font-mono text-xs text-amber-900">message</code>.
           </p>
         </fieldset>
 

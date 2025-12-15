@@ -241,6 +241,10 @@ model IntegrationSettings {
   teamsWebhookUrl  String?
   telegramBotToken String?
   telegramChatId   String?
+  autoIncidentEnabled          Boolean   @default(false)
+  autoIncidentErrorThreshold   Int?
+  autoIncidentWindowSeconds    Int?
+  autoIncidentCooldownSeconds  Int?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

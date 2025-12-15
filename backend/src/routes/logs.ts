@@ -82,10 +82,15 @@ const logsRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     // respect plan limits on log-based auto incidents (reuse incident monthly cap)
-    const org = await prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { plan: true }
-    });
+    const [org, integrationSettings] = await Promise.all([
+      prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { plan: true }
+      }),
+      prisma.integrationSettings.findUnique({
+        where: { organizationId: orgId }
+      }) as any
+    ]);
     const limits = getPlanLimits(org?.plan ?? "free");
 
     const now = Date.now();
@@ -103,12 +108,23 @@ const logsRoutes: FastifyPluginAsync = async (fastify) => {
     logBuffers.set(key, buf);
 
     // Simple trigger: errors in last TRIGGER_WINDOW_MS exceed threshold
-    const windowCutoff = now - TRIGGER_WINDOW_MS;
+    const orgEnabled = integrationSettings?.autoIncidentEnabled ?? false;
+    const threshold = integrationSettings?.autoIncidentErrorThreshold ?? ERROR_THRESHOLD;
+    const windowMs =
+      (integrationSettings?.autoIncidentWindowSeconds ?? TRIGGER_WINDOW_MS / 1000) * 1000;
+    const cooldownMs =
+      (integrationSettings?.autoIncidentCooldownSeconds ?? TRIGGER_COOLDOWN_MS / 1000) * 1000;
+
+    if (!orgEnabled) {
+      return reply.send({ error: false, message: "Ingested (auto incidents disabled)" });
+    }
+
+    const windowCutoff = now - windowMs;
     const recentErrors = buf.filter((e) => e.ts >= windowCutoff && e.level === "error");
     const lastTriggerAt = lastTriggers.get(key) ?? 0;
-    const inCooldown = now - lastTriggerAt < TRIGGER_COOLDOWN_MS;
+    const inCooldown = now - lastTriggerAt < cooldownMs;
 
-    if (!inCooldown && recentErrors.length >= ERROR_THRESHOLD) {
+    if (!inCooldown && recentErrors.length >= threshold) {
       // Enforce incident cap if any
       if (limits.maxIncidentsPerMonth !== undefined) {
         const since = new Date();

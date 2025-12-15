@@ -46,6 +46,10 @@ type IntegrationSettingsInput = {
   teamsWebhookUrl?: string | null | undefined;
   telegramBotToken?: string | null | undefined;
   telegramChatId?: string | null | undefined;
+  autoIncidentEnabled?: boolean;
+  autoIncidentErrorThreshold?: number | null;
+  autoIncidentWindowSeconds?: number | null;
+  autoIncidentCooldownSeconds?: number | null;
 };
 
 export async function saveIntegrationSettings(

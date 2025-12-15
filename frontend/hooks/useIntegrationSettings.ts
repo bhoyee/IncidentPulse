@@ -9,6 +9,10 @@ export type IntegrationSettings = {
   telegramBotToken: string;
   telegramChatId: string;
   stripePortalUrl?: string;
+  autoIncidentEnabled?: boolean;
+  autoIncidentErrorThreshold?: number | null;
+  autoIncidentWindowSeconds?: number | null;
+  autoIncidentCooldownSeconds?: number | null;
 };
 
 type SettingsResponse = {
@@ -22,6 +26,10 @@ type UpdatePayload = {
   teamsWebhookUrl?: string;
   telegramBotToken?: string;
   telegramChatId?: string;
+  autoIncidentEnabled?: boolean;
+  autoIncidentErrorThreshold?: number | null;
+  autoIncidentWindowSeconds?: number | null;
+  autoIncidentCooldownSeconds?: number | null;
 };
 
 export function useIntegrationSettings(enabled: boolean) {

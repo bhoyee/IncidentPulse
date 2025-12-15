@@ -37,7 +37,11 @@ const updateSchema = z.object({
     .trim()
     .max(255)
     .optional()
-    .or(z.literal(""))
+    .or(z.literal("")),
+  autoIncidentEnabled: z.boolean().optional(),
+  autoIncidentErrorThreshold: z.coerce.number().int().positive().optional(),
+  autoIncidentWindowSeconds: z.coerce.number().int().positive().optional(),
+  autoIncidentCooldownSeconds: z.coerce.number().int().positive().optional()
 });
 
 const sanitizeInput = (value: string | undefined | ""): string | null | undefined => {
@@ -54,7 +58,7 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
       const orgId = getRequestOrgId(request);
-      const settings = await getIntegrationSettings(orgId);
+      const settings = (await getIntegrationSettings(orgId)) as any;
 
       return reply.send({
         error: false,
@@ -64,7 +68,11 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
           teamsWebhookUrl: settings?.teamsWebhookUrl ?? "",
           telegramBotToken: settings?.telegramBotToken ?? "",
           telegramChatId: settings?.telegramChatId ?? "",
-          stripePortalUrl: env.STRIPE_PORTAL_RETURN_URL ?? ""
+          stripePortalUrl: env.STRIPE_PORTAL_RETURN_URL ?? "",
+          autoIncidentEnabled: settings?.autoIncidentEnabled ?? false,
+          autoIncidentErrorThreshold: settings?.autoIncidentErrorThreshold ?? null,
+          autoIncidentWindowSeconds: settings?.autoIncidentWindowSeconds ?? null,
+          autoIncidentCooldownSeconds: settings?.autoIncidentCooldownSeconds ?? null
         }
       });
     }
@@ -85,13 +93,17 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const payload = parsed.data;
 
-      const updated = await saveIntegrationSettings(
+      const updated: any = await saveIntegrationSettings(
         {
           slackWebhookUrl: sanitizeInput(payload.slackWebhookUrl),
           discordWebhookUrl: sanitizeInput(payload.discordWebhookUrl),
           teamsWebhookUrl: sanitizeInput(payload.teamsWebhookUrl),
           telegramBotToken: sanitizeInput(payload.telegramBotToken),
-          telegramChatId: sanitizeInput(payload.telegramChatId)
+          telegramChatId: sanitizeInput(payload.telegramChatId),
+          autoIncidentEnabled: payload.autoIncidentEnabled ?? undefined,
+          autoIncidentErrorThreshold: payload.autoIncidentErrorThreshold ?? undefined,
+          autoIncidentWindowSeconds: payload.autoIncidentWindowSeconds ?? undefined,
+          autoIncidentCooldownSeconds: payload.autoIncidentCooldownSeconds ?? undefined
         },
         orgId
       );
@@ -103,7 +115,11 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
           discordWebhookUrl: updated.discordWebhookUrl ?? "",
           teamsWebhookUrl: updated.teamsWebhookUrl ?? "",
           telegramBotToken: updated.telegramBotToken ?? "",
-          telegramChatId: updated.telegramChatId ?? ""
+          telegramChatId: updated.telegramChatId ?? "",
+          autoIncidentEnabled: updated.autoIncidentEnabled ?? false,
+          autoIncidentErrorThreshold: updated.autoIncidentErrorThreshold ?? null,
+          autoIncidentWindowSeconds: updated.autoIncidentWindowSeconds ?? null,
+          autoIncidentCooldownSeconds: updated.autoIncidentCooldownSeconds ?? null
         }
       });
     }
