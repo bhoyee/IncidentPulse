@@ -1365,7 +1365,7 @@ function PlatformSupportPanel({
     }
   };
 
-  const handleDelete = async (ticketId: string) => {
+  const handleDeleteTicket = async (ticketId: string) => {
     const confirmed = window.confirm("Delete this ticket? This cannot be undone.");
     if (!confirmed) return;
     await deleteTicket.mutateAsync(ticketId);
@@ -1444,7 +1444,9 @@ function PlatformSupportPanel({
                   <td className="px-4 py-3">
                     <select
                       value={ticket.status}
-                      onChange={(e) => handleStatus(ticket.id, e.target.value as any)}
+                      onChange={(e) =>
+                        handleStatus(ticket.id, e.target.value as SupportTicket["status"])
+                      }
                       className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
                     >
                       <option value="open">Open</option>
@@ -1496,11 +1498,11 @@ function PlatformSupportPanel({
 
       {selectedTicket ? (
         <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 shadow-lg">
-          <div className="flex flex-col gap-2 border-b border-gray-800 pb-3">
-            <p className="text-xs uppercase tracking-wide text-blue-300">Ticket detail</p>
-            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+            <div className="flex flex-col gap-2 border-b border-gray-800 pb-3">
+              <p className="text-xs uppercase tracking-wide text-blue-300">Ticket detail</p>
+              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
                   <input
                     value={selectedTicket.subject}
                     onChange={(e) =>
@@ -1534,12 +1536,35 @@ function PlatformSupportPanel({
                 <p className="text-sm text-gray-300 mt-2">
                   Org: {selectedTicket.organization?.name ?? "—"}
                 </p>
+                </div>
+                <div className="text-xs text-gray-400">
+                  Created {format(new Date(selectedTicket.createdAt), "PP p")}
+                </div>
               </div>
-              <div className="text-xs text-gray-400">
-                Created {format(new Date(selectedTicket.createdAt), "PP p")}
+              <div className="flex items-center justify-between text-xs text-gray-300 pt-2">
+                <span className="flex items-center gap-2">
+                  Status
+                  <select
+                    value={selectedTicket.status}
+                    onChange={(e) =>
+                      handleStatus(selectedTicket.id, e.target.value as SupportTicket["status"])
+                    }
+                    className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                  >
+                    <option value="open">Open</option>
+                    <option value="pending">Pending</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteTicket(selectedTicket.id)}
+                  className="rounded-md border border-red-500/50 px-3 py-1 text-xs font-semibold text-red-300 hover:bg-red-900/40"
+                >
+                  Delete ticket
+                </button>
               </div>
             </div>
-          </div>
 
           <div className="mt-4 space-y-6">
             <div>
@@ -1680,8 +1705,6 @@ function DashboardPageContent() {
   const [auditPage, setAuditPage] = useState(1);
   const AUDIT_PAGE_SIZE = 20;
   const [isSimulatingIncident, setIsSimulatingIncident] = useState(false);
-  const [platformTicketStatus, setPlatformTicketStatus] = useState<string>("");
-  const [platformTicketOrg, setPlatformTicketOrg] = useState<string>("");
   const auditActionOptions = [
     { value: "", label: "All actions" },
     { value: "user_login", label: "User login" },
@@ -2414,27 +2437,6 @@ function DashboardPageContent() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-sm text-gray-300">
-                <span>
-                  Status:{" "}
-                  <select
-                    value={selectedTicket.status}
-                    onChange={(e) => handleStatus(selectedTicket.id, e.target.value as any)}
-                    className="ml-2 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
-                  >
-                    <option value="open">Open</option>
-                    <option value="pending">Pending</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(selectedTicket.id)}
-                  className="rounded-md border border-red-500/50 px-3 py-1 text-xs font-semibold text-red-300 hover:bg-red-900/40"
-                >
-                  Delete ticket
-                </button>
-              </div>
             </div>
           </div>
 
