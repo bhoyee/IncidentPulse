@@ -25,6 +25,7 @@ import maintenanceRoutes from "./routes/maintenance";
 import auditRoutes from "./routes/audit";
 import organizationsRoutes from "./routes/organizations";
 import supportRoutes from "./routes/support";
+import logsRoutes from "./routes/logs";
 import platformRoutes from "./routes/platform";
 import { enforceOrgRateLimit } from "./lib/org-rate-limit";
 import { recordTraffic, persistTraffic } from "./lib/traffic-metrics";
@@ -220,6 +221,7 @@ export function buildApp() {
   fastify.register(auditRoutes, { prefix: "/audit" });
   fastify.register(organizationsRoutes, { prefix: "/organizations" });
   fastify.register(supportRoutes, { prefix: "/support" });
+  fastify.register(logsRoutes, { prefix: "/logs" });
   fastify.register(platformRoutes, { prefix: "/platform" });
 
   fastify.addHook("onResponse", async (request, reply) => {
