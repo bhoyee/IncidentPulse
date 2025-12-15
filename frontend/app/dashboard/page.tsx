@@ -82,6 +82,8 @@ import {
   usePlatformSupportTickets,
   useUpdateSupportStatus,
   useAssignSupportTicket,
+  useUpdateSupportTicket,
+  useDeleteSupportTicket,
   useUploadSupportAttachments,
   type SupportTicket
 } from "@hooks/useSupport";
@@ -1318,6 +1320,8 @@ function PlatformSupportPanel({
   const assignTicket = useAssignSupportTicket();
   const addComment = useAddSupportComment("platform");
   const uploadAttachments = useUploadSupportAttachments("platform");
+  const updateTicket = useUpdateSupportTicket("platform");
+  const deleteTicket = useDeleteSupportTicket();
 
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) ?? null;
 
@@ -1336,6 +1340,13 @@ function PlatformSupportPanel({
     setNotes((prev) => ({ ...prev, [ticketId]: "" }));
   };
 
+  const handleUpdateMeta = async (
+    ticketId: string,
+    payload: { priority?: "low" | "medium" | "high" | "urgent"; category?: string | null; subject?: string }
+  ) => {
+    await updateTicket.mutateAsync({ ticketId, ...payload });
+  };
+
   const handleReply = async (ticketId: string) => {
     const body = replyBody.trim();
     if (!body) return;
@@ -1352,6 +1363,13 @@ function PlatformSupportPanel({
     } finally {
       setUploadingFor(null);
     }
+  };
+
+  const handleDelete = async (ticketId: string) => {
+    const confirmed = window.confirm("Delete this ticket? This cannot be undone.");
+    if (!confirmed) return;
+    await deleteTicket.mutateAsync(ticketId);
+    setSelectedTicketId(null);
   };
 
   return (
@@ -1482,10 +1500,39 @@ function PlatformSupportPanel({
             <p className="text-xs uppercase tracking-wide text-blue-300">Ticket detail</p>
             <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
               <div>
-                <h4 className="text-xl font-semibold text-white">{selectedTicket.subject}</h4>
-                <p className="text-sm text-gray-300">
-                  Org: {selectedTicket.organization?.name ?? "—"} · Priority:{" "}
-                  <span className="capitalize">{selectedTicket.priority}</span>
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+                  <input
+                    value={selectedTicket.subject}
+                    onChange={(e) =>
+                      handleUpdateMeta(selectedTicket.id, { subject: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm font-semibold text-white focus:border-blue-400 focus:ring-blue-500"
+                  />
+                  <select
+                    value={selectedTicket.priority}
+                    onChange={(e) =>
+                      handleUpdateMeta(selectedTicket.id, {
+                        priority: e.target.value as SupportTicket["priority"]
+                      })
+                    }
+                    className="w-full md:w-40 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                  <input
+                    value={selectedTicket.category ?? ""}
+                    onChange={(e) =>
+                      handleUpdateMeta(selectedTicket.id, { category: e.target.value || null })
+                    }
+                    placeholder="Category"
+                    className="w-full md:w-48 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                  />
+                </div>
+                <p className="text-sm text-gray-300 mt-2">
+                  Org: {selectedTicket.organization?.name ?? "—"}
                 </p>
               </div>
               <div className="text-xs text-gray-400">
@@ -2365,6 +2412,28 @@ function DashboardPageContent() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="flex items-center justify-between text-sm text-gray-300">
+                <span>
+                  Status:{" "}
+                  <select
+                    value={selectedTicket.status}
+                    onChange={(e) => handleStatus(selectedTicket.id, e.target.value as any)}
+                    className="ml-2 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                  >
+                    <option value="open">Open</option>
+                    <option value="pending">Pending</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(selectedTicket.id)}
+                  className="rounded-md border border-red-500/50 px-3 py-1 text-xs font-semibold text-red-300 hover:bg-red-900/40"
+                >
+                  Delete ticket
+                </button>
               </div>
             </div>
           </div>

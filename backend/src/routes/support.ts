@@ -402,6 +402,38 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
     );
 
     superAdminScope.patch(
+      "/:ticketId",
+      {
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
+      },
+      async (request) => {
+        const { ticketId } = request.params as { ticketId: string };
+        const { subject, body, priority, category } = request.body as {
+          subject?: string;
+          body?: string;
+          priority?: "low" | "medium" | "high" | "urgent";
+          category?: string | null;
+        };
+
+        const data: any = {};
+        if (subject?.trim()) data.subject = subject.trim();
+        if (body?.trim()) data.body = body.trim();
+        if (priority) data.priority = priority as any;
+        if (category !== undefined) data.category = category?.trim() || null;
+
+        if (!Object.keys(data).length) {
+          throw superAdminScope.httpErrors.badRequest("No fields to update");
+        }
+
+        const updated = await prisma.supportTicket.update({
+          where: { id: ticketId },
+          data
+        });
+        return { error: false, data: updated };
+      }
+    );
+
+    superAdminScope.patch(
       "/:ticketId/assign",
       {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
@@ -414,6 +446,18 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
           data: { assigneeId: assigneeId ?? null }
         });
         return { error: false, data: updated };
+      }
+    );
+
+    superAdminScope.delete(
+      "/:ticketId",
+      {
+        config: { rateLimit: { max: 10, timeWindow: "1 minute" } }
+      },
+      async (request) => {
+        const { ticketId } = request.params as { ticketId: string };
+        await prisma.supportTicket.delete({ where: { id: ticketId } });
+        return { error: false, message: "Ticket deleted" };
       }
     );
 

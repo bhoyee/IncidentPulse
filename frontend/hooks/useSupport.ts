@@ -139,6 +139,49 @@ export function useAssignSupportTicket() {
   });
 }
 
+export function useUpdateSupportTicket(scope: "org" | "platform" = "platform") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      ticketId: string;
+      subject?: string;
+      body?: string;
+      priority?: "low" | "medium" | "high" | "urgent";
+      category?: string | null;
+    }) => {
+      const base = scope === "platform" ? "/support/platform" : "/support";
+      const res = await apiClient.patch<{ error: boolean; data: SupportTicket }>(
+        `${base}/${payload.ticketId}`,
+        {
+          subject: payload.subject,
+          body: payload.body,
+          priority: payload.priority,
+          category: payload.category
+        }
+      );
+      return res.data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["support"] });
+    }
+  });
+}
+
+export function useDeleteSupportTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ticketId: string) => {
+      const res = await apiClient.delete<{ error: boolean; message?: string }>(
+        `/support/platform/${ticketId}`
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["support"] });
+    }
+  });
+}
+
 export function useUploadSupportAttachments(scope: "org" | "platform" = "org") {
   const qc = useQueryClient();
   return useMutation({
