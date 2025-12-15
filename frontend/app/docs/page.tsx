@@ -27,6 +27,7 @@ const docSections = [
   { id: "features", label: "Core Features" },
   { id: "architecture", label: "Architecture" },
   { id: "setup", label: "Setup Guide" },
+  { id: "integrations", label: "Integrations" },
   { id: "webhooks", label: "Webhook Automation" },
   { id: "api", label: "API Reference" },
   { id: "multi-tenant", label: "Multi-tenant" },
@@ -585,6 +586,66 @@ Content-Type: application/json
   "incidentId": "inc_12345",
   "status": "investigating"
 }`;
+
+const fluentBitSnippet = `[OUTPUT]
+    Name        http
+    Match       *
+    Host        your-api.com
+    URI         /webhooks/incidents
+    Header      Authorization Bearer ipk_xxxxxx
+    Format      json
+    Json_date_key timestamp
+
+[FILTER]
+    Name   modify
+    Match  *
+    Add    service checkout
+    Add    severity error`;
+
+const filebeatSnippet = `output.http:
+  hosts: ["https://your-api.com/webhooks/incidents"]
+  headers:
+    Authorization: "Bearer ipk_xxxxxx"
+  format: json
+processors:
+  - add_fields:
+      target: ""
+      fields:
+        service: checkout
+        severity: error`;
+
+const datadogSnippet = `Datadog webhook
+- URL: https://your-api.com/webhooks/incidents
+- Headers: Authorization: Bearer ipk_xxxxxx, Content-Type: application/json
+- Payload template:
+{
+  "service": "{{#is_alert}}checkout{{/is_alert}}",
+  "severity": "{{alert_status}}",
+  "message": "{{alert_title}} - {{alert_transition}}",
+  "timestamp": "{{last_updated}}"
+}`;
+
+const cloudwatchSnippet = `CloudWatch / EventBridge API destination
+- Method: POST
+- URL: https://your-api.com/webhooks/incidents
+- Headers: Authorization: Bearer ipk_xxxxxx
+- Body:
+{
+  "service": "checkout",
+  "severity": "high",
+  "message": "Alarm {{alarmName}} state is {{newStateValue}}: {{newStateReason}}",
+  "timestamp": "{{timestamp}}"
+}`;
+
+const lokiSnippet = `Loki / Alertmanager receiver
+receivers:
+  - name: incidentpulse
+    webhook_configs:
+      - url: https://your-api.com/webhooks/incidents
+        http_config:
+          headers:
+            Authorization: Bearer ipk_xxxxxx
+        send_resolved: true`;
 
 const githubActionsSnippet = `- name: Notify IncidentPulse when workflow fails
   if: failure()
@@ -1238,8 +1299,35 @@ export default function DocumentationPage() {
               </div>
             </section>
 
+            <section id="integrations" className="scroll-mt-32 space-y-8">
+              <SectionBadge index={5} label="Integrations" />
+              <div className="space-y-4">
+                <h2 className="text-3xl font-semibold text-slate-900">Integrations</h2>
+                <p className="text-base text-slate-600">
+                  Use an org-scoped API key and send a small JSON payload to <code className="font-mono text-xs text-slate-600">/webhooks/incidents</code>. Your monitoring/logging tools can forward events without code changes.
+                </p>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <CodeBlock label="Fluent Bit" value={fluentBitSnippet} />
+                <CodeBlock label="Filebeat" value={filebeatSnippet} />
+                <CodeBlock label="Datadog webhook payload" value={datadogSnippet} />
+                <CodeBlock label="CloudWatch / EventBridge" value={cloudwatchSnippet} />
+                <CodeBlock label="Loki / Alertmanager" value={lokiSnippet} />
+                <CodeBlock
+                  label="Curl smoke test"
+                  value={`curl -X POST https://your-api.com/webhooks/incidents \\
+  -H "Authorization: Bearer ipk_xxxxxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{"service":"checkout","severity":"error","message":"DB timeout","timestamp":"2025-01-10T12:00:00Z"}'`}
+                />
+              </div>
+              <p className="text-sm text-slate-600">
+                Required fields: <code className="font-mono text-xs text-slate-600">service</code>, <code className="font-mono text-xs text-slate-600">severity</code>, <code className="font-mono text-xs text-slate-600">message</code>. Optional: <code className="font-mono text-xs text-slate-600">timestamp</code>, <code className="font-mono text-xs text-slate-600">context</code>. Use a valid org API key in the <code className="font-mono text-xs text-slate-600">Authorization: Bearer ...</code> header.
+              </p>
+            </section>
+
             <section id="webhooks" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={5} label="Webhook Automation" />
+              <SectionBadge index={6} label="Webhook Automation" />
               <div className="space-y-4">
                 <h2 className="text-3xl font-semibold text-slate-900">Automate incident intake from observability tools</h2>
                 <p className="text-base text-slate-600">
@@ -1369,7 +1457,7 @@ Content-Type: application/json`}
             </section>
 
             <section id="api" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={6} label="API Reference" />
+              <SectionBadge index={7} label="API Reference" />
               <div className="space-y-4">
                 <h2 className="text-3xl font-semibold text-slate-900">Developer-friendly REST API</h2>
                 <p className="text-base text-slate-600">
@@ -1399,7 +1487,7 @@ Content-Type: application/json`}
             </section>
 
             <section id="faq" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={7} label="FAQ & Troubleshooting" />
+              <SectionBadge index={8} label="FAQ & Troubleshooting" />
               <div className="space-y-4">
                 <h2 className="text-3xl font-semibold text-slate-900">Answers to common questions</h2>
                 <p className="text-base text-slate-600">
@@ -1425,7 +1513,7 @@ Content-Type: application/json`}
             </section>
 
             <section id="credits" className="scroll-mt-32 space-y-8">
-              <SectionBadge index={8} label="Credits & License" />
+              <SectionBadge index={9} label="Credits & License" />
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 className="text-2xl font-semibold text-slate-900">Open collaboration encouraged</h2>
                 <p className="mt-2 text-sm text-slate-600">

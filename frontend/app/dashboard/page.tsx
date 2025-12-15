@@ -1306,6 +1306,7 @@ function DashboardPageContent() {
   const [auditActionFilter, setAuditActionFilter] = useState("");
   const [auditPage, setAuditPage] = useState(1);
   const AUDIT_PAGE_SIZE = 20;
+  const [isSimulatingIncident, setIsSimulatingIncident] = useState(false);
   const auditActionOptions = [
     { value: "", label: "All actions" },
     { value: "user_login", label: "User login" },
@@ -1591,6 +1592,7 @@ function DashboardPageContent() {
     page: incidentPage,
     pageSize: INCIDENT_PAGE_SIZE
   });
+  const invalidateIncidentsMain = useInvalidateIncidents();
   const incidents = incidentsResponse?.data ?? [];
   const incidentMeta = incidentsResponse?.meta;
   const maintenanceReference = new Date();
@@ -1692,6 +1694,33 @@ function DashboardPageContent() {
   const handleIncidentDrawerClose = () => {
     setSelectedIncidentId(null);
     router.replace("/dashboard", { scroll: false });
+  };
+
+  const handleSimulateIncident = async () => {
+    if (isSimulatingIncident) return;
+    setIsSimulatingIncident(true);
+    try {
+      const defaultServiceId = serviceOptions[0]?.id ?? null;
+      await apiClient.post("/incidents", {
+        title: "Simulated incident",
+        description: "Demo incident created from the Simulate button to show end-to-end flow.",
+        severity: "medium",
+        status: "investigating",
+        serviceId: defaultServiceId
+      });
+      await invalidateIncidentsMain();
+      window.alert("Simulated incident created. Check the incident list.");
+    } catch (error) {
+      let message = "Failed to simulate incident.";
+      if (isAxiosError(error)) {
+        message = error.response?.data?.message ?? error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      window.alert(message);
+    } finally {
+      setIsSimulatingIncident(false);
+    }
   };
 
   const navigation = [
@@ -2119,6 +2148,14 @@ function DashboardPageContent() {
                   </div>
 
                   <div className="flex flex-wrap gap-4">
+                    <button
+                      type="button"
+                      onClick={handleSimulateIncident}
+                      disabled={isSimulatingIncident || billingLocked}
+                      className="inline-flex items-center gap-2 rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-100 transition hover:bg-blue-600/20 disabled:opacity-50"
+                    >
+                      {isSimulatingIncident ? "Simulating..." : "Simulate incident"}
+                    </button>
                     <div className="flex min-w-[150px] flex-col">
                       <label className="mb-1 text-xs font-medium text-gray-400">Status</label>
                       <div className="relative">
