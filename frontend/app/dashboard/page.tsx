@@ -84,6 +84,7 @@ import {
   useAssignSupportTicket,
   useUpdateSupportTicket,
   useDeleteSupportTicket,
+  useDeleteSupportComment,
   useUploadSupportAttachments,
   type SupportTicket
 } from "@hooks/useSupport";
@@ -1322,6 +1323,7 @@ function PlatformSupportPanel({
   const uploadAttachments = useUploadSupportAttachments("platform");
   const updateTicket = useUpdateSupportTicket("platform");
   const deleteTicket = useDeleteSupportTicket();
+  const deleteComment = useDeleteSupportComment("platform");
 
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) ?? null;
 
@@ -1415,7 +1417,6 @@ function PlatformSupportPanel({
               <th className="px-4 py-3 text-left">Status</th>
               <th className="px-4 py-3 text-left">Assignee</th>
               <th className="px-4 py-3 text-left">Created</th>
-              <th className="px-4 py-3 text-left">Internal note</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800 text-gray-100">
@@ -1472,22 +1473,7 @@ function PlatformSupportPanel({
                     {format(new Date(ticket.createdAt), "PP p")}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-col gap-2">
-                      <textarea
-                        rows={2}
-                        value={notes[ticket.id] ?? ""}
-                        onChange={(e) => setNotes((prev) => ({ ...prev, [ticket.id]: e.target.value }))}
-                        placeholder="Add internal note"
-                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleAddNote(ticket.id)}
-                        className="self-start rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500"
-                      >
-                        Save note
-                      </button>
-                    </div>
+                    <span className="text-xs text-gray-500">Open ticket to add notes</span>
                   </td>
                 </tr>
               ))
@@ -1615,28 +1601,39 @@ function PlatformSupportPanel({
                   />
                 </label>
               </div>
-              <div className="space-y-3 rounded-lg border border-gray-800 bg-gray-900/60 p-3 max-h-72 overflow-y-auto">
-                {selectedTicket.comments && selectedTicket.comments.length > 0 ? (
-                  selectedTicket.comments.map((c) => (
-                    <div key={c.id} className="rounded border border-gray-800 bg-gray-950/60 p-3">
-                      <div className="flex items-center justify-between text-xs text-gray-400">
-                        <span>
-                          {c.author?.name ?? "System"}{" "}
-                          {c.isInternal ? (
-                            <span className="ml-2 rounded bg-amber-900/50 px-2 py-0.5 text-amber-200">
-                              Internal
+                  <div className="space-y-3 rounded-lg border border-gray-800 bg-gray-900/60 p-3 max-h-72 overflow-y-auto">
+                    {selectedTicket.comments && selectedTicket.comments.length > 0 ? (
+                      selectedTicket.comments.map((c) => (
+                        <div key={c.id} className="rounded border border-gray-800 bg-gray-950/60 p-3">
+                          <div className="flex items-center justify-between text-xs text-gray-400">
+                            <span>
+                              {c.author?.name ?? "System"}{" "}
+                              {c.isInternal ? (
+                                <span className="ml-2 rounded bg-amber-900/50 px-2 py-0.5 text-amber-200">
+                                  Internal
+                                </span>
+                              ) : null}
                             </span>
-                          ) : null}
-                        </span>
-                        <span>{format(new Date(c.createdAt), "PP p")}</span>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-gray-100">{c.body}</p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-400">No comments yet.</p>
-                )}
-              </div>
+                            <div className="flex items-center gap-3">
+                              <span>{format(new Date(c.createdAt), "PP p")}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  deleteComment.mutateAsync({ ticketId: selectedTicket.id, commentId: c.id })
+                                }
+                                className="text-xs text-red-300 hover:text-red-200"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap text-sm text-gray-100">{c.body}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-400">No comments yet.</p>
+                    )}
+                  </div>
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">

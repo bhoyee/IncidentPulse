@@ -495,6 +495,25 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         return { error: false, data: comment };
       }
     );
+
+    superAdminScope.delete(
+      "/:ticketId/comments/:commentId",
+      {
+        config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
+      },
+      async (request) => {
+        const { ticketId, commentId } = request.params as { ticketId: string; commentId: string };
+        // Ensure the comment belongs to the ticket
+        const existing = await prisma.supportComment.findFirst({
+          where: { id: commentId, ticketId }
+        });
+        if (!existing) {
+          throw superAdminScope.httpErrors.notFound("Comment not found");
+        }
+        await prisma.supportComment.delete({ where: { id: commentId } });
+        return { error: false, message: "Comment deleted" };
+      }
+    );
   }, { prefix: "/platform" });
 };
 

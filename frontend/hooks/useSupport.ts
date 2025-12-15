@@ -139,6 +139,22 @@ export function useAssignSupportTicket() {
   });
 }
 
+export function useDeleteSupportComment(scope: "org" | "platform" = "platform") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { ticketId: string; commentId: string }) => {
+      const base = scope === "platform" ? "/support/platform" : "/support";
+      const res = await apiClient.delete<{ error: boolean; message?: string }>(
+        `${base}/${payload.ticketId}/comments/${payload.commentId}`
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["support"] });
+    }
+  });
+}
+
 export function useUpdateSupportTicket(scope: "org" | "platform" = "platform") {
   const qc = useQueryClient();
   return useMutation({
