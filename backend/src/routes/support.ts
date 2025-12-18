@@ -5,7 +5,12 @@ import {
   persistSupportAttachmentBuffer,
   buildAttachmentUrl
 } from "../lib/storage";
-import { notifySupportTicketCreated, notifySupportComment } from "../lib/support-notifier";
+import {
+  notifySupportTicketCreated,
+  notifySupportComment,
+  notifySupportTicketClosed
+} from "../lib/support-notifier";
+import { emitSupportEvent, onSupportEvent } from "../lib/realtime";
 import { env } from "../env";
 
 type TicketPayload = {
@@ -59,7 +64,12 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
 
       const ticket = await prisma.supportTicket.findUnique({
         where: { id: ticketId },
-        select: { id: true, organizationId: true }
+        select: {
+          id: true,
+          organizationId: true,
+          createdBy: { select: { email: true } },
+          assignee: { select: { email: true } }
+        }
       });
       if (!ticket) {
         throw fastify.httpErrors.notFound("Ticket not found");
@@ -118,9 +128,25 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
 
-      notifySupportComment(ticket.id, user.email).catch((err) =>
-        request.log.warn({ err }, "Failed to send support inbound notification")
-      );
+      const updatedTicket = await prisma.supportTicket.update({
+        where: { id: ticket.id },
+        data: { updatedAt: new Date() },
+        select: { id: true, organizationId: true, updatedAt: true }
+      });
+
+      emitSupportEvent({
+        type: "support.comment.added",
+        ticket: updatedTicket
+      });
+
+      const recipients = [ticket.createdBy?.email, ticket.assignee?.email]
+        .filter(Boolean)
+        .filter((email) => email !== user.email);
+      for (const email of recipients) {
+        notifySupportComment(ticket.id, email as string, body).catch((err) =>
+          request.log.warn({ err }, "Failed to send support inbound notification")
+        );
+      }
 
       return reply.send({
         error: false,
@@ -228,6 +254,10 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         createdById: request.user.id
       }
     });
+    emitSupportEvent({
+      type: "support.ticket.created",
+      ticket: { id: ticket.id, organizationId: ticket.organizationId, updatedAt: ticket.updatedAt }
+    });
     notifySupportTicketCreated(ticket.id).catch((err) =>
       request.log.warn({ err }, "Failed to send support ticket notification")
     );
@@ -251,14 +281,60 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
     if (request.user.role !== "admin") {
       throw fastify.httpErrors.forbidden();
     }
-    const updated = await prisma.supportTicket.updateMany({
+    const existing = await prisma.supportTicket.findFirst({
       where: { id: ticketId, organizationId: request.user.orgId },
-      data: { status }
+      select: { id: true, status: true }
     });
-    if (!updated.count) {
+    if (!existing) {
       throw fastify.httpErrors.notFound("Ticket not found");
     }
+    const updated = await prisma.supportTicket.update({
+      where: { id: existing.id },
+      data: { status },
+      select: { id: true, organizationId: true, updatedAt: true }
+    });
+    emitSupportEvent({ type: "support.ticket.updated", ticket: updated });
+    if (status === "closed" && existing.status !== "closed") {
+      notifySupportTicketClosed(existing.id).catch((err) =>
+        request.log.warn({ err }, "Failed to send support ticket closed notification")
+      );
+    }
     return { error: false, message: "Status updated" };
+    }
+  );
+
+  fastify.post(
+    "/:ticketId/reactivate",
+    {
+      config: {
+        rateLimit: { max: 10, timeWindow: "1 minute" }
+      }
+    },
+    async (request) => {
+      const { ticketId } = request.params as { ticketId: string };
+      if (!request.user.orgId) {
+        throw fastify.httpErrors.badRequest("Missing org context");
+      }
+      const ticket = await prisma.supportTicket.findFirst({
+        where: { id: ticketId, organizationId: request.user.orgId },
+        select: { id: true, status: true, createdById: true }
+      });
+      if (!ticket) {
+        throw fastify.httpErrors.notFound("Ticket not found");
+      }
+      if (request.user.role !== "admin" && ticket.createdById !== request.user.id) {
+        throw fastify.httpErrors.forbidden();
+      }
+      if (ticket.status === "open") {
+        return { error: false, message: "Ticket already open" };
+      }
+      const updated = await prisma.supportTicket.update({
+        where: { id: ticket.id },
+        data: { status: "open" },
+        select: { id: true, organizationId: true, updatedAt: true }
+      });
+      emitSupportEvent({ type: "support.ticket.updated", ticket: updated });
+      return { error: false, message: "Ticket reactivated" };
     }
   );
 
@@ -280,10 +356,18 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ticket = await prisma.supportTicket.findFirst({
         where: { id: ticketId, organizationId: request.user.orgId },
-        select: { id: true }
+        select: {
+          id: true,
+          status: true,
+          createdBy: { select: { email: true } },
+          assignee: { select: { email: true } }
+        }
       });
       if (!ticket) {
         throw fastify.httpErrors.notFound("Ticket not found");
+      }
+      if (ticket.status === "closed") {
+        throw fastify.httpErrors.forbidden("Ticket is closed. Reactivate to reply.");
       }
       const internalFlag = request.user.isSuperAdmin ? Boolean(isInternal) : false;
       const comment = await prisma.supportComment.create({
@@ -297,10 +381,21 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
           author: { select: { id: true, name: true, email: true } }
         }
       });
+      const updatedTicket = await prisma.supportTicket.update({
+        where: { id: ticketId },
+        data: { updatedAt: new Date() },
+        select: { id: true, organizationId: true, updatedAt: true }
+      });
+      emitSupportEvent({ type: "support.comment.added", ticket: updatedTicket });
       if (!internalFlag) {
-        notifySupportComment(ticketId, comment.author?.email).catch((err) =>
-          request.log.warn({ err }, "Failed to send support comment notification")
-        );
+        const recipients = [ticket.createdBy?.email, ticket.assignee?.email]
+          .filter(Boolean)
+          .filter((email) => email !== request.user.email);
+        for (const email of recipients) {
+          notifySupportComment(ticketId, email as string, body).catch((err) =>
+            request.log.warn({ err }, "Failed to send support comment notification")
+          );
+        }
       }
       return { error: false, data: comment };
     }
@@ -346,14 +441,92 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
     }
+    const updatedTicket = await prisma.supportTicket.update({
+      where: { id: ticketId },
+      data: { updatedAt: new Date() },
+      select: { id: true, organizationId: true, updatedAt: true }
+    });
+    emitSupportEvent({ type: "support.ticket.updated", ticket: updatedTicket });
     return { error: false, data: saved };
   }
+  );
+
+  fastify.get(
+    "/stream",
+    { preHandler: fastify.authenticate },
+    async (request, reply) => {
+      const orgId = request.user.orgId;
+      if (!orgId) {
+        throw fastify.httpErrors.badRequest("Missing org context");
+      }
+      reply.raw.setHeader("Content-Type", "text/event-stream");
+      reply.raw.setHeader("Cache-Control", "no-cache");
+      reply.raw.setHeader("Connection", "keep-alive");
+      reply.raw.setHeader("X-Accel-Buffering", "no");
+      if (typeof reply.raw.flushHeaders === "function") {
+        reply.raw.flushHeaders();
+      }
+      reply.hijack();
+
+      const sendHeartbeat = setInterval(() => {
+        reply.raw.write(": heartbeat\n\n");
+      }, 15000);
+
+      const detach = onSupportEvent((event) => {
+        if (event.ticket.organizationId !== orgId) {
+          return;
+        }
+        reply.raw.write("event: support\n");
+        reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+      });
+
+      const closeStream = () => {
+        clearInterval(sendHeartbeat);
+        detach();
+        reply.raw.end();
+      };
+
+      request.raw.on("close", closeStream);
+      request.raw.on("aborted", closeStream);
+    }
   );
 
   // Platform super-admin routes
   fastify.register(async (superAdminScope) => {
     superAdminScope.addHook("preHandler", superAdminScope.authenticate);
     superAdminScope.addHook("preHandler", superAdminScope.requireSuperAdmin);
+
+    superAdminScope.get(
+      "/stream",
+      async (request, reply) => {
+        reply.raw.setHeader("Content-Type", "text/event-stream");
+        reply.raw.setHeader("Cache-Control", "no-cache");
+        reply.raw.setHeader("Connection", "keep-alive");
+        reply.raw.setHeader("X-Accel-Buffering", "no");
+        if (typeof reply.raw.flushHeaders === "function") {
+          reply.raw.flushHeaders();
+        }
+        reply.hijack();
+
+        const sendHeartbeat = setInterval(() => {
+          reply.raw.write(": heartbeat\n\n");
+        }, 15000);
+
+        const detach = onSupportEvent((event) => {
+          reply.raw.write("event: support\n");
+          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+        });
+
+        const closeStream = () => {
+          clearInterval(sendHeartbeat);
+          detach();
+          reply.raw.end();
+        };
+
+        request.raw.on("close", closeStream);
+        request.raw.on("aborted", closeStream);
+      }
+    );
 
     superAdminScope.get(
       "/",
@@ -393,10 +566,24 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       async (request) => {
       const { ticketId } = request.params as { ticketId: string };
       const { status } = request.body as { status: "open" | "pending" | "closed" };
+      const existing = await prisma.supportTicket.findUnique({
+        where: { id: ticketId },
+        select: { id: true, status: true }
+      });
+      if (!existing) {
+        throw superAdminScope.httpErrors.notFound("Ticket not found");
+      }
       const updated = await prisma.supportTicket.update({
         where: { id: ticketId },
-        data: { status }
+        data: { status },
+        select: { id: true, organizationId: true, updatedAt: true }
       });
+      emitSupportEvent({ type: "support.ticket.updated", ticket: updated });
+      if (status === "closed" && existing.status !== "closed") {
+        notifySupportTicketClosed(existing.id).catch((err) =>
+          request.log.warn({ err }, "Failed to send support ticket closed notification")
+        );
+      }
       return { error: false, data: updated };
       }
     );
@@ -427,8 +614,10 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
 
         const updated = await prisma.supportTicket.update({
           where: { id: ticketId },
-          data
+          data,
+          select: { id: true, organizationId: true, updatedAt: true }
         });
+        emitSupportEvent({ type: "support.ticket.updated", ticket: updated });
         return { error: false, data: updated };
       }
     );
@@ -443,8 +632,10 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         const { assigneeId } = request.body as { assigneeId?: string | null };
         const updated = await prisma.supportTicket.update({
           where: { id: ticketId },
-          data: { assigneeId: assigneeId ?? null }
+          data: { assigneeId: assigneeId ?? null },
+          select: { id: true, organizationId: true, updatedAt: true }
         });
+        emitSupportEvent({ type: "support.ticket.updated", ticket: updated });
         return { error: false, data: updated };
       }
     );
@@ -456,7 +647,14 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       },
       async (request) => {
         const { ticketId } = request.params as { ticketId: string };
+        const existing = await prisma.supportTicket.findUnique({
+          where: { id: ticketId },
+          select: { id: true, organizationId: true, updatedAt: true }
+        });
         await prisma.supportTicket.delete({ where: { id: ticketId } });
+        if (existing) {
+          emitSupportEvent({ type: "support.ticket.deleted", ticket: existing });
+        }
         return { error: false, message: "Ticket deleted" };
       }
     );
@@ -492,15 +690,21 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
             isInternal: isInternal ?? true
           }
         });
+        const updatedTicket = await prisma.supportTicket.update({
+          where: { id: ticketId },
+          data: { updatedAt: new Date() },
+          select: { id: true, organizationId: true, updatedAt: true }
+        });
+        emitSupportEvent({ type: "support.comment.added", ticket: updatedTicket });
         if (!isInternal) {
           const recipients = [ticket.createdBy?.email, ticket.assignee?.email]
             .filter(Boolean)
             .filter((email) => email !== request.user.email);
-          for (const email of recipients) {
-            notifySupportComment(ticketId, email as string).catch((err) =>
-              request.log.warn({ err }, "Failed to send support comment notification")
-            );
-          }
+        for (const email of recipients) {
+          notifySupportComment(ticketId, email as string, body).catch((err) =>
+            request.log.warn({ err }, "Failed to send support comment notification")
+          );
+        }
         }
         return { error: false, data: comment };
       }

@@ -32,6 +32,20 @@ export type IncidentRealtimeEvent =
   | { type: "incident.created" | "incident.updated"; incident: IncidentRealtimePayload }
   | { type: "incident.deleted"; incidentId: string };
 
+export type SupportRealtimeEvent =
+  | {
+      type:
+        | "support.ticket.created"
+        | "support.ticket.updated"
+        | "support.comment.added"
+        | "support.ticket.deleted";
+      ticket: {
+        id: string;
+        organizationId: string;
+        updatedAt: Date;
+      };
+    };
+
 const incidentEmitter = new EventEmitter();
 incidentEmitter.setMaxListeners(0);
 
@@ -42,6 +56,18 @@ export function emitIncidentEvent(event: IncidentRealtimeEvent) {
 export function onIncidentEvent(listener: (event: IncidentRealtimeEvent) => void) {
   incidentEmitter.on("incident", listener);
   return () => incidentEmitter.off("incident", listener);
+}
+
+const supportEmitter = new EventEmitter();
+supportEmitter.setMaxListeners(0);
+
+export function emitSupportEvent(event: SupportRealtimeEvent) {
+  supportEmitter.emit("support", event);
+}
+
+export function onSupportEvent(listener: (event: SupportRealtimeEvent) => void) {
+  supportEmitter.on("support", listener);
+  return () => supportEmitter.off("support", listener);
 }
 
 const statusEmitter = new EventEmitter();

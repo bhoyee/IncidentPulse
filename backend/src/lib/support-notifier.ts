@@ -2,6 +2,123 @@ import { prisma } from "./db";
 import { sendMail } from "./mailer";
 import { env } from "../env";
 
+function trimMessage(input?: string | null, max = 800): string | undefined {
+  if (!input) return undefined;
+  const cleaned = input.trim();
+  if (!cleaned) return undefined;
+  if (cleaned.length <= max) return cleaned;
+  return `${cleaned.slice(0, max)}…`;
+}
+
+function escapeHtml(input: string) {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildSupportEmailBody(options: {
+  orgName: string;
+  subject: string;
+  priority?: string;
+  status?: string;
+  openedBy?: string;
+  message?: string;
+  link: string;
+  note?: string;
+}) {
+  const lines = [
+    `${options.orgName} support ticket update`,
+    `Subject: ${options.subject}`,
+    `Priority: ${options.priority ?? "medium"}`,
+    `Status: ${options.status ?? "open"}`
+  ];
+
+  if (options.openedBy) {
+    lines.push(`Opened by: ${options.openedBy}`);
+  }
+
+  if (options.message) {
+    lines.push("", "Last message:", options.message);
+  }
+
+  if (options.note) {
+    lines.push("", options.note);
+  }
+
+  lines.push("", `View ticket: ${options.link}`);
+  return lines.join("\n");
+}
+
+function buildSupportEmailHtml(options: {
+  orgName: string;
+  subject: string;
+  priority?: string;
+  status?: string;
+  openedBy?: string;
+  message?: string;
+  link: string;
+  headline?: string;
+  note?: string;
+}) {
+  const rows = [
+    ["Subject", options.subject],
+    ["Priority", options.priority ?? "medium"],
+    ["Status", options.status ?? "open"]
+  ];
+  if (options.openedBy) {
+    rows.push(["Opened by", options.openedBy]);
+  }
+
+  const rowHtml = rows
+    .map(
+      ([label, value]) =>
+        `<tr>
+          <td style="padding:8px 12px;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;">${escapeHtml(
+            label
+          )}</td>
+          <td style="padding:8px 12px;color:#0f172a;font-size:14px;font-weight:600;">${escapeHtml(
+            value
+          )}</td>
+        </tr>`
+    )
+    .join("");
+
+  const messageBlock = options.message
+    ? `<div style="margin-top:16px;padding:12px 14px;border-radius:12px;background:#f1f5f9;">
+        <div style="font-size:12px;text-transform:uppercase;color:#64748b;font-weight:700;letter-spacing:0.08em;">Latest message</div>
+        <p style="margin:8px 0 0;color:#0f172a;font-size:14px;white-space:pre-line;">${escapeHtml(
+          options.message
+        )}</p>
+      </div>`
+    : "";
+
+  const noteBlock = options.note
+    ? `<p style="margin:16px 0 0;color:#475569;font-size:14px;">${escapeHtml(options.note)}</p>`
+    : "";
+
+  return `
+  <div style="background:#f8fafc;padding:24px;font-family:Inter,Segoe UI,Arial,sans-serif;color:#0f172a;">
+    <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;padding:24px;">
+      <div style="font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:0.1em;">IncidentPulse Support</div>
+      <h1 style="margin:8px 0 0;font-size:20px;color:#0f172a;">${escapeHtml(
+        options.headline ?? `${options.orgName} support update`
+      )}</h1>
+      <p style="margin:6px 0 0;color:#64748b;font-size:14px;">${escapeHtml(options.orgName)}</p>
+      <table style="width:100%;margin-top:16px;border-collapse:collapse;background:#f8fafc;border-radius:12px;overflow:hidden;">
+        ${rowHtml}
+      </table>
+      ${messageBlock}
+      ${noteBlock}
+      <div style="margin-top:20px;">
+        <a href="${options.link}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:10px;font-weight:600;font-size:14px;">View ticket</a>
+      </div>
+    </div>
+  </div>`;
+}
+
 function buildDashboardLink(ticketId: string, tab = "support") {
   const base = env.FRONTEND_URL.replace(/\/$/, "");
   return `${base}/dashboard?tab=${tab}&ticket=${ticketId}`;
@@ -67,52 +184,116 @@ export async function notifySupportTicketCreated(ticketId: string) {
   await sendMail({
     to,
     subject: `[Support #${ticket.id}] ${orgName}: ${ticket.subject}`,
-    text: [
-      `${orgName} support ticket opened`,
-      `Subject: ${ticket.subject}`,
-      `Priority: ${ticket.priority}`,
-      `Opened by: ${openedBy}`,
-      ``,
-      `View ticket: ${link}`
-    ].join("\n"),
+    text: buildSupportEmailBody({
+      orgName,
+      subject: ticket.subject,
+      priority: ticket.priority,
+      status: ticket.status,
+      openedBy,
+      message: trimMessage(ticket.body),
+      link
+    }),
+    html: buildSupportEmailHtml({
+      orgName,
+      subject: ticket.subject,
+      priority: ticket.priority,
+      status: ticket.status,
+      openedBy,
+      message: trimMessage(ticket.body),
+      link
+    }),
     replyTo
   });
 }
 
-export async function notifySupportComment(ticketId: string, authorEmail?: string | null) {
+export async function notifySupportComment(
+  ticketId: string,
+  recipientEmail?: string | null,
+  message?: string | null
+) {
   const ticket = await prisma.supportTicket.findUnique({
     where: { id: ticketId },
     select: {
       subject: true,
       priority: true,
+      status: true,
       organizationId: true,
       organization: { select: { name: true } }
     }
   });
   if (!ticket) return;
-  const recipients = await getOrgAdminEmails(ticket.organizationId);
-  if (authorEmail) {
-    recipients.push(authorEmail);
-  }
-  const superAdmins = await getSuperAdminEmails();
-  recipients.push(...superAdmins);
-  const to = Array.from(new Set(recipients));
-  if (to.length === 0) return;
+  if (!recipientEmail) return;
 
   const orgName = ticket.organization?.name ?? "Workspace";
   const link = buildDashboardLink(ticketId, "support");
   const replyTo = buildReplyTo(ticketId);
 
   await sendMail({
-    to,
+    to: recipientEmail,
     subject: `[Support #${ticketId}] New comment: ${ticket.subject}`,
-    text: [
-      `${orgName} support ticket updated`,
-      `Subject: ${ticket.subject}`,
-      `Priority: ${ticket.priority}`,
-      ``,
-      `View ticket: ${link}`
-    ].join("\n"),
+    text: buildSupportEmailBody({
+      orgName,
+      subject: ticket.subject,
+      priority: ticket.priority,
+      status: ticket.status,
+      message: trimMessage(message),
+      link
+    }),
+    html: buildSupportEmailHtml({
+      orgName,
+      subject: ticket.subject,
+      priority: ticket.priority,
+      status: ticket.status,
+      message: trimMessage(message),
+      link
+    }),
     replyTo
+  });
+}
+
+export async function notifySupportTicketClosed(ticketId: string) {
+  const ticket = await prisma.supportTicket.findUnique({
+    where: { id: ticketId },
+    select: {
+      subject: true,
+      priority: true,
+      status: true,
+      body: true,
+      organizationId: true,
+      organization: { select: { name: true } },
+      createdBy: { select: { email: true, name: true } }
+    }
+  });
+  if (!ticket?.createdBy?.email) return;
+
+  const orgName = ticket.organization?.name ?? "Workspace";
+  const link = buildDashboardLink(ticketId, "support");
+  const note =
+    "We’ve closed this ticket. If you have any further questions, please reopen the ticket or create a new one.";
+
+  await sendMail({
+    to: ticket.createdBy.email,
+    subject: `[Support #${ticketId}] Ticket closed: ${ticket.subject}`,
+    text: buildSupportEmailBody({
+      orgName,
+      subject: ticket.subject,
+      priority: ticket.priority,
+      status: ticket.status,
+      openedBy: ticket.createdBy.name ?? ticket.createdBy.email,
+      message: undefined,
+      link,
+      note
+    }),
+    html: buildSupportEmailHtml({
+      orgName,
+      subject: ticket.subject,
+      priority: ticket.priority,
+      status: ticket.status,
+      openedBy: ticket.createdBy.name ?? ticket.createdBy.email,
+      message: undefined,
+      link,
+      headline: "Ticket closed",
+      note
+    })
   });
 }
