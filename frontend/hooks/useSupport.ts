@@ -37,7 +37,13 @@ type TicketResponse = { error: boolean; data: SupportTicket[]; meta?: { page: nu
 type TicketCreatePayload = { subject: string; body: string; priority?: string; category?: string };
 type SupportAttachment = NonNullable<SupportTicket["attachments"]>[number];
 
-export function useOrgSupportTickets(filters?: { status?: string; q?: string; page?: number; pageSize?: number }) {
+export function useOrgSupportTickets(filters?: {
+  status?: string;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+  enabled?: boolean;
+}) {
   return useQuery({
     queryKey: ["support", "org", filters?.status ?? "", filters?.q ?? "", filters?.page ?? 1, filters?.pageSize ?? 10],
     queryFn: async () => {
@@ -50,7 +56,8 @@ export function useOrgSupportTickets(filters?: { status?: string; q?: string; pa
         }
       });
       return res.data;
-    }
+    },
+    enabled: filters?.enabled ?? true
   });
 }
 
@@ -114,6 +121,21 @@ export function useUpdateSupportStatus(scope: "org" | "platform" = "org") {
       const res = await apiClient.patch<{ error: boolean; message?: string; data?: SupportTicket }>(
         endpoint,
         { status: payload.status }
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["support"] });
+    }
+  });
+}
+
+export function useReactivateSupportTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ticketId: string) => {
+      const res = await apiClient.post<{ error: boolean; message?: string }>(
+        `/support/${ticketId}/reactivate`
       );
       return res.data;
     },

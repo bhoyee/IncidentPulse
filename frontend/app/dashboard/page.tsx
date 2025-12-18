@@ -86,6 +86,7 @@ import {
   useDeleteSupportTicket,
   useDeleteSupportComment,
   useUploadSupportAttachments,
+  useReactivateSupportTicket,
   type SupportTicket
 } from "@hooks/useSupport";
 import {
@@ -100,6 +101,7 @@ import { usePlatformOrgs, usePlatformUsers } from "@hooks/usePlatform";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { FirstStepsModal } from "@components/FirstStepsModal";
 import { useIncidentStream } from "@hooks/useIncidentStream";
+import { useSupportStream } from "@hooks/useSupportStream";
 import { useOpenBillingPortal, useStartCheckout, useInvoices } from "@hooks/useBilling";
 import { apiClient } from "@lib/api-client";
 import {
@@ -843,7 +845,18 @@ function OrganizationsPanel({ session }: { session?: SessionUser | null }) {
   );
 }
 
-function SupportPanel() {
+function SupportPanel({
+  lastSeen,
+  onMarkRead,
+  unreadCount,
+  onTicketRead
+}: {
+  lastSeen: number;
+  onMarkRead: () => void;
+  unreadCount: number;
+  onTicketRead: (updatedAt: string | Date) => void;
+}) {
+  const { data: session } = useSession();
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -852,13 +865,15 @@ function SupportPanel() {
     status: statusFilter || undefined,
     q: search || undefined,
     page,
-    pageSize
+    pageSize,
+    enabled: Boolean(session)
   });
   const tickets = supportResponse?.data ?? [];
   const totalTickets = supportResponse?.meta?.total ?? tickets.length;
   const createTicket = useCreateSupportTicket();
   const addComment = useAddSupportComment("org");
   const uploadAttachments = useUploadSupportAttachments("org");
+  const reactivateTicket = useReactivateSupportTicket();
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
@@ -874,7 +889,7 @@ function SupportPanel() {
   const statusClasses = (status: SupportTicket["status"]) => {
     switch (status) {
       case "closed":
-        return "bg-emerald-900/50 text-emerald-200 border border-emerald-500/40";
+        return "bg-red-900/50 text-red-200 border border-red-500/50";
       case "pending":
         return "bg-amber-900/40 text-amber-200 border border-amber-500/40";
       default:
@@ -1005,11 +1020,37 @@ function SupportPanel() {
     }
   };
 
+  const handleReactivate = async (ticketId: string) => {
+    try {
+      await reactivateTicket.mutateAsync(ticketId);
+    } catch (error) {
+      let message = "Failed to reactivate ticket.";
+      if (isAxiosError(error)) {
+        message = error.response?.data?.message ?? error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      window.alert(message);
+    }
+  };
+
   return (
     <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-8 shadow-lg">
       <div className="flex flex-col gap-2 border-b border-gray-700 pb-4">
-        <p className="text-xs uppercase tracking-wide text-blue-300">Support</p>
-        <h2 className="text-2xl font-bold text-white">Support tickets</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-blue-300">Support</p>
+            <h2 className="text-2xl font-bold text-white">Support tickets</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onMarkRead}
+            disabled={unreadCount === 0}
+            className="rounded-full border border-gray-700 px-4 py-2 text-xs font-semibold text-gray-200 hover:border-blue-500 hover:text-white disabled:opacity-50"
+          >
+            Mark all read
+          </button>
+        </div>
         <p className="text-sm text-gray-300">
           Create support tickets, add comments, and attach evidence. Attachments open in a new tab.
         </p>
@@ -1161,9 +1202,12 @@ function SupportPanel() {
           <EmptyState message="No support tickets yet. Create one above." />
         ) : (
           <div className="space-y-4">
-            {tickets.map((ticket) => (
+            {tickets.map((ticket) => {
+              const isNew = new Date(ticket.updatedAt).getTime() > lastSeen;
+              return (
               <div
                 key={ticket.id}
+                onClick={() => onTicketRead(ticket.updatedAt)}
                 className="rounded-xl border border-gray-700 bg-gray-900/60 p-4 space-y-3"
               >
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1181,7 +1225,14 @@ function SupportPanel() {
                         </span>
                       ) : null}
                     </div>
-                    <h4 className="text-lg font-semibold text-white">{ticket.subject}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-lg font-semibold text-white">{ticket.subject}</h4>
+                      {isNew ? (
+                        <span className="rounded-full bg-blue-600 px-2 py-1 text-[11px] font-semibold uppercase text-white">
+                          New
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="text-xs text-gray-400">
                       Opened {format(new Date(ticket.createdAt), "PP p")} by{" "}
                       {ticket.createdBy?.name || "Unknown"}
@@ -1247,44 +1298,60 @@ function SupportPanel() {
                     ) : (
                       <p className="text-xs text-gray-500">No comments yet.</p>
                     )}
-                    <div className="space-y-2">
-                      <textarea
-                        value={commentInputs[ticket.id] || ""}
-                        onChange={(e) =>
-                          setCommentInputs((prev) => ({ ...prev, [ticket.id]: e.target.value }))
-                        }
-                        rows={2}
-                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        placeholder="Add a reply"
-                      />
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <label className="text-xs text-gray-300">
-                          Attach files
-                          <input
-                            type="file"
-                            multiple
-                            onChange={(e) => {
-                              handleAttachments(ticket.id, e.target.files);
-                              e.target.value = "";
-                            }}
-                            className="mt-1 block w-full text-xs text-gray-200"
-                            disabled={uploadingFor === ticket.id}
-                          />
-                        </label>
+                    {ticket.status === "closed" ? (
+                      <div className="rounded-lg border border-amber-700/40 bg-amber-900/30 p-3 text-xs text-amber-100">
+                        <p className="font-semibold">Ticket closed.</p>
+                        <p className="mt-1">Reactivate to send a new reply.</p>
                         <button
                           type="button"
-                          onClick={() => handleComment(ticket.id)}
-                          disabled={commentSubmitting === ticket.id}
-                          className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                          onClick={() => handleReactivate(ticket.id)}
+                          disabled={reactivateTicket.isPending}
+                          className="mt-3 inline-flex items-center justify-center rounded-lg border border-amber-400/60 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:border-amber-200 disabled:opacity-60"
                         >
-                          {commentSubmitting === ticket.id ? "Sending…" : "Post reply"}
+                          {reactivateTicket.isPending ? "Reactivating…" : "Reactivate ticket"}
                         </button>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <textarea
+                          value={commentInputs[ticket.id] || ""}
+                          onChange={(e) =>
+                            setCommentInputs((prev) => ({ ...prev, [ticket.id]: e.target.value }))
+                          }
+                          rows={2}
+                          className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          placeholder="Add a reply"
+                        />
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <label className="text-xs text-gray-300">
+                            Attach files
+                            <input
+                              type="file"
+                              multiple
+                              onChange={(e) => {
+                                handleAttachments(ticket.id, e.target.files);
+                                e.target.value = "";
+                              }}
+                              className="mt-1 block w-full text-xs text-gray-200"
+                              disabled={uploadingFor === ticket.id}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleComment(ticket.id)}
+                            disabled={commentSubmitting === ticket.id}
+                            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                          >
+                            {commentSubmitting === ticket.id ? "Sending…" : "Post reply"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
             {totalTickets > pageSize ? (
               <Pagination
                 page={page}
@@ -1302,10 +1369,14 @@ function SupportPanel() {
 
 function PlatformSupportPanel({
   orgs,
-  users
+  users,
+  lastSeen,
+  onTicketRead
 }: {
   orgs: Array<{ id: string; name: string; slug?: string }>;
   users: Array<{ id: string; name: string; email: string }>;
+  lastSeen: number;
+  onTicketRead: (updatedAt: string | Date) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [orgFilter, setOrgFilter] = useState<string>("");
@@ -1433,50 +1504,70 @@ function PlatformSupportPanel({
                 </td>
               </tr>
             ) : (
-              tickets.map((ticket) => (
-                <tr
-                  key={ticket.id}
-                  className={`hover:bg-gray-800/60 cursor-pointer ${selectedTicketId === ticket.id ? "bg-gray-800/80" : ""}`}
-                  onClick={() => setSelectedTicketId(ticket.id)}
-                >
-                  <td className="px-4 py-3 font-semibold text-white">{ticket.subject}</td>
-                  <td className="px-4 py-3 text-gray-300">{ticket.organization?.name ?? "—"}</td>
-                  <td className="px-4 py-3 capitalize text-gray-200">{ticket.priority}</td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={ticket.status}
-                      onChange={(e) =>
-                        handleStatus(ticket.id, e.target.value as SupportTicket["status"])
-                      }
-                      className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
-                    >
-                      <option value="open">Open</option>
-                      <option value="pending">Pending</option>
-                      <option value="closed">Closed</option>
-                    </select>
-                  </td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={ticket.assignee?.id ?? ""}
-                      onChange={(e) => handleAssign(ticket.id, e.target.value)}
-                      className="w-full rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
-                    >
-                      <option value="">Unassigned</option>
-                      {users.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-gray-300">
-                    {format(new Date(ticket.createdAt), "PP p")}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-gray-500">Open ticket to add notes</span>
-                  </td>
-                </tr>
-              ))
+              tickets.map((ticket) => {
+                const isNew = new Date(ticket.updatedAt).getTime() > lastSeen;
+                return (
+                  <tr
+                    key={ticket.id}
+                    className={`hover:bg-gray-800/60 cursor-pointer ${
+                      selectedTicketId === ticket.id ? "bg-gray-800/80" : ""
+                    }`}
+                  onClick={() => {
+                    setSelectedTicketId(ticket.id);
+                    onTicketRead(ticket.updatedAt);
+                  }}
+                  >
+                    <td className="px-4 py-3 font-semibold text-white">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>{ticket.subject}</span>
+                        {ticket.status === "closed" ? (
+                          <span className="rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-semibold uppercase text-white">
+                            Closed
+                          </span>
+                        ) : null}
+                        {isNew ? (
+                          <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-semibold uppercase text-white">
+                            New
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-300">{ticket.organization?.name ?? "—"}</td>
+                    <td className="px-4 py-3 capitalize text-gray-200">{ticket.priority}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={ticket.status}
+                        onChange={(e) => handleStatus(ticket.id, e.target.value as SupportTicket["status"])}
+                        className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                      >
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={ticket.assignee?.id ?? ""}
+                        onChange={(e) => handleAssign(ticket.id, e.target.value)}
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                      >
+                        <option value="">Unassigned</option>
+                        {users.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-gray-300">
+                      {format(new Date(ticket.createdAt), "PP p")}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-gray-500">Open ticket to add notes</span>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -1768,18 +1859,19 @@ function DashboardPageContent() {
 
   const { data: session } = useSession();
   useIncidentStream(Boolean(session));
+  useSupportStream(Boolean(session));
   const isAdmin = session?.role === "admin";
   const [supportLastSeen, setSupportLastSeen] = useState<number>(() => {
-    if (typeof window === "undefined") return Date.now();
+    if (typeof window === "undefined") return 0;
     const raw = window.localStorage.getItem("support:lastSeen");
-    return raw ? Number(raw) || Date.now() : Date.now();
+    return raw ? Number(raw) || 0 : 0;
   });
   const [platformSupportLastSeen, setPlatformSupportLastSeen] = useState<number>(() => {
-    if (typeof window === "undefined") return Date.now();
+    if (typeof window === "undefined") return 0;
     const raw = window.localStorage.getItem("platformSupport:lastSeen");
-    return raw ? Number(raw) || Date.now() : Date.now();
+    return raw ? Number(raw) || 0 : 0;
   });
-  const supportBadge = useOrgSupportTickets({ page: 1, pageSize: 50 });
+  const supportBadge = useOrgSupportTickets({ page: 1, pageSize: 50, enabled: Boolean(session) });
   const platformBadge = usePlatformSupportTickets(Boolean(session?.isSuperAdmin), {
     status: undefined,
     orgId: undefined
@@ -1804,19 +1896,46 @@ function DashboardPageContent() {
     (platformBadge.data ?? []).filter(
       (t) => new Date(t.updatedAt).getTime() > platformSupportLastSeen
     ).length || 0;
-  useEffect(() => {
-    if (activeTab === "support") {
-      const now = Date.now();
-      setSupportLastSeen(now);
-      if (typeof window !== "undefined") window.localStorage.setItem("support:lastSeen", String(now));
-    }
-    if (activeTab === "platformSupport") {
-      const now = Date.now();
-      setPlatformSupportLastSeen(now);
-      if (typeof window !== "undefined")
-        window.localStorage.setItem("platformSupport:lastSeen", String(now));
-    }
-  }, [activeTab]);
+  const markSupportRead = () => {
+    const now = Date.now();
+    setSupportLastSeen((prev) => {
+      const next = Math.max(prev, now);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("support:lastSeen", String(next));
+      }
+      return next;
+    });
+  };
+  const markPlatformSupportRead = () => {
+    const now = Date.now();
+    setPlatformSupportLastSeen((prev) => {
+      const next = Math.max(prev, now);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("platformSupport:lastSeen", String(next));
+      }
+      return next;
+    });
+  };
+  const markSupportTicketRead = (updatedAt: string | Date) => {
+    const ts = new Date(updatedAt).getTime();
+    setSupportLastSeen((prev) => {
+      const next = Math.max(prev, ts);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("support:lastSeen", String(next));
+      }
+      return next;
+    });
+  };
+  const markPlatformSupportTicketRead = (updatedAt: string | Date) => {
+    const ts = new Date(updatedAt).getTime();
+    setPlatformSupportLastSeen((prev) => {
+      const next = Math.max(prev, ts);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("platformSupport:lastSeen", String(next));
+      }
+      return next;
+    });
+  };
   const canCreate = Boolean(session && session.role !== "viewer");
   const firstName = session?.name?.split(" ")[0] || "Team";
   const integrationSettingsQuery = useIntegrationSettings(Boolean(isAdmin));
@@ -2410,7 +2529,7 @@ function DashboardPageContent() {
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold block">{item.name}</span>
             {item.badge ? (
-              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-500 px-2 text-[11px] font-bold text-white">
+              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-2 text-[11px] font-bold text-white">
                 {item.badge > 99 ? "99+" : item.badge}
               </span>
             ) : null}
@@ -2510,16 +2629,16 @@ function DashboardPageContent() {
                           : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                       }`}
                     >
-                      <span className={`mr-3 w-5 h-5 font-bold flex items-center justify-center ${
-                        item.current ? 'text-white' : 'text-gray-500 group-hover:text-blue-400'
-                      }`}>
-                        {item.icon}
+                      <span className="mr-3 flex h-5 w-5 items-center justify-center">
+                        {iconFor(item.id, item.current)}
                       </span>
-                      <div>
+                      <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold block">{item.name}</span>
-                        <span className={`text-xs ${item.current ? 'text-blue-200' : 'text-gray-500'}`}>
-                          {item.description}
-                        </span>
+                        {item.badge ? (
+                          <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-2 text-[11px] font-bold text-white">
+                            {item.badge > 99 ? "99+" : item.badge}
+                          </span>
+                        ) : null}
                       </div>
                     </button>
                   ))}
@@ -3536,19 +3655,41 @@ function DashboardPageContent() {
             )}
 
             {activeTab === 'support' && (
-              <SupportPanel />
+              <SupportPanel
+                lastSeen={supportLastSeen}
+                onMarkRead={markSupportRead}
+                unreadCount={supportUnread}
+                onTicketRead={markSupportTicketRead}
+              />
             )}
 
             {activeTab === 'platformSupport' && session?.isSuperAdmin && (
               <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
                 <div className="flex flex-col gap-2 border-b border-gray-700 pb-4">
-                  <p className="text-xs uppercase tracking-wide text-blue-300">Platform Support</p>
-                  <h2 className="text-2xl font-bold text-white">All tenant tickets</h2>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-blue-300">Platform Support</p>
+                      <h2 className="text-2xl font-bold text-white">All tenant tickets</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={markPlatformSupportRead}
+                      disabled={platformUnread === 0}
+                      className="rounded-full border border-gray-700 px-4 py-2 text-xs font-semibold text-gray-200 hover:border-blue-500 hover:text-white disabled:opacity-50"
+                    >
+                      Mark all read
+                    </button>
+                  </div>
                   <p className="text-sm text-gray-300">
                     Triage and respond to every organization’s tickets. Add internal notes, reassign, and update status.
                   </p>
                 </div>
-                <PlatformSupportPanel orgs={platformOrgs} users={platformUsers} />
+                <PlatformSupportPanel
+                  orgs={platformOrgs}
+                  users={platformUsers}
+                  lastSeen={platformSupportLastSeen}
+                  onTicketRead={markPlatformSupportTicketRead}
+                />
               </div>
             )}
 
