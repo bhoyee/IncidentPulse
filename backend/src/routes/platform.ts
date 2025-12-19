@@ -111,7 +111,6 @@ function buildStaffInviteEmail(options: { name: string; email: string; tempPassw
   return { to: options.email, subject, text, html };
 }
 
-
 const platformRoutes: FastifyPluginAsync = async (fastify) => {
   // All routes require super-admin
   fastify.addHook("preHandler", fastify.authenticate);
@@ -150,9 +149,11 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
     return { error: false, data: results };
   });
 
-  fastify.get("/metrics", async () => {
+  fastify.get("/metrics", async (request) => {
+    const windowParam = (request.query as any)?.window as string | undefined;
+    const windowDays = Math.max(1, Math.min(90, Number(windowParam) || 30));
     const now = new Date();
-    const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const since = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
 
     const [
       orgs,
@@ -189,15 +190,15 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
       prisma.$queryRaw<Array<{ bucket: Date; count: number }>>`
         SELECT DATE_TRUNC('day', "createdAt")::date AS bucket, COUNT(*)::int AS count
         FROM "Incident"
-        WHERE "createdAt" >= ${last30}
+        WHERE "createdAt" >= ${since}
         GROUP BY bucket
         ORDER BY bucket
       `,
-      prisma.incident.count({ where: { createdAt: { gte: last30 } } }),
-      prisma.maintenanceEvent.count({ where: { createdAt: { gte: last30 } } }),
+      prisma.incident.count({ where: { createdAt: { gte: since } } }),
+      prisma.maintenanceEvent.count({ where: { createdAt: { gte: since } } }),
       prisma.incident.groupBy({
         by: ["organizationId"],
-        where: { createdAt: { gte: last30 } },
+        where: { createdAt: { gte: since } },
         _count: { _all: true }
       }),
       prisma.membership.groupBy({
@@ -216,7 +217,7 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
       getWebhookMetrics(),
       (prisma as any).trafficStat.groupBy({
         by: ["route"],
-        where: { bucket: { gte: last30 } },
+        where: { bucket: { gte: since } },
         _sum: { count: true, errorCount: true, totalMs: true },
         orderBy: { _sum: { count: "desc" } },
         take: 10
@@ -224,7 +225,7 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
       prisma.$queryRaw<Array<{ orgId: string | null; route: string; count: number; errorCount: number; totalMs: number }>>`
         SELECT "orgId", route, SUM(count)::int as count, SUM("errorCount")::int as "errorCount", SUM("totalMs")::int as "totalMs"
         FROM "TrafficStat"
-        WHERE bucket >= ${last30}
+        WHERE bucket >= ${since}
         GROUP BY "orgId", route
         ORDER BY count DESC
         LIMIT 30
@@ -232,7 +233,7 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
       (prisma as any).publicVisit.groupBy({
         by: ["path"],
         _count: { _all: true },
-        where: { createdAt: { gte: last30 } },
+        where: { createdAt: { gte: since } },
         orderBy: { _count: { _all: "desc" } },
         take: 10
       }),
@@ -242,7 +243,7 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
       (prisma as any).publicVisit.groupBy({
         by: ["country"],
         _count: { _all: true },
-        where: { createdAt: { gte: last30 }, country: { not: null } },
+        where: { createdAt: { gte: since }, country: { not: null } },
         orderBy: { _count: { _all: "desc" } },
         take: 10
       })
@@ -277,14 +278,24 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
       })
     );
 
+    const activeOrgs = orgs.filter((o: any) => o.status !== "suspended" && !o.isDeleted).length;
+    const inactiveOrgs = orgs.length - activeOrgs;
+
+    const totalMembers = membersByOrg.reduce((sum: number, row: any) => sum + (row._count?._all ?? 0), 0);
+    const totalAdmins = await prisma.membership.count({ where: { role: "admin" } });
+
     return {
       error: false,
       data: {
         totals: {
           orgs: orgs.length,
           users: userCount,
-          incidents30: incidents30Count,
-          maintenance30: maintenance30Count
+          incidentsWindow: incidents30Count,
+          maintenanceWindow: maintenance30Count,
+          activeOrgs,
+          inactiveOrgs,
+          members: totalMembers,
+          admins: totalAdmins
         },
         incidentsTrend: incidentsByDay,
         orgs: orgSummaries,

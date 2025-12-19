@@ -69,7 +69,16 @@ export type PlatformAuditLog = {
 };
 
 export type PlatformMetrics = {
-  totals: { orgs: number; users: number; incidents30: number; maintenance30: number };
+  totals: {
+    orgs: number;
+    users: number;
+    incidentsWindow: number;
+    maintenanceWindow: number;
+    activeOrgs?: number;
+    inactiveOrgs?: number;
+    members?: number;
+    admins?: number;
+  };
   incidentsTrend: Array<{ bucket: string; count: number }>;
   orgs: Array<
     PlatformOrg & {
@@ -283,14 +292,18 @@ export function useResetUserPassword() {
   });
 }
 
-export function usePlatformMetrics(enabled: boolean) {
+export function usePlatformMetrics(enabled: boolean, windowDays = 30) {
+  const windowParam = Math.max(1, Math.min(90, windowDays));
   return useQuery({
-    queryKey: ["platform", "metrics"],
+    queryKey: ["platform", "metrics", windowParam],
     queryFn: async (): Promise<PlatformMetrics> => {
-      const res = await apiClient.get<{ error: boolean; data: PlatformMetrics }>(`/platform/metrics`);
+      const res = await apiClient.get<{ error: boolean; data: PlatformMetrics }>(`/platform/metrics`, {
+        params: { window: windowParam }
+      });
       return res.data.data;
     },
-    enabled
+    enabled,
+    refetchInterval: enabled ? 15000 : false
   });
 }
 
@@ -337,4 +350,3 @@ export function usePlatformAuditLogs(enabled: boolean, params?: { page?: number;
     enabled
   });
 }
-

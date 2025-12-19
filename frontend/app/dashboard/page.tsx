@@ -104,7 +104,8 @@ import {
   useCreatePlatformStaff,
   useUpdatePlatformStaff,
   useDeletePlatformStaff,
-  type PlatformStaff
+  type PlatformStaff,
+  usePlatformMetrics
 } from "@hooks/usePlatform";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { FirstStepsModal } from "@components/FirstStepsModal";
@@ -2514,6 +2515,9 @@ function DashboardPageContent() {
   const platformOrgs = usePlatformOrgs(Boolean(session?.isSuperAdmin)).data ?? [];
   const platformStaffQuery = usePlatformStaff(Boolean(session?.isSuperAdmin));
   const platformStaff = platformStaffQuery.data ?? [];
+  const [metricsWindow, setMetricsWindow] = useState<"7" | "30" | "90">("30");
+  const platformMetricsQuery = usePlatformMetrics(Boolean(session?.isSuperAdmin), Number(metricsWindow));
+  const platformMetrics = platformMetricsQuery.data;
   const currentOrg = useMemo(
     () => orgs.find((o) => o.id === session?.orgId),
     [orgs, session?.orgId]
@@ -3972,6 +3976,117 @@ function DashboardPageContent() {
                 unreadCount={supportUnread}
                 onTicketRead={markSupportTicketRead}
               />
+            )}
+
+            {activeTab === 'platformOps' && session?.isSuperAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-3 border-b border-gray-700 pb-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-blue-300">Platform</p>
+                    <h2 className="text-2xl font-bold text-white">Realtime platform overview</h2>
+                    <p className="text-sm text-gray-300">
+                      Live visitors, tenants, orgs, and team counts. Data refreshes automatically every 15s.
+                    </p>
+                  </div>
+                  <label className="text-xs font-semibold text-gray-300">
+                    Window
+                    <select
+                      value={metricsWindow}
+                      onChange={(e) => setMetricsWindow(e.target.value as typeof metricsWindow)}
+                      className="ml-2 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                    >
+                      <option value="7">Last 7 days</option>
+                      <option value="30">Last 30 days</option>
+                      <option value="90">Last 90 days</option>
+                    </select>
+                  </label>
+                </div>
+
+                {platformMetricsQuery.isLoading ? (
+                  <p className="text-sm text-gray-400">Loading metrics...</p>
+                ) : platformMetrics ? (
+                  <div className="space-y-6">
+                    <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-4">
+                      <StatCard
+                        label="Visitors"
+                        value={platformMetrics.visitors?.total?.toLocaleString() ?? "0"}
+                        description="Unique visits in window"
+                      />
+                      <StatCard
+                        label="Active orgs"
+                        value={platformMetrics.totals.activeOrgs?.toString() ?? "0"}
+                        description="Org status != suspended"
+                      />
+                      <StatCard
+                        label="Inactive orgs"
+                        value={platformMetrics.totals.inactiveOrgs?.toString() ?? "0"}
+                        description="Suspended/deleted"
+                      />
+                      <StatCard
+                        label="Users"
+                        value={platformMetrics.totals.users.toString()}
+                        description="All tenants"
+                      />
+                      <StatCard
+                        label="Members"
+                        value={platformMetrics.totals.members?.toString() ?? "0"}
+                        description="Org memberships"
+                      />
+                      <StatCard
+                        label="Admins"
+                        value={platformMetrics.totals.admins?.toString() ?? "0"}
+                        description="Org admins"
+                      />
+                      <StatCard
+                        label="Incidents"
+                        value={platformMetrics.totals.incidentsWindow.toString()}
+                        description={`Created last ${metricsWindow}d`}
+                      />
+                      <StatCard
+                        label="Maintenance"
+                        value={platformMetrics.totals.maintenanceWindow.toString()}
+                        description={`Created last ${metricsWindow}d`}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <ChartCard title="Incidents per day">
+                        {platformMetrics.incidentsTrend.length === 0 ? (
+                          <EmptyState message="No incidents in window." />
+                        ) : (
+                          <ResponsiveContainer width="100%" height={220}>
+                            <LineChart data={platformMetrics.incidentsTrend}>
+                              <CartesianGrid stroke="#1f2937" strokeDasharray="3 3" />
+                              <XAxis dataKey="bucket" stroke="#9ca3af" tickLine={false} />
+                              <YAxis stroke="#9ca3af" tickLine={false} />
+                              <Tooltip />
+                              <Line type="monotone" dataKey="count" stroke="#60a5fa" strokeWidth={2} dot={false} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        )}
+                      </ChartCard>
+
+                      <ChartCard title="Visitors by country">
+                        {platformMetrics.visitors?.topCountries?.length ? (
+                          <ResponsiveContainer width="100%" height={220}>
+                            <BarChart data={platformMetrics.visitors.topCountries}>
+                              <CartesianGrid stroke="#1f2937" strokeDasharray="3 3" />
+                              <XAxis dataKey="country" stroke="#9ca3af" tickLine={false} />
+                              <YAxis stroke="#9ca3af" tickLine={false} allowDecimals={false} />
+                              <Tooltip />
+                              <Bar dataKey="count" fill="#34d399" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <EmptyState message="No visitor data in window." />
+                        )}
+                      </ChartCard>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">No metrics available.</p>
+                )}
+              </div>
             )}
 
             {activeTab === 'platformSupport' && session?.isSuperAdmin && (
