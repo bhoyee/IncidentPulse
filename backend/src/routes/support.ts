@@ -8,7 +8,8 @@ import {
 import {
   notifySupportTicketCreated,
   notifySupportComment,
-  notifySupportTicketClosed
+  notifySupportTicketClosed,
+  notifySupportAssignment
 } from "../lib/support-notifier";
 import { emitSupportEvent, onSupportEvent } from "../lib/realtime";
 import { env } from "../env";
@@ -632,6 +633,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         const { assigneeId } = request.body as { assigneeId?: string | null };
         const normalizedAssigneeId =
           typeof assigneeId === "string" && assigneeId.trim().length > 0 ? assigneeId.trim() : null;
+        let assigneeEmail: string | null = null;
         if (normalizedAssigneeId) {
           const staff = await prisma.user.findFirst({
             where: {
@@ -639,11 +641,12 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
               platformRole: { not: "none" },
               isActive: true
             },
-            select: { id: true }
+            select: { id: true, email: true }
           });
           if (!staff) {
             throw superAdminScope.httpErrors.badRequest("Assignee must be an active platform staff member.");
           }
+          assigneeEmail = staff.email ?? null;
         }
         const updated = await prisma.supportTicket.update({
           where: { id: ticketId },
@@ -659,6 +662,15 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
           }
         });
         emitSupportEvent({ type: "support.ticket.updated", ticket: updated });
+        if (assigneeEmail) {
+          notifySupportAssignment(ticketId, assigneeEmail, {
+            tab: "platformSupport",
+            orgName: updated.organization?.name ?? "Workspace",
+            subject: updated.subject,
+            priority: updated.priority,
+            status: updated.status
+          }).catch((err) => request.log.warn({ err }, "Failed to send assignment notification"));
+        }
         return { error: false, data: updated };
       }
     );

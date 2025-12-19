@@ -8,6 +8,7 @@ import { getWebhookMetrics } from "../lib/webhook-metrics";
 import { getTrafficSnapshot } from "../lib/traffic-metrics";
 import { updateOrgRateLimitCache } from "../lib/org-rate-limit";
 import { Prisma } from "@prisma/client";
+import { sendMail } from "../lib/mailer";
 
 let stripe: any = null;
 async function getStripe() {
@@ -65,6 +66,49 @@ async function getOrCreateStripeCustomer(orgId: string) {
     data: { stripeCustomerId: customer.id }
   });
   return customer.id as string;
+}
+
+function buildStaffInviteEmail(options: { name: string; email: string; tempPassword: string }) {
+  const loginUrl = `${env.FRONTEND_URL.replace(/\/$/, "")}/superadmin-login`;
+  const subject = "Welcome to IncidentPulse Platform Staff";
+  const text = [
+    `Hello ${options.name || "there"},`,
+    "",
+    "You've been added as platform staff on IncidentPulse.",
+    "",
+    `Email: ${options.email}`,
+    `Temporary password: ${options.tempPassword}`,
+    "",
+    `Login: ${loginUrl}`,
+    "",
+    "Please sign in and change your password immediately.",
+    "",
+    "Thanks,",
+    "IncidentPulse Team"
+  ].join("\n");
+
+  const html = `
+  <div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b1021;padding:24px;">
+    <div style="max-width:640px;margin:0 auto;background:#0f172a;border:1px solid #1f2937;border-radius:16px;padding:24px;color:#e2e8f0;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.12em;color:#60a5fa;font-weight:700;">IncidentPulse</div>
+      <h1 style="margin:10px 0 0;font-size:22px;color:#f8fafc;">Welcome to Platform Staff</h1>
+      <p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin-top:10px;">
+        Hello ${options.name || "there"},<br/>
+        You've been added as platform staff on IncidentPulse. Use the credentials below to sign in, then update your password.
+      </p>
+      <div style="margin-top:16px;border:1px solid #1f2937;border-radius:12px;background:#111827;padding:14px;">
+        <p style="margin:0 0 6px;font-size:13px;color:#9ca3af;">Email</p>
+        <p style="margin:0 0 12px;font-size:15px;color:#f8fafc;font-weight:600;">${options.email}</p>
+        <p style="margin:0 0 6px;font-size:13px;color:#9ca3af;">Temporary password</p>
+        <p style="margin:0;font-size:15px;color:#f8fafc;font-weight:700;">${options.tempPassword}</p>
+      </div>
+      <a href="${loginUrl}" style="display:inline-block;margin-top:18px;padding:12px 16px;border-radius:10px;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;font-size:14px;">Open platform login</a>
+      <p style="margin-top:14px;color:#94a3b8;font-size:13px;">If you did not expect this, contact your administrator.</p>
+    </div>
+  </div>
+  `;
+
+  return { to: options.email, subject, text, html };
 }
 
 
@@ -514,6 +558,11 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
           isActive: true,
           createdAt: true
         }
+      });
+
+      const inviteEmail = buildStaffInviteEmail({ name, email, tempPassword });
+      sendMail(inviteEmail).catch((err: any) => {
+        request.log.warn({ err }, "Failed to send staff invite email");
       });
 
       await recordAuditLog(

@@ -251,6 +251,41 @@ export async function notifySupportComment(
   });
 }
 
+export async function notifySupportAssignment(
+  ticketId: string,
+  assigneeEmail?: string | null,
+  options?: { tab?: string; orgName?: string; subject?: string; priority?: string; status?: string }
+) {
+  if (!assigneeEmail) return;
+  const link = buildDashboardLink(ticketId, options?.tab ?? "platformSupport");
+  const orgName = options?.orgName ?? "Workspace";
+  const subject = options?.subject ?? `Ticket ${ticketId}`;
+  const priority = options?.priority;
+  const status = options?.status;
+
+  await sendMail({
+    to: assigneeEmail,
+    subject: `[Support #${ticketId}] Assigned to you: ${subject}`,
+    text: buildSupportEmailBody({
+      orgName,
+      subject,
+      priority,
+      status,
+      message: "This ticket has been assigned to you. Please review and respond.",
+      link
+    }),
+    html: buildSupportEmailHtml({
+      orgName,
+      subject,
+      priority,
+      status,
+      message: "This ticket has been assigned to you. Please review and respond.",
+      link,
+      headline: "Ticket assigned to you"
+    })
+  });
+}
+
 export async function notifySupportTicketClosed(ticketId: string) {
   const ticket = await prisma.supportTicket.findUnique({
     where: { id: ticketId },
