@@ -630,10 +630,33 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       async (request) => {
         const { ticketId } = request.params as { ticketId: string };
         const { assigneeId } = request.body as { assigneeId?: string | null };
+        const normalizedAssigneeId =
+          typeof assigneeId === "string" && assigneeId.trim().length > 0 ? assigneeId.trim() : null;
+        if (normalizedAssigneeId) {
+          const staff = await prisma.user.findFirst({
+            where: {
+              id: normalizedAssigneeId,
+              platformRole: { not: "none" },
+              isActive: true
+            },
+            select: { id: true }
+          });
+          if (!staff) {
+            throw superAdminScope.httpErrors.badRequest("Assignee must be an active platform staff member.");
+          }
+        }
         const updated = await prisma.supportTicket.update({
           where: { id: ticketId },
-          data: { assigneeId: assigneeId ?? null },
-          select: { id: true, organizationId: true, updatedAt: true }
+          data: { assigneeId: normalizedAssigneeId },
+          select: {
+            id: true,
+            subject: true,
+            priority: true,
+            status: true,
+            organizationId: true,
+            organization: { select: { name: true } },
+            updatedAt: true
+          }
         });
         emitSupportEvent({ type: "support.ticket.updated", ticket: updated });
         return { error: false, data: updated };

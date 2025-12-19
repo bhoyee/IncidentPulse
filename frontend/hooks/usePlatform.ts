@@ -30,10 +30,20 @@ export type PlatformUser = {
   email: string;
   isActive: boolean;
   isSuperAdmin?: boolean;
+  platformRole?: "none" | "support" | "sales" | "hr" | "operations";
   createdAt?: string;
   lastLogin?: string | null;
   membershipCount?: number;
   memberships?: Array<{ organizationId: string }>;
+};
+
+export type PlatformStaff = {
+  id: string;
+  name: string;
+  email: string;
+  platformRole: "support" | "sales" | "hr" | "operations";
+  isActive: boolean;
+  createdAt?: string;
 };
 
 export type PlatformInvoice = {
@@ -109,6 +119,76 @@ export function usePlatformUsers(enabled: boolean) {
       return res.data.data;
     },
     enabled
+  });
+}
+
+export function usePlatformStaff(enabled: boolean) {
+  return useQuery({
+    queryKey: ["platform", "staff"],
+    queryFn: async (): Promise<PlatformStaff[]> => {
+      const res = await apiClient.get<{ error: boolean; data: PlatformStaff[] }>("/platform/staff");
+      return res.data.data;
+    },
+    enabled
+  });
+}
+
+export function useCreatePlatformStaff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { name: string; email: string; platformRole: PlatformStaff["platformRole"] }) => {
+      const res = await apiClient.post<{ error: boolean; data: PlatformStaff; meta?: { temporaryPassword?: string } }>(
+        "/platform/staff",
+        payload
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["platform", "staff"] });
+      qc.invalidateQueries({ queryKey: ["platform", "users"] });
+    }
+  });
+}
+
+export function useUpdatePlatformStaff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      userId: string;
+      name?: string;
+      platformRole?: PlatformStaff["platformRole"];
+      isActive?: boolean;
+    }) => {
+      const res = await apiClient.patch<{ error: boolean; data: PlatformStaff }>(
+        `/platform/staff/${payload.userId}`,
+        {
+          name: payload.name,
+          platformRole: payload.platformRole,
+          isActive: payload.isActive
+        }
+      );
+      return res.data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["platform", "staff"] });
+      qc.invalidateQueries({ queryKey: ["platform", "users"] });
+    }
+  });
+}
+
+export function useDeletePlatformStaff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiClient.delete<{ error: boolean; data: PlatformStaff }>(
+        `/platform/staff/${userId}`
+      );
+      return res.data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["platform", "staff"] });
+      qc.invalidateQueries({ queryKey: ["platform", "users"] });
+    }
   });
 }
 
@@ -257,5 +337,4 @@ export function usePlatformAuditLogs(enabled: boolean, params?: { page?: number;
     enabled
   });
 }
-
 

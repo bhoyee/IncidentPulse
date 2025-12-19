@@ -24,7 +24,8 @@ import {
   CpuChipIcon,
   CreditCardIcon,
   LifebuoyIcon,
-  KeyIcon
+  KeyIcon,
+  UserGroupIcon
 } from "@heroicons/react/24/solid";
 import {
   ResponsiveContainer,
@@ -97,7 +98,14 @@ import {
   useDeleteOrganization,
   type Organization
 } from "@hooks/useOrganizations";
-import { usePlatformOrgs, usePlatformUsers } from "@hooks/usePlatform";
+import {
+  usePlatformOrgs,
+  usePlatformStaff,
+  useCreatePlatformStaff,
+  useUpdatePlatformStaff,
+  useDeletePlatformStaff,
+  type PlatformStaff
+} from "@hooks/usePlatform";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { FirstStepsModal } from "@components/FirstStepsModal";
 import { useIncidentStream } from "@hooks/useIncidentStream";
@@ -204,6 +212,12 @@ function formatAuditAction(action: string): string {
     maintenance_canceled: "Maintenance canceled"
   };
   return map[action] ?? action;
+}
+
+function formatPlatformRole(role: string): string {
+  if (!role) return "Staff";
+  if (role.toLowerCase() === "hr") return "HR";
+  return `${role.charAt(0).toUpperCase()}${role.slice(1)}`;
 }
 
 const NewIncidentForm = ({
@@ -861,6 +875,7 @@ function SupportPanel({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const { data: supportResponse, isLoading } = useOrgSupportTickets({
     status: statusFilter || undefined,
     q: search || undefined,
@@ -870,6 +885,7 @@ function SupportPanel({
   });
   const tickets = supportResponse?.data ?? [];
   const totalTickets = supportResponse?.meta?.total ?? tickets.length;
+  const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) ?? null;
   const createTicket = useCreateSupportTicket();
   const addComment = useAddSupportComment("org");
   const uploadAttachments = useUploadSupportAttachments("org");
@@ -1202,57 +1218,101 @@ function SupportPanel({
           <EmptyState message="No support tickets yet. Create one above." />
         ) : (
           <div className="space-y-4">
-            {tickets.map((ticket) => {
-              const isNew = new Date(ticket.updatedAt).getTime() > lastSeen;
-              return (
-              <div
-                key={ticket.id}
-                onClick={() => onTicketRead(ticket.updatedAt)}
-                className="rounded-xl border border-gray-700 bg-gray-900/60 p-4 space-y-3"
-              >
+            <div className="overflow-x-auto rounded-xl border border-gray-800 bg-gray-900 shadow-lg">
+              <table className="min-w-full divide-y divide-gray-800 text-sm">
+                <thead className="bg-gray-800/60 text-xs uppercase text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Subject</th>
+                    <th className="px-4 py-3 text-left">Priority</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Opened</th>
+                    <th className="px-4 py-3 text-left">Assignee</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800 text-gray-100">
+                  {tickets.map((ticket) => {
+                    const isNew = new Date(ticket.updatedAt).getTime() > lastSeen;
+                    return (
+                      <tr
+                        key={ticket.id}
+                        className={`hover:bg-gray-800/60 cursor-pointer ${selectedTicketId === ticket.id ? "bg-gray-800/80" : ""}`}
+                        onClick={() => {
+                          setSelectedTicketId((prev) => (prev === ticket.id ? null : ticket.id));
+                          onTicketRead(ticket.updatedAt);
+                        }}
+                      >
+                        <td className="px-4 py-3 font-semibold text-white">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>{ticket.subject}</span>
+                            {ticket.status === "closed" ? (
+                              <span className="rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-semibold uppercase text-white">
+                                Closed
+                              </span>
+                            ) : null}
+                            {isNew ? (
+                              <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-semibold uppercase text-white">
+                                New
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 capitalize text-gray-200">{ticket.priority}</td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClasses(ticket.status)}`}>
+                            {ticket.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-300">
+                          {format(new Date(ticket.createdAt), "PP p")}
+                        </td>
+                        <td className="px-4 py-3 text-gray-300">
+                          {ticket.assignee?.name || "Unassigned"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {selectedTicket ? (
+              <div className="rounded-xl border border-gray-700 bg-gray-900/60 p-4 space-y-3">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClasses(ticket.status)}`}>
-                        {ticket.status.toUpperCase()}
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClasses(selectedTicket.status)}`}>
+                        {selectedTicket.status.toUpperCase()}
                       </span>
-                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${priorityClasses(ticket.priority)}`}>
-                        {ticket.priority.toUpperCase()}
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${priorityClasses(selectedTicket.priority)}`}>
+                        {selectedTicket.priority.toUpperCase()}
                       </span>
-                      {ticket.category ? (
+                      {selectedTicket.category ? (
                         <span className="rounded-full border border-gray-600 px-2 py-1 text-xs text-gray-200">
-                          {ticket.category}
+                          {selectedTicket.category}
                         </span>
                       ) : null}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-lg font-semibold text-white">{ticket.subject}</h4>
-                      {isNew ? (
-                        <span className="rounded-full bg-blue-600 px-2 py-1 text-[11px] font-semibold uppercase text-white">
-                          New
-                        </span>
-                      ) : null}
-                    </div>
+                    <h4 className="text-lg font-semibold text-white">{selectedTicket.subject}</h4>
                     <p className="text-xs text-gray-400">
-                      Opened {format(new Date(ticket.createdAt), "PP p")} by{" "}
-                      {ticket.createdBy?.name || "Unknown"}
+                      Opened {format(new Date(selectedTicket.createdAt), "PP p")} by{" "}
+                      {selectedTicket.createdBy?.name || "Unknown"}
                     </p>
                   </div>
                   <div className="text-sm text-gray-300">
                     Assignee:{" "}
                     <span className="font-semibold">
-                      {ticket.assignee?.name || "Unassigned"}
+                      {selectedTicket.assignee?.name || "Unassigned"}
                     </span>
                   </div>
                 </div>
 
-                <p className="whitespace-pre-wrap text-sm text-gray-200">{ticket.body}</p>
+                <p className="whitespace-pre-wrap text-sm text-gray-200">{selectedTicket.body}</p>
 
-                {ticket.attachments && ticket.attachments.length > 0 ? (
+                {selectedTicket.attachments && selectedTicket.attachments.length > 0 ? (
                   <div className="space-y-2 rounded-lg border border-gray-700 bg-gray-900/60 p-3">
                     <p className="text-xs font-semibold uppercase text-gray-300">Attachments</p>
                     <div className="grid gap-2 md:grid-cols-2">
-                      {ticket.attachments.map((att) => {
+                      {selectedTicket.attachments.map((att) => {
                         const href = att.path?.startsWith("http")
                           ? att.path
                           : `/uploads/${att.path}`;
@@ -1285,8 +1345,8 @@ function SupportPanel({
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase text-gray-300">Comments</p>
                   <div className="space-y-2 rounded-lg border border-gray-800 bg-gray-950/80 p-3">
-                    {ticket.comments && ticket.comments.length > 0 ? (
-                      ticket.comments.map((comment) => (
+                    {selectedTicket.comments && selectedTicket.comments.length > 0 ? (
+                      selectedTicket.comments.map((comment) => (
                         <div key={comment.id} className="rounded border border-gray-800 bg-gray-900/80 p-2">
                           <div className="flex items-center justify-between text-xs text-gray-400">
                             <span>{comment.author?.name || "Unknown"}</span>
@@ -1298,13 +1358,13 @@ function SupportPanel({
                     ) : (
                       <p className="text-xs text-gray-500">No comments yet.</p>
                     )}
-                    {ticket.status === "closed" ? (
+                    {selectedTicket.status === "closed" ? (
                       <div className="rounded-lg border border-amber-700/40 bg-amber-900/30 p-3 text-xs text-amber-100">
                         <p className="font-semibold">Ticket closed.</p>
                         <p className="mt-1">Reactivate to send a new reply.</p>
                         <button
                           type="button"
-                          onClick={() => handleReactivate(ticket.id)}
+                          onClick={() => handleReactivate(selectedTicket.id)}
                           disabled={reactivateTicket.isPending}
                           className="mt-3 inline-flex items-center justify-center rounded-lg border border-amber-400/60 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:border-amber-200 disabled:opacity-60"
                         >
@@ -1314,9 +1374,9 @@ function SupportPanel({
                     ) : (
                       <div className="space-y-2">
                         <textarea
-                          value={commentInputs[ticket.id] || ""}
+                          value={commentInputs[selectedTicket.id] || ""}
                           onChange={(e) =>
-                            setCommentInputs((prev) => ({ ...prev, [ticket.id]: e.target.value }))
+                            setCommentInputs((prev) => ({ ...prev, [selectedTicket.id]: e.target.value }))
                           }
                           rows={2}
                           className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -1329,20 +1389,20 @@ function SupportPanel({
                               type="file"
                               multiple
                               onChange={(e) => {
-                                handleAttachments(ticket.id, e.target.files);
+                                handleAttachments(selectedTicket.id, e.target.files);
                                 e.target.value = "";
                               }}
                               className="mt-1 block w-full text-xs text-gray-200"
-                              disabled={uploadingFor === ticket.id}
+                              disabled={uploadingFor === selectedTicket.id}
                             />
                           </label>
                           <button
                             type="button"
-                            onClick={() => handleComment(ticket.id)}
-                            disabled={commentSubmitting === ticket.id}
+                            onClick={() => handleComment(selectedTicket.id)}
+                            disabled={commentSubmitting === selectedTicket.id}
                             className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
                           >
-                            {commentSubmitting === ticket.id ? "Sending…" : "Post reply"}
+                            {commentSubmitting === selectedTicket.id ? "Sending…" : "Post reply"}
                           </button>
                         </div>
                       </div>
@@ -1350,8 +1410,12 @@ function SupportPanel({
                   </div>
                 </div>
               </div>
-            );
-            })}
+            ) : (
+              <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 text-sm text-gray-400">
+                Select a ticket to view details and the conversation thread.
+              </div>
+            )}
+
             {totalTickets > pageSize ? (
               <Pagination
                 page={page}
@@ -1369,12 +1433,12 @@ function SupportPanel({
 
 function PlatformSupportPanel({
   orgs,
-  users,
+  staff,
   lastSeen,
   onTicketRead
 }: {
   orgs: Array<{ id: string; name: string; slug?: string }>;
-  users: Array<{ id: string; name: string; email: string }>;
+  staff: PlatformStaff[];
   lastSeen: number;
   onTicketRead: (updatedAt: string | Date) => void;
 }) {
@@ -1398,7 +1462,7 @@ function PlatformSupportPanel({
 
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) ?? null;
 
-  const handleAssign = async (ticketId: string, assigneeId: string) => {
+  const handleAssign = async (ticketId: string, assigneeId: string | null) => {
     await assignTicket.mutateAsync({ ticketId, assigneeId });
   };
 
@@ -1513,7 +1577,7 @@ function PlatformSupportPanel({
                       selectedTicketId === ticket.id ? "bg-gray-800/80" : ""
                     }`}
                   onClick={() => {
-                    setSelectedTicketId(ticket.id);
+                    setSelectedTicketId((prev) => (prev === ticket.id ? null : ticket.id));
                     onTicketRead(ticket.updatedAt);
                   }}
                   >
@@ -1548,15 +1612,20 @@ function PlatformSupportPanel({
                     <td className="px-4 py-3">
                       <select
                         value={ticket.assignee?.id ?? ""}
-                        onChange={(e) => handleAssign(ticket.id, e.target.value)}
+                        onChange={(e) => handleAssign(ticket.id, e.target.value || null)}
                         className="w-full rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
                       >
                         <option value="">Unassigned</option>
-                        {users.map((user) => (
-                          <option key={user.id} value={user.id}>
-                            {user.name}
-                          </option>
-                        ))}
+                        {staff
+                          .filter((user) => user.isActive)
+                          .map((user) => {
+                            const label = user.name ? `${user.name} - ${user.email}` : user.email;
+                            return (
+                              <option key={user.id} value={user.id}>
+                                {label} ({formatPlatformRole(user.platformRole)})
+                              </option>
+                            );
+                          })}
                       </select>
                     </td>
                     <td className="px-4 py-3 text-gray-300">
@@ -1777,6 +1846,243 @@ function PlatformSupportPanel({
   );
 }
 
+function PlatformStaffPanel({
+  staff,
+  isLoading
+}: {
+  staff: PlatformStaff[];
+  isLoading: boolean;
+}) {
+  const createStaff = useCreatePlatformStaff();
+  const updateStaff = useUpdatePlatformStaff();
+  const deleteStaff = useDeletePlatformStaff();
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    platformRole: "support" as PlatformStaff["platformRole"]
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [invite, setInvite] = useState<{ email: string; password: string } | null>(null);
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
+  const roleOptions: Array<PlatformStaff["platformRole"]> = ["support", "sales", "hr", "operations"];
+
+  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setInvite(null);
+    const name = form.name.trim();
+    const email = form.email.trim().toLowerCase();
+    if (!name || !email) {
+      setError("Name and email are required.");
+      return;
+    }
+    try {
+      const response = await createStaff.mutateAsync({
+        name,
+        email,
+        platformRole: form.platformRole
+      });
+      const tempPassword = response.meta?.temporaryPassword ?? "";
+      if (tempPassword) {
+        setInvite({ email, password: tempPassword });
+      }
+      setForm((prev) => ({ ...prev, name: "", email: "" }));
+    } catch (err) {
+      let message = "Failed to create platform staff user.";
+      if (isAxiosError(err)) {
+        message = err.response?.data?.message ?? err.message;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      setError(message);
+    }
+  };
+
+  const handleUpdate = async (
+    userId: string,
+    payload: { name?: string; platformRole?: PlatformStaff["platformRole"]; isActive?: boolean }
+  ) => {
+    setPendingUserId(userId);
+    try {
+      await updateStaff.mutateAsync({ userId, ...payload });
+    } finally {
+      setPendingUserId(null);
+    }
+  };
+
+  const handleDelete = async (userId: string) => {
+    const confirmed = window.confirm("Remove this platform staff member?");
+    if (!confirmed) return;
+    setDeletingUserId(userId);
+    try {
+      await deleteStaff.mutateAsync(userId);
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <form onSubmit={handleCreate} className="rounded-xl border border-gray-800 bg-gray-900 p-4">
+        <div className="flex flex-col gap-2 border-b border-gray-800 pb-3">
+          <p className="text-xs uppercase tracking-wide text-blue-300">Platform Staff</p>
+          <h3 className="text-lg font-semibold text-white">Add a platform team member</h3>
+          <p className="text-sm text-gray-300">
+            Platform staff can be assigned to support tickets. They do not appear in tenant rosters.
+          </p>
+        </div>
+        {error ? (
+          <div className="mt-3 rounded-lg border border-red-500/50 bg-red-900/40 px-3 py-2 text-sm text-red-100">
+            {error}
+          </div>
+        ) : null}
+        {invite ? (
+          <div className="mt-3 rounded-lg border border-emerald-500/40 bg-emerald-900/20 px-3 py-2 text-sm text-emerald-100">
+            Temporary password for <span className="font-semibold">{invite.email}</span>:{" "}
+            <span className="font-mono">{invite.password}</span>
+          </div>
+        ) : null}
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <input
+            value={form.name}
+            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+            placeholder="Full name"
+            className="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+          />
+          <input
+            value={form.email}
+            onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+            placeholder="name@company.com"
+            className="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+          />
+          <select
+            value={form.platformRole}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, platformRole: e.target.value as PlatformStaff["platformRole"] }))
+            }
+            className="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+          >
+            {roleOptions.map((role) => (
+              <option key={role} value={role}>
+                {formatPlatformRole(role)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="mt-4">
+          <button
+            type="submit"
+            disabled={createStaff.isPending}
+            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+          >
+            {createStaff.isPending ? "Creating..." : "Create staff user"}
+          </button>
+        </div>
+      </form>
+
+      <div className="overflow-x-auto rounded-xl border border-gray-800 bg-gray-900 shadow-lg">
+        <table className="min-w-full divide-y divide-gray-800 text-sm">
+          <thead className="bg-gray-800/60 text-xs uppercase text-gray-400">
+            <tr>
+              <th className="px-4 py-3 text-left">Name</th>
+              <th className="px-4 py-3 text-left">Email</th>
+              <th className="px-4 py-3 text-left">Role</th>
+              <th className="px-4 py-3 text-left">Status</th>
+              <th className="px-4 py-3 text-left">Created</th>
+              <th className="px-4 py-3 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-800 text-gray-100">
+            {isLoading ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                  Loading staff...
+                </td>
+              </tr>
+            ) : staff.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                  No platform staff yet.
+                </td>
+              </tr>
+            ) : (
+              staff.map((member) => (
+                <tr key={member.id}>
+                  <td className="px-4 py-3">
+                    <input
+                      defaultValue={member.name}
+                      onBlur={(e) => {
+                        const next = e.target.value.trim();
+                        if (next && next !== member.name) {
+                          handleUpdate(member.id, { name: next });
+                        }
+                      }}
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 px-2 py-1 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-gray-300">{member.email}</td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={member.platformRole}
+                      onChange={(e) =>
+                        handleUpdate(member.id, { platformRole: e.target.value as PlatformStaff["platformRole"] })
+                      }
+                      className="rounded-md border border-gray-700 bg-gray-950 px-2 py-1 text-xs text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                      disabled={pendingUserId === member.id}
+                    >
+                      {roleOptions.map((role) => (
+                        <option key={role} value={role}>
+                          {formatPlatformRole(role)}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        member.isActive
+                          ? "bg-emerald-600/20 text-emerald-200"
+                          : "bg-amber-600/20 text-amber-200"
+                      }`}
+                    >
+                      {member.isActive ? "Active" : "Suspended"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-400">
+                    {member.createdAt ? format(new Date(member.createdAt), "PP") : "-"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdate(member.id, { isActive: !member.isActive })}
+                        disabled={pendingUserId === member.id}
+                        className="rounded-md border border-gray-700 px-3 py-1 text-xs font-semibold text-gray-200 hover:border-blue-400 disabled:opacity-60"
+                      >
+                        {member.isActive ? "Suspend" : "Activate"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(member.id)}
+                        disabled={deletingUserId === member.id}
+                        className="rounded-md border border-red-500/60 px-3 py-1 text-xs font-semibold text-red-200 hover:bg-red-900/30 disabled:opacity-60"
+                      >
+                        {deletingUserId === member.id ? "Removing..." : "Remove"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1826,6 +2132,7 @@ function DashboardPageContent() {
     | "platformOps"
     | "platformSupport"
     | "platformBilling"
+    | "platformStaff"
   >("incidents");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isNewIncidentOpen, setIsNewIncidentOpen] = useState(false);
@@ -2205,7 +2512,8 @@ function DashboardPageContent() {
   const isTeamRefetching = teamUsersQuery.isFetching && !teamUsersQuery.isLoading;
   const { data: orgs = [] } = useOrganizations();
   const platformOrgs = usePlatformOrgs(Boolean(session?.isSuperAdmin)).data ?? [];
-  const platformUsers = usePlatformUsers(Boolean(session?.isSuperAdmin)).data ?? [];
+  const platformStaffQuery = usePlatformStaff(Boolean(session?.isSuperAdmin));
+  const platformStaff = platformStaffQuery.data ?? [];
   const currentOrg = useMemo(
     () => orgs.find((o) => o.id === session?.orgId),
     [orgs, session?.orgId]
@@ -2325,7 +2633,8 @@ function DashboardPageContent() {
             icon: "SADM",
             badge: platformUnread
           },
-          { id: "platformBilling", name: "Platform Billing", description: "Tenant billing", icon: "BILL" }
+          { id: "platformBilling", name: "Platform Billing", description: "Tenant billing", icon: "BILL" },
+          { id: "platformStaff", name: "Platform Staff", description: "Platform team", icon: "STAFF" }
         ]
       : [])
   ].map((item) => ({
@@ -2366,6 +2675,8 @@ function DashboardPageContent() {
         return <LifebuoyIcon className={`${base} ${cls}`} />;
       case "platformBilling":
         return <CreditCardIcon className={`${base} ${cls}`} />;
+      case "platformStaff":
+        return <UserGroupIcon className={`${base} ${cls}`} />;
       default:
         return <HomeIcon className={`${base} ${cls}`} />;
     }
@@ -3686,10 +3997,23 @@ function DashboardPageContent() {
                 </div>
                 <PlatformSupportPanel
                   orgs={platformOrgs}
-                  users={platformUsers}
+                  staff={platformStaff}
                   lastSeen={platformSupportLastSeen}
                   onTicketRead={markPlatformSupportTicketRead}
                 />
+              </div>
+            )}
+
+            {activeTab === 'platformStaff' && session?.isSuperAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-2 border-b border-gray-700 pb-4">
+                  <p className="text-xs uppercase tracking-wide text-blue-300">Platform Staff</p>
+                  <h2 className="text-2xl font-bold text-white">Platform team directory</h2>
+                  <p className="text-sm text-gray-300">
+                    Create and manage staff accounts used for platform support assignment.
+                  </p>
+                </div>
+                <PlatformStaffPanel staff={platformStaff} isLoading={platformStaffQuery.isLoading} />
               </div>
             )}
 

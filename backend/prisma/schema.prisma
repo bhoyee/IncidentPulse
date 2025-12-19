@@ -85,12 +85,21 @@ enum BillingStatus {
   suspended
 }
 
+enum PlatformRole {
+  none
+  support
+  sales
+  hr
+  operations
+}
+
 model User {
   id           String    @id @default(uuid())
   name         String
   email        String    @unique
   role         Role      @default(viewer)
   isSuperAdmin Boolean   @default(false)
+  platformRole PlatformRole @default(none)
   passwordHash String
   teamRoles    String[]  @default([])
   isActive     Boolean   @default(true)

@@ -67,6 +67,7 @@ async function getOrCreateStripeCustomer(orgId: string) {
   return customer.id as string;
 }
 
+
 const platformRoutes: FastifyPluginAsync = async (fastify) => {
   // All routes require super-admin
   fastify.addHook("preHandler", fastify.authenticate);
@@ -435,6 +436,7 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
           email: true,
           isActive: true,
           isSuperAdmin: true,
+          platformRole: true,
           createdAt: true,
           memberships: {
             select: { organizationId: true }
@@ -458,6 +460,176 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
       lastLogin: lastLoginMap.get(u.id) ?? null
     }));
     return { error: false, data };
+  });
+
+  const platformRoleOptions = new Set(["support", "sales", "hr", "operations"]);
+
+  fastify.get("/staff", async () => {
+    const staff = await prisma.user.findMany({
+      where: { platformRole: { not: "none" } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        platformRole: true,
+        isActive: true,
+        createdAt: true
+      }
+    });
+    return { error: false, data: staff };
+  });
+
+  fastify.post("/staff", async (request, reply) => {
+    const body = request.body as { name?: string; email?: string; platformRole?: string };
+    const name = body.name?.trim();
+    const email = body.email?.trim().toLowerCase();
+    const platformRole = body.platformRole?.trim().toLowerCase();
+
+    if (!name || !email || !platformRole || !platformRoleOptions.has(platformRole)) {
+      return reply.status(400).send({
+        error: true,
+        message: "Provide name, email, and a valid platform role."
+      });
+    }
+
+    const tempPassword = `Temp-${Math.random().toString(36).slice(2, 10)}!`;
+    const passwordHash = await hashPassword(tempPassword);
+
+    try {
+      const user = await prisma.user.create({
+        data: {
+          name,
+          email,
+          passwordHash,
+          isActive: true,
+          isSuperAdmin: true,
+          platformRole: platformRole as any
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          platformRole: true,
+          isActive: true,
+          createdAt: true
+        }
+      });
+
+      await recordAuditLog(
+        {
+          action: "platform_staff_created" as any,
+          actorId: request.user.id,
+          actorEmail: request.user.email,
+          actorName: request.user.name,
+          targetType: "user",
+          targetId: user.id,
+          metadata: { platformRole: user.platformRole }
+        },
+        prisma
+      );
+
+      return reply.status(201).send({
+        error: false,
+        data: user,
+        meta: { temporaryPassword: tempPassword }
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        return reply.status(409).send({
+          error: true,
+          message: "A user with this email already exists"
+        });
+      }
+      throw error;
+    }
+  });
+
+  fastify.patch("/staff/:userId", async (request, reply) => {
+    const { userId } = request.params as { userId: string };
+    const body = request.body as {
+      name?: string;
+      platformRole?: string;
+      isActive?: boolean;
+    };
+
+    const updateData: any = {};
+    if (body.name?.trim()) updateData.name = body.name.trim();
+    if (typeof body.isActive === "boolean") updateData.isActive = body.isActive;
+    if (body.platformRole) {
+      const roleValue = body.platformRole.trim().toLowerCase();
+      if (!platformRoleOptions.has(roleValue)) {
+        return reply.status(400).send({
+          error: true,
+          message: "Invalid platform role."
+        });
+      }
+      updateData.platformRole = roleValue;
+      updateData.isSuperAdmin = true;
+    }
+
+    if (!Object.keys(updateData).length) {
+      return reply.status(400).send({ error: true, message: "No changes provided." });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        platformRole: true,
+        isActive: true,
+        createdAt: true
+      }
+    });
+
+    await recordAuditLog(
+      {
+        action: "platform_staff_updated" as any,
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        targetType: "user",
+        targetId: userId,
+        metadata: updateData
+      },
+      prisma
+    );
+
+    return { error: false, data: updated };
+  });
+
+  fastify.delete("/staff/:userId", async (request) => {
+    const { userId } = request.params as { userId: string };
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { isActive: false, platformRole: "none" as any },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        platformRole: true,
+        isActive: true,
+        createdAt: true
+      }
+    });
+
+    await recordAuditLog(
+      {
+        action: "platform_staff_deleted" as any,
+        actorId: request.user.id,
+        actorEmail: request.user.email,
+        actorName: request.user.name,
+        targetType: "user",
+        targetId: userId,
+        metadata: { platformRole: updated.platformRole }
+      },
+      prisma
+    );
+
+    return { error: false, data: updated };
   });
 
   fastify.patch<{ Params: { userId: string }; Body: { isActive: boolean } }>(
