@@ -55,20 +55,28 @@ export default async function StatusEmbedPage({ params }: { params: { slug: stri
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-4 py-8"
-      style={{ background: bg, color: fg, fontFamily: "Inter, system-ui, -apple-system, sans-serif" }}
+      className="min-h-screen px-0 py-0"
+      style={{
+        background: bg,
+        color: fg,
+        fontFamily: "Inter, system-ui, -apple-system, sans-serif"
+      }}
     >
-      <div className="w-full max-w-3xl rounded-2xl border border-slate-800/80 bg-slate-900/80 shadow-xl p-6">
-        <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
-          {branding.logoUrl ? <img src={branding.logoUrl} alt="Status logo" className="h-10 w-auto" /> : null}
-          <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Status</p>
-            <h1 className="text-xl font-bold" style={{ color: fg }}>
-              {status.overall_state?.replace("_", " ").toUpperCase()}
-            </h1>
+      <div className="w-full px-4 py-8">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            {branding.logoUrl ? <img src={branding.logoUrl} alt="Status logo" className="h-10 w-auto" /> : null}
+            <div>
+              <p className="text-xs uppercase tracking-wide" style={{ color: fg, opacity: 0.7 }}>
+                Status
+              </p>
+              <h1 className="text-2xl font-bold" style={{ color: fg }}>
+                {status.overall_state?.replace("_", " ").toUpperCase()}
+              </h1>
+            </div>
           </div>
           <span
-            className="ml-auto inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold"
+            className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold md:ml-auto"
             style={{ background: `${accent}22`, color: accent }}
           >
             <span className="h-2 w-2 rounded-full" style={{ background: accent }} />
@@ -76,20 +84,26 @@ export default async function StatusEmbedPage({ params }: { params: { slug: stri
           </span>
         </div>
 
-        <div className="grid gap-4 pt-4 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2">
           <div className="space-y-3">
             <h2 className="text-sm font-semibold" style={{ color: fg }}>
               Active incidents
             </h2>
             {status.active_incidents.length === 0 ? (
-              <p className="text-sm text-slate-400">No active incidents.</p>
+              <p className="text-sm" style={{ color: fg, opacity: 0.7 }}>
+                No active incidents.
+              </p>
             ) : (
               status.active_incidents.map((inc) => (
-                <div key={inc.id} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                <div
+                  key={inc.id}
+                  className="rounded-lg border px-3 py-3"
+                  style={{ borderColor: `${fg}22`, background: `${fg}05` }}
+                >
                   <p className="text-sm font-semibold" style={{ color: fg }}>
                     {inc.title}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs" style={{ color: fg, opacity: 0.7 }}>
                     {inc.severity} · {inc.status} · {new Date(inc.startedAt).toLocaleString()}
                   </p>
                 </div>
@@ -105,8 +119,8 @@ export default async function StatusEmbedPage({ params }: { params: { slug: stri
               {status.services.map((svc) => (
                 <div
                   key={svc.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-3 py-2"
-                  style={{ color: fg }}
+                  className="flex items-center justify-between rounded-lg border px-3 py-2"
+                  style={{ borderColor: `${fg}22`, background: `${fg}05`, color: fg }}
                 >
                   <span className="text-sm font-medium">{svc.name}</span>
                   <span
