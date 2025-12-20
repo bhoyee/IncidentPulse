@@ -15,6 +15,11 @@ export type IntegrationSettings = {
   autoIncidentCooldownSeconds?: number | null;
   autoIncidentAiEnabled?: boolean;
   autoIncidentSummaryLines?: number | null;
+   statusEmbedEnabled?: boolean;
+   statusLogoUrl?: string;
+   statusPrimaryColor?: string;
+   statusTextColor?: string;
+   statusBackgroundColor?: string;
 };
 
 type SettingsResponse = {
@@ -32,6 +37,11 @@ type UpdatePayload = {
   autoIncidentErrorThreshold?: number | null;
   autoIncidentWindowSeconds?: number | null;
   autoIncidentCooldownSeconds?: number | null;
+  statusEmbedEnabled?: boolean;
+  statusLogoUrl?: string;
+  statusPrimaryColor?: string;
+  statusTextColor?: string;
+  statusBackgroundColor?: string;
 };
 
 export function useIntegrationSettings(enabled: boolean) {

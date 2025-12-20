@@ -22,7 +22,12 @@ const defaultState: IntegrationSettings = {
   autoIncidentWindowSeconds: null,
   autoIncidentCooldownSeconds: null,
   autoIncidentAiEnabled: false,
-  autoIncidentSummaryLines: null
+  autoIncidentSummaryLines: null,
+  statusEmbedEnabled: false,
+  statusLogoUrl: "",
+  statusPrimaryColor: "",
+  statusTextColor: "",
+  statusBackgroundColor: ""
 };
 
 const githubWorkflowSample = `jobs:
@@ -385,6 +390,84 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
             <code className="font-mono text-xs text-amber-900 ml-1">/logs/ingest</code> with <code className="font-mono text-xs text-amber-900">service</code>, <code className="font-mono text-xs text-amber-900">level</code>, and <code className="font-mono text-xs text-amber-900">message</code>.
             If an AI provider key is not configured on the backend, summaries are simply skipped; keys are never shown in the UI.
           </p>
+        </fieldset>
+
+        <fieldset className="space-y-4 rounded-lg border border-gray-200 p-4">
+          <legend className="text-sm font-semibold text-gray-800">Status embed</legend>
+          <label className="flex items-center gap-3 text-sm font-medium text-gray-800">
+            <input
+              type="checkbox"
+              name="statusEmbedEnabled"
+              checked={Boolean(form.statusEmbedEnabled)}
+              onChange={(e) => setForm((prev) => ({ ...prev, statusEmbedEnabled: e.target.checked }))}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              disabled={disabled}
+            />
+            Enable embeddable status widget
+          </label>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="text-sm text-gray-800">
+              Logo URL
+              <input
+                type="url"
+                name="statusLogoUrl"
+                value={form.statusLogoUrl ?? ""}
+                onChange={handleChange}
+                placeholder="https://example.com/logo.png"
+                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                disabled={disabled}
+              />
+              <span className="mt-1 block text-xs text-gray-600">Shown at the top of the widget.</span>
+            </label>
+            <label className="text-sm text-gray-800">
+              Primary color (hex/css)
+              <input
+                type="text"
+                name="statusPrimaryColor"
+                value={form.statusPrimaryColor ?? ""}
+                onChange={handleChange}
+                placeholder="#22c55e"
+                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                disabled={disabled}
+              />
+              <span className="mt-1 block text-xs text-gray-600">Used for accents and badges.</span>
+            </label>
+            <label className="text-sm text-gray-800">
+              Text color
+              <input
+                type="text"
+                name="statusTextColor"
+                value={form.statusTextColor ?? ""}
+                onChange={handleChange}
+                placeholder="#e2e8f0"
+                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                disabled={disabled}
+              />
+            </label>
+            <label className="text-sm text-gray-800">
+              Background color
+              <input
+                type="text"
+                name="statusBackgroundColor"
+                value={form.statusBackgroundColor ?? ""}
+                onChange={handleChange}
+                placeholder="#0f172a"
+                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                disabled={disabled}
+              />
+            </label>
+          </div>
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 space-y-2">
+            <p className="font-semibold text-gray-800">Embed snippet</p>
+            <p>Replace <code className="font-mono text-[11px] text-gray-800">{`YOUR_ORG_SLUG`}</code> with your org slug.</p>
+            <pre className="overflow-x-auto rounded bg-black/80 p-3 text-[11px] leading-snug text-gray-100">
+{`<iframe
+  src="${process.env.NEXT_PUBLIC_SITE_URL || "https://your-frontend"}/status/embed/YOUR_ORG_SLUG"
+  style="border:0;width:100%;min-height:420px;border-radius:12px;"
+  loading="lazy"
+></iframe>`}
+            </pre>
+          </div>
         </fieldset>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
