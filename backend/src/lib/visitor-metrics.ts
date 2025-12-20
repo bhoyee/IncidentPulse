@@ -18,7 +18,8 @@ async function lookupCountry(ip?: string | null): Promise<string | null> {
 
 export async function recordPublicVisit(path: string, ip?: string, userAgent?: string) {
   try {
-    const country = await lookupCountry(ip);
+    const countryLookup = await lookupCountry(ip);
+    const country = countryLookup ?? "Unknown";
     await (prisma as any).publicVisit.create({
       data: {
         path,

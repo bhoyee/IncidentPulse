@@ -41,6 +41,7 @@ export function buildApp() {
   ensureUploadsRootSync();
 
   const fastify = Fastify({
+    trustProxy: true,
     logger: {
       transport:
         process.env.NODE_ENV !== "production"
@@ -238,7 +239,14 @@ export function buildApp() {
       const skip = route.startsWith("/api") || route.startsWith("/metrics") || route.startsWith("/auth");
       if (!skip) {
         const ua = request.headers["user-agent"];
-        recordPublicVisit(route, request.ip, typeof ua === "string" ? ua : undefined);
+        const forwarded = request.headers["x-forwarded-for"];
+        const clientIp =
+          typeof forwarded === "string" && forwarded.length > 0
+            ? forwarded.split(",")[0].trim()
+            : Array.isArray(forwarded) && forwarded.length > 0
+            ? forwarded[0]
+            : request.ip;
+        recordPublicVisit(route, clientIp, typeof ua === "string" ? ua : undefined);
       }
     }
   });
