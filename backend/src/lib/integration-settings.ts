@@ -52,6 +52,11 @@ type IntegrationSettingsInput = {
   autoIncidentCooldownSeconds?: number | null;
   autoIncidentAiEnabled?: boolean;
   autoIncidentSummaryLines?: number | null;
+  statusEmbedEnabled?: boolean;
+  statusLogoUrl?: string | null;
+  statusPrimaryColor?: string | null;
+  statusTextColor?: string | null;
+  statusBackgroundColor?: string | null;
 };
 
 export async function saveIntegrationSettings(

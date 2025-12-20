@@ -43,7 +43,12 @@ const updateSchema = z.object({
   autoIncidentWindowSeconds: z.coerce.number().int().positive().optional(),
   autoIncidentCooldownSeconds: z.coerce.number().int().positive().optional(),
   autoIncidentAiEnabled: z.boolean().optional(),
-  autoIncidentSummaryLines: z.coerce.number().int().positive().optional()
+  autoIncidentSummaryLines: z.coerce.number().int().positive().optional(),
+  statusEmbedEnabled: z.boolean().optional(),
+  statusLogoUrl: z.string().url("Logo must be a valid URL").max(500).optional().or(z.literal("")),
+  statusPrimaryColor: z.string().max(50).optional().or(z.literal("")),
+  statusTextColor: z.string().max(50).optional().or(z.literal("")),
+  statusBackgroundColor: z.string().max(50).optional().or(z.literal(""))
 });
 
 const sanitizeInput = (value: string | undefined | ""): string | null | undefined => {
@@ -76,7 +81,12 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
           autoIncidentWindowSeconds: settings?.autoIncidentWindowSeconds ?? null,
           autoIncidentCooldownSeconds: settings?.autoIncidentCooldownSeconds ?? null,
           autoIncidentAiEnabled: settings?.autoIncidentAiEnabled ?? false,
-          autoIncidentSummaryLines: settings?.autoIncidentSummaryLines ?? null
+          autoIncidentSummaryLines: settings?.autoIncidentSummaryLines ?? null,
+          statusEmbedEnabled: settings?.statusEmbedEnabled ?? false,
+          statusLogoUrl: settings?.statusLogoUrl ?? "",
+          statusPrimaryColor: settings?.statusPrimaryColor ?? "",
+          statusTextColor: settings?.statusTextColor ?? "",
+          statusBackgroundColor: settings?.statusBackgroundColor ?? ""
         }
       });
     }
@@ -109,7 +119,12 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
           autoIncidentWindowSeconds: payload.autoIncidentWindowSeconds ?? undefined,
           autoIncidentCooldownSeconds: payload.autoIncidentCooldownSeconds ?? undefined,
           autoIncidentAiEnabled: payload.autoIncidentAiEnabled ?? undefined,
-          autoIncidentSummaryLines: payload.autoIncidentSummaryLines ?? undefined
+          autoIncidentSummaryLines: payload.autoIncidentSummaryLines ?? undefined,
+          statusEmbedEnabled: payload.statusEmbedEnabled ?? undefined,
+          statusLogoUrl: sanitizeInput(payload.statusLogoUrl),
+          statusPrimaryColor: sanitizeInput(payload.statusPrimaryColor),
+          statusTextColor: sanitizeInput(payload.statusTextColor),
+          statusBackgroundColor: sanitizeInput(payload.statusBackgroundColor)
         },
         orgId
       );
@@ -127,7 +142,12 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
           autoIncidentWindowSeconds: updated.autoIncidentWindowSeconds ?? null,
           autoIncidentCooldownSeconds: updated.autoIncidentCooldownSeconds ?? null,
           autoIncidentAiEnabled: updated.autoIncidentAiEnabled ?? false,
-          autoIncidentSummaryLines: updated.autoIncidentSummaryLines ?? null
+          autoIncidentSummaryLines: updated.autoIncidentSummaryLines ?? null,
+          statusEmbedEnabled: updated.statusEmbedEnabled ?? false,
+          statusLogoUrl: updated.statusLogoUrl ?? "",
+          statusPrimaryColor: updated.statusPrimaryColor ?? "",
+          statusTextColor: updated.statusTextColor ?? "",
+          statusBackgroundColor: updated.statusBackgroundColor ?? ""
         }
       });
     }

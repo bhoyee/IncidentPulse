@@ -256,6 +256,11 @@ model IntegrationSettings {
   autoIncidentCooldownSeconds  Int?
   autoIncidentAiEnabled        Boolean   @default(false)
   autoIncidentSummaryLines     Int?
+  statusEmbedEnabled           Boolean   @default(false)
+  statusLogoUrl                String?
+  statusPrimaryColor           String?
+  statusTextColor              String?
+  statusBackgroundColor        String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

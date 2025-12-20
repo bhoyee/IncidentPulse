@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { fetchFreshStatus } from "../lib/status";
 import { onStatusSnapshot } from "../lib/realtime";
 import { DEFAULT_ORG_ID, findOrgIdBySlug } from "../lib/org";
+import { getIntegrationSettings } from "../lib/integration-settings";
 
 const publicRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/status", async (_request, reply) => {
@@ -91,6 +92,41 @@ const publicRoutes: FastifyPluginAsync = async (fastify) => {
 
     reply.raw.on("close", closeStream);
     reply.raw.on("aborted", closeStream);
+  });
+
+  // Lightweight JSON for embeddable widgets (branding + status)
+  fastify.get("/status/embed", async (_request, reply) => {
+    const { orgId: queryOrgId, orgSlug } =
+      (_request.query as { orgId?: string; orgSlug?: string } | undefined) ?? {};
+
+    let orgId: string | null = null;
+    if (orgSlug) {
+      orgId = await findOrgIdBySlug(orgSlug);
+    }
+    if (!orgId) {
+      orgId = queryOrgId && queryOrgId.length > 0 ? queryOrgId : DEFAULT_ORG_ID;
+    }
+
+    const snapshot = await fetchFreshStatus(undefined, orgId);
+    const settings = await getIntegrationSettings(orgId, true);
+
+    return reply.send({
+      error: false,
+      data: {
+        status: snapshot.payload,
+        meta: {
+          state: snapshot.state,
+          uptime24h: snapshot.uptime24h
+        },
+        branding: {
+          embedEnabled: (settings as any)?.statusEmbedEnabled ?? false,
+          logoUrl: (settings as any)?.statusLogoUrl ?? null,
+          primaryColor: (settings as any)?.statusPrimaryColor ?? null,
+          textColor: (settings as any)?.statusTextColor ?? null,
+          backgroundColor: (settings as any)?.statusBackgroundColor ?? null
+        }
+      }
+    });
   });
 };
 
