@@ -63,14 +63,22 @@ export async function saveIntegrationSettings(
   data: IntegrationSettingsInput,
   organizationId = DEFAULT_ORG_ID
 ): Promise<IntegrationSettings> {
+  const normalized: IntegrationSettingsInput = {
+    ...data,
+    autoIncidentErrorThreshold: data.autoIncidentErrorThreshold ?? null,
+    autoIncidentWindowSeconds: data.autoIncidentWindowSeconds ?? null,
+    autoIncidentCooldownSeconds: data.autoIncidentCooldownSeconds ?? null,
+    autoIncidentSummaryLines: data.autoIncidentSummaryLines ?? null
+  };
+
   const updated = await prisma.integrationSettings.upsert({
     where: { organizationId },
     create: {
-      organizationId,
-      ...data
+      organization: { connect: { id: organizationId } },
+      ...normalized
     },
     update: {
-      ...data
+      ...normalized
     }
   });
 
