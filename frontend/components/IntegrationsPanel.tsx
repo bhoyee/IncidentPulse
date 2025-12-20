@@ -461,9 +461,16 @@ export function IntegrationsPanel({ settings, isLoading, onSave, isSaving }: Pro
             <p className="font-semibold text-gray-800">Embed snippet</p>
             <p>Replace <code className="font-mono text-[11px] text-gray-800">{`YOUR_ORG_SLUG`}</code> with your org slug.</p>
             <pre className="overflow-x-auto rounded bg-black/80 p-3 text-[11px] leading-snug text-gray-100">
+{`<div id="incidentpulse-status"></div>
+<script src="${process.env.NEXT_PUBLIC_API_BASE || "https://your-api"}/public/status/embed.js" data-org="YOUR_ORG_SLUG"></script>`}
+            </pre>
+            <p className="text-[11px] text-gray-600">
+              The script injects a full-width widget (no platform header). If you prefer an iframe, you can still use:
+            </p>
+            <pre className="overflow-x-auto rounded bg-black/80 p-3 text-[11px] leading-snug text-gray-100">
 {`<iframe
   src="${process.env.NEXT_PUBLIC_SITE_URL || "https://your-frontend"}/status/embed/YOUR_ORG_SLUG"
-  style="border:0;width:100%;min-height:420px;border-radius:12px;"
+  style="border:0;width:100%;min-height:420px;border-radius:12px;display:block;"
   loading="lazy"
 ></iframe>`}
             </pre>
