@@ -111,6 +111,210 @@ function buildStaffInviteEmail(options: { name: string; email: string; tempPassw
   return { to: options.email, subject, text, html };
 }
 
+async function computePlatformMetrics(windowDays: number) {
+  const window = Math.max(1, Math.min(90, windowDays));
+  const now = new Date();
+  const since = new Date(now.getTime() - window * 24 * 60 * 60 * 1000);
+
+  const [
+    orgs,
+    userCount,
+    incidentsByDay,
+    incidentsWindowCount,
+    maintenanceWindowCount,
+    incidentsByOrg,
+    membersByOrg,
+    servicesByOrg,
+    lastActivityRows,
+    webhookMetrics,
+    persistedTop,
+    persistedOrgTop,
+    publicVisitsByPath,
+    publicVisitsTotalCount,
+    publicVisitsByCountry
+  ] = await Promise.all([
+    (prisma as any).organization.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        plan: true,
+        status: true,
+        isDeleted: true,
+        createdAt: true,
+        rateLimitPerMinute: true,
+        stripeCustomerId: true
+      }
+    }),
+    prisma.user.count(),
+    prisma.$queryRaw<Array<{ bucket: Date; count: number }>>`
+      SELECT DATE_TRUNC('day', "createdAt")::date AS bucket, COUNT(*)::int AS count
+      FROM "Incident"
+      WHERE "createdAt" >= ${since}
+      GROUP BY bucket
+      ORDER BY bucket
+    `,
+    prisma.incident.count({ where: { createdAt: { gte: since } } }),
+    prisma.maintenanceEvent.count({ where: { createdAt: { gte: since } } }),
+    prisma.incident.groupBy({
+      by: ["organizationId"],
+      where: { createdAt: { gte: since } },
+      _count: { _all: true }
+    }),
+    prisma.membership.groupBy({
+      by: ["organizationId"],
+      _count: { _all: true }
+    }),
+    prisma.service.groupBy({
+      by: ["organizationId"],
+      _count: { _all: true }
+    }),
+    prisma.$queryRaw<Array<{ organizationId: string; lastActivity: Date }>>`
+      SELECT "organizationId", MAX("createdAt") AS "lastActivity"
+      FROM "AuditLog"
+      GROUP BY "organizationId"
+    `,
+    getWebhookMetrics(),
+    (prisma as any).trafficStat.groupBy({
+      by: ["route"],
+      where: { bucket: { gte: since } },
+      _sum: { count: true, errorCount: true, totalMs: true },
+      orderBy: { _sum: { count: "desc" } },
+      take: 10
+    }),
+    prisma.$queryRaw<Array<{ orgId: string | null; route: string; count: number; errorCount: number; totalMs: number }>>`
+      SELECT "orgId", route, SUM(count)::int as count, SUM("errorCount")::int as "errorCount", SUM("totalMs")::int as "totalMs"
+      FROM "TrafficStat"
+      WHERE bucket >= ${since}
+      GROUP BY "orgId", route
+      ORDER BY count DESC
+      LIMIT 30
+    `,
+    prisma.$queryRaw<Array<{ path: string | null; count: number }>>`
+      SELECT path, COUNT(*)::int AS count
+      FROM "PublicVisit"
+      WHERE "createdAt" >= ${since}
+      GROUP BY path
+      ORDER BY count DESC
+      LIMIT 10
+    `,
+    (prisma as any).publicVisit.count({ where: { createdAt: { gte: since } } }) as any,
+    prisma.$queryRaw<Array<{ country: string | null; count: number }>>`
+      SELECT COALESCE(country, 'Unknown') AS country, COUNT(*)::int AS count
+      FROM "PublicVisit"
+      WHERE "createdAt" >= ${since}
+      GROUP BY COALESCE(country, 'Unknown')
+      ORDER BY count DESC
+      LIMIT 10
+    `
+  ]);
+
+  const incidentsByOrgMap = new Map<string, number>(
+    incidentsByOrg.map((row: { organizationId: string; _count: { _all: number } }) => [row.organizationId, row._count._all])
+  );
+  const membersByOrgMap = new Map<string, number>(
+    membersByOrg.map((row: { organizationId: string; _count: { _all: number } }) => [row.organizationId, row._count._all])
+  );
+  const servicesByOrgMap = new Map<string, number>(
+    servicesByOrg.map((row: { organizationId: string; _count: { _all: number } }) => [row.organizationId, row._count._all])
+  );
+  const lastActivityMap = new Map<string, Date>(
+    lastActivityRows.map((row: { organizationId: string; lastActivity: Date }) => [row.organizationId, row.lastActivity])
+  );
+
+  const orgSummaries = await Promise.all(
+    orgs.map(async (org: any) => {
+      const billing = await getBillingStatusForOrg(org as any);
+      return {
+        ...org,
+        lastActivity: lastActivityMap.get(org.id) ?? null,
+        counts: {
+          incidents30: incidentsByOrgMap.get(org.id) ?? 0,
+          members: membersByOrgMap.get(org.id) ?? 0,
+          services: servicesByOrgMap.get(org.id) ?? 0
+        },
+        billing
+      };
+    })
+  );
+
+  const activeOrgs = orgs.filter((o: any) => o.status !== "suspended" && !o.isDeleted).length;
+  const inactiveOrgs = orgs.length - activeOrgs;
+  const totalMembers = membersByOrg.reduce((sum: number, row: any) => sum + (row._count?._all ?? 0), 0);
+  const totalAdmins = await prisma.membership.count({ where: { role: "admin" } });
+
+  // Billing rollups
+  const activeSubscriptionStatuses = new Set(["active", "trialing", "past_due", "unpaid"]);
+  const inactiveSubscriptionStatuses = new Set(["canceled", "incomplete", "incomplete_expired", "paused"]);
+  const billingTotals = orgSummaries.reduce(
+    (acc: any, org: any) => {
+      const status = org.billing?.subscriptionStatus;
+      if (activeSubscriptionStatuses.has(status)) acc.activeSubscriptions += 1;
+      else if (inactiveSubscriptionStatuses.has(status)) acc.inactiveSubscriptions += 1;
+      else acc.unknownSubscriptions += 1;
+      return acc;
+    },
+    { activeSubscriptions: 0, inactiveSubscriptions: 0, unknownSubscriptions: 0, totalSales: 0 }
+  );
+
+  return {
+    totals: {
+      orgs: orgs.length,
+      tenants: orgs.length,
+      users: userCount,
+      incidentsWindow: incidentsWindowCount,
+      maintenanceWindow: maintenanceWindowCount,
+      activeOrgs,
+      inactiveOrgs,
+      inactiveTenants: inactiveOrgs,
+      members: totalMembers,
+      admins: totalAdmins
+    },
+    billingTotals,
+    incidentsTrend: incidentsByDay,
+    orgs: orgSummaries,
+    webhook: webhookMetrics,
+    traffic: getTrafficSnapshot(),
+    trafficPersisted: {
+      topEndpoints: (persistedTop as any[]).map((row) => {
+        const count = Number(row._sum?.count ?? 0);
+        const errors = Number(row._sum?.errorCount ?? 0);
+        const totalMs = Number(row._sum?.totalMs ?? 0);
+        return {
+          route: row.route,
+          count,
+          avgMs: count ? Math.round(totalMs / count) : 0,
+          errorRate: count ? Number(((errors / count) * 100).toFixed(1)) : 0
+        };
+      }),
+      topEndpointsByOrg: (persistedOrgTop as any[]).map((row) => {
+        const count = Number(row.count ?? 0);
+        const errors = Number(row.errorCount ?? 0);
+        const totalMs = Number(row.totalMs ?? 0);
+        return {
+          orgId: row.orgId,
+          route: row.route,
+          count,
+          avgMs: count ? Math.round(totalMs / count) : 0,
+          errorRate: count ? Number(((errors / count) * 100).toFixed(1)) : 0
+        };
+      })
+    },
+    visitors: {
+      total: Number(publicVisitsTotalCount ?? 0),
+      topPaths: publicVisitsByPath.map((row: any) => ({
+        path: row.path ?? "Unknown",
+        count: Number(row.count ?? 0)
+      })),
+      topCountries: publicVisitsByCountry.map((row: any) => ({
+        country: row.country ?? "Unknown",
+        count: Number(row.count ?? 0)
+      }))
+    }
+  };
+}
+
 const platformRoutes: FastifyPluginAsync = async (fastify) => {
   // All routes require super-admin
   fastify.addHook("preHandler", fastify.authenticate);
@@ -152,193 +356,36 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/metrics", async (request) => {
     const windowParam = (request.query as any)?.window as string | undefined;
     const windowDays = Math.max(1, Math.min(90, Number(windowParam) || 30));
-    const now = new Date();
-    const since = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
+    const data = await computePlatformMetrics(windowDays);
+    return { error: false, data };
+  });
 
-    const [
-      orgs,
-      userCount,
-      incidentsByDay,
-      incidents30Count,
-      maintenance30Count,
-      incidentsByOrg,
-      membersByOrg,
-      servicesByOrg,
-      lastActivityRows,
-      webhookMetrics,
-      persistedTop,
-      persistedOrgTop,
-      publicVisitsByPath,
-      publicVisitsTotals,
-      publicVisitsByCountry
-    ] = await Promise.all([
-      (prisma as any).organization.findMany({
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-        name: true,
-        slug: true,
-        plan: true,
-        status: true,
-        isDeleted: true,
-        createdAt: true,
-        rateLimitPerMinute: true,
-        stripeCustomerId: true
-      }
-    }),
-      prisma.user.count(),
-      prisma.$queryRaw<Array<{ bucket: Date; count: number }>>`
-        SELECT DATE_TRUNC('day', "createdAt")::date AS bucket, COUNT(*)::int AS count
-        FROM "Incident"
-        WHERE "createdAt" >= ${since}
-        GROUP BY bucket
-        ORDER BY bucket
-      `,
-      prisma.incident.count({ where: { createdAt: { gte: since } } }),
-      prisma.maintenanceEvent.count({ where: { createdAt: { gte: since } } }),
-      prisma.incident.groupBy({
-        by: ["organizationId"],
-        where: { createdAt: { gte: since } },
-        _count: { _all: true }
-      }),
-      prisma.membership.groupBy({
-        by: ["organizationId"],
-        _count: { _all: true }
-      }),
-      prisma.service.groupBy({
-        by: ["organizationId"],
-        _count: { _all: true }
-      }),
-      prisma.$queryRaw<Array<{ organizationId: string; lastActivity: Date }>>`
-        SELECT "organizationId", MAX("createdAt") AS "lastActivity"
-        FROM "AuditLog"
-        GROUP BY "organizationId"
-      `,
-      getWebhookMetrics(),
-      (prisma as any).trafficStat.groupBy({
-        by: ["route"],
-        where: { bucket: { gte: since } },
-        _sum: { count: true, errorCount: true, totalMs: true },
-        orderBy: { _sum: { count: "desc" } },
-        take: 10
-      }),
-      prisma.$queryRaw<Array<{ orgId: string | null; route: string; count: number; errorCount: number; totalMs: number }>>`
-        SELECT "orgId", route, SUM(count)::int as count, SUM("errorCount")::int as "errorCount", SUM("totalMs")::int as "totalMs"
-        FROM "TrafficStat"
-        WHERE bucket >= ${since}
-        GROUP BY "orgId", route
-        ORDER BY count DESC
-        LIMIT 30
-      `,
-      (prisma as any).publicVisit.groupBy({
-        by: ["path"],
-        _count: { _all: true },
-        where: { createdAt: { gte: since } },
-        orderBy: { _count: { _all: "desc" } },
-        take: 10
-      }),
-      (prisma as any).publicVisit.aggregate({
-        _count: { _all: true }
-      }) as any,
-      (prisma as any).publicVisit.groupBy({
-        by: ["country"],
-        _count: { _all: true },
-        where: { createdAt: { gte: since }, country: { not: null } },
-        orderBy: { _count: { _all: "desc" } },
-        take: 10
-      })
-    ]);
+  fastify.get("/metrics/stream", async (request, reply) => {
+    const windowParam = (request.query as any)?.window as string | undefined;
+    const windowDays = Math.max(1, Math.min(90, Number(windowParam) || 30));
 
-    const incidentsByOrgMap = new Map<string, number>(
-      incidentsByOrg.map((row: { organizationId: string; _count: { _all: number } }) => [row.organizationId, row._count._all])
-    );
-    const membersByOrgMap = new Map<string, number>(
-      membersByOrg.map((row: { organizationId: string; _count: { _all: number } }) => [row.organizationId, row._count._all])
-    );
-    const servicesByOrgMap = new Map<string, number>(
-      servicesByOrg.map((row: { organizationId: string; _count: { _all: number } }) => [row.organizationId, row._count._all])
-    );
-    const lastActivityMap = new Map<string, Date>(
-      lastActivityRows.map((row: { organizationId: string; lastActivity: Date }) => [row.organizationId, row.lastActivity])
-    );
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
 
-    const orgSummaries = await Promise.all(
-      orgs.map(async (org: any) => {
-        const billing = await getBillingStatusForOrg(org as any);
-        return {
-          ...org,
-          lastActivity: lastActivityMap.get(org.id) ?? null,
-          counts: {
-            incidents30: incidentsByOrgMap.get(org.id) ?? 0,
-            members: membersByOrgMap.get(org.id) ?? 0,
-            services: servicesByOrgMap.get(org.id) ?? 0
-          },
-          billing
-        };
-      })
-    );
-
-    const activeOrgs = orgs.filter((o: any) => o.status !== "suspended" && !o.isDeleted).length;
-    const inactiveOrgs = orgs.length - activeOrgs;
-
-    const totalMembers = membersByOrg.reduce((sum: number, row: any) => sum + (row._count?._all ?? 0), 0);
-    const totalAdmins = await prisma.membership.count({ where: { role: "admin" } });
-
-    return {
-      error: false,
-      data: {
-        totals: {
-          orgs: orgs.length,
-          users: userCount,
-          incidentsWindow: incidents30Count,
-          maintenanceWindow: maintenance30Count,
-          activeOrgs,
-          inactiveOrgs,
-          members: totalMembers,
-          admins: totalAdmins
-        },
-        incidentsTrend: incidentsByDay,
-        orgs: orgSummaries,
-        webhook: webhookMetrics,
-        traffic: getTrafficSnapshot(),
-        trafficPersisted: {
-          topEndpoints: persistedTop.map((row: any) => {
-            const count = Number(row._sum?.count ?? 0);
-            const errors = Number(row._sum?.errorCount ?? 0);
-            const totalMs = Number(row._sum?.totalMs ?? 0);
-            return {
-              route: row.route,
-              count,
-              avgMs: count ? Math.round(totalMs / count) : 0,
-              errorRate: count ? Number(((errors / count) * 100).toFixed(1)) : 0
-            };
-          }),
-          topEndpointsByOrg: (persistedOrgTop as any[]).map((row) => {
-            const count = Number(row.count ?? 0);
-            const errors = Number(row.errorCount ?? 0);
-            const totalMs = Number(row.totalMs ?? 0);
-            return {
-              orgId: row.orgId,
-              route: row.route,
-              count,
-              avgMs: count ? Math.round(totalMs / count) : 0,
-              errorRate: count ? Number(((errors / count) * 100).toFixed(1)) : 0
-            };
-          })
-        },
-        visitors: {
-          total: (publicVisitsTotals as any)?._count?._all ?? 0,
-          topPaths: publicVisitsByPath.map((row: any) => ({
-            path: row.path,
-            count: row._count?._all ?? 0
-          })),
-          topCountries: publicVisitsByCountry.map((row: any) => ({
-            country: row.country ?? "Unknown",
-            count: row._count?._all ?? 0
-          }))
-        }
+    const send = async () => {
+      try {
+        const data = await computePlatformMetrics(windowDays);
+        reply.raw.write(`data: ${JSON.stringify({ error: false, data })}\n\n`);
+      } catch (err: any) {
+        request.log.error({ err }, "Failed to stream platform metrics");
+        reply.raw.write(`data: ${JSON.stringify({ error: true, message: "metrics fetch failed" })}\n\n`);
       }
     };
+
+    await send();
+    const interval = setInterval(send, 15000);
+    reply.raw.on("close", () => {
+      clearInterval(interval);
+    });
   });
 
   fastify.patch<{ Params: { orgId: string }; Body: { status: "active" | "suspended" } }>(
