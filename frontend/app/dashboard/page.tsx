@@ -4006,48 +4006,68 @@ function DashboardPageContent() {
                   <p className="text-sm text-gray-400">Loading metrics...</p>
                 ) : platformMetrics ? (
                   <div className="space-y-6">
-                    <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-4">
-                      <StatCard
-                        label="Visitors"
-                        value={platformMetrics.visitors?.total?.toLocaleString() ?? "0"}
-                        description="Unique visits in window"
-                      />
-                      <StatCard
-                        label="Active orgs"
-                        value={platformMetrics.totals.activeOrgs?.toString() ?? "0"}
-                        description="Org status != suspended"
-                      />
-                      <StatCard
-                        label="Inactive orgs"
-                        value={platformMetrics.totals.inactiveOrgs?.toString() ?? "0"}
-                        description="Suspended/deleted"
-                      />
-                      <StatCard
-                        label="Users"
-                        value={platformMetrics.totals.users.toString()}
-                        description="All tenants"
-                      />
-                      <StatCard
-                        label="Members"
-                        value={platformMetrics.totals.members?.toString() ?? "0"}
-                        description="Org memberships"
-                      />
-                      <StatCard
-                        label="Admins"
-                        value={platformMetrics.totals.admins?.toString() ?? "0"}
-                        description="Org admins"
-                      />
-                      <StatCard
-                        label="Incidents"
-                        value={platformMetrics.totals.incidentsWindow.toString()}
-                        description={`Created last ${metricsWindow}d`}
-                      />
-                      <StatCard
-                        label="Maintenance"
-                        value={platformMetrics.totals.maintenanceWindow.toString()}
-                        description={`Created last ${metricsWindow}d`}
-                      />
-                    </div>
+                    {(() => {
+                      const tenantsCount =
+                        (platformMetrics.totals as { tenants?: number }).tenants ?? platformMetrics.totals.orgs;
+                      const billingTotals =
+                        (platformMetrics as {
+                          billingTotals?: { activeSubscriptions?: number; inactiveSubscriptions?: number; totalSales?: number };
+                        }).billingTotals ?? {};
+                      return (
+                        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-4">
+                          <StatCard
+                            label="Visitors"
+                            value={platformMetrics.visitors?.total?.toLocaleString() ?? "0"}
+                            description="Unique visits in window"
+                          />
+                          <StatCard
+                            label="Tenants"
+                            value={tenantsCount?.toString() ?? "0"}
+                            description="Total tenants"
+                          />
+                          <StatCard
+                            label="Active tenants"
+                            value={platformMetrics.totals.activeOrgs?.toString() ?? "0"}
+                            description="Not suspended/deleted"
+                          />
+                          <StatCard
+                            label="Inactive tenants"
+                            value={platformMetrics.totals.inactiveOrgs?.toString() ?? "0"}
+                            description="Suspended or deleted"
+                          />
+                          <StatCard
+                            label="Users"
+                            value={platformMetrics.totals.users.toString()}
+                            description="All tenant users"
+                          />
+                          <StatCard
+                            label="Members"
+                            value={platformMetrics.totals.members?.toString() ?? "0"}
+                            description="Org memberships"
+                          />
+                          <StatCard
+                            label="Active subscriptions"
+                            value={billingTotals.activeSubscriptions?.toString() ?? "0"}
+                            description="Stripe active/past-due"
+                          />
+                          <StatCard
+                            label="Inactive subscriptions"
+                            value={billingTotals.inactiveSubscriptions?.toString() ?? "0"}
+                            description="Canceled/paused"
+                          />
+                          <StatCard
+                            label="Total sales"
+                            value={`$${(billingTotals.totalSales ?? 0).toLocaleString()}`}
+                            description="From Stripe (window)"
+                          />
+                          <StatCard
+                            label="Incidents"
+                            value={platformMetrics.totals.incidentsWindow.toString()}
+                            description={`Created last ${metricsWindow}d`}
+                          />
+                        </div>
+                      );
+                    })()}
 
                     <div className="grid gap-4 lg:grid-cols-2">
                       <ChartCard title="Incidents per day">
