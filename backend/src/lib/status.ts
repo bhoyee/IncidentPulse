@@ -14,6 +14,9 @@ export type PublicIncident = {
   severity: Incident["severity"];
   status: Incident["status"];
   startedAt: Date;
+  latestUpdateMessage?: string | null;
+  rootCause?: string | null;
+  resolutionSummary?: string | null;
   service: {
     id: string;
     name: string;
@@ -28,6 +31,16 @@ export type ServiceStatusSnapshot = {
   description: string | null;
   state: StatusSnapshot["state"];
   activeIncidentCount: number;
+  uptimeHistory?: {
+    date: string;
+    state: "operational" | "degraded";
+    incidents: {
+      title: string;
+      severity: Incident["severity"];
+      status: Incident["status"];
+      startedAt: Date;
+    }[];
+  }[];
   maintenance?: PublicMaintenanceEvent | null;
 };
 
@@ -52,6 +65,7 @@ export type StatusSnapshot = {
   uptime24h: number;
   payload: {
     overall_state: "operational" | "partial_outage" | "major_outage";
+    last_incident_at: Date | null;
     active_incidents: PublicIncident[];
     services: ServiceStatusSnapshot[];
     last_24h: {
@@ -76,7 +90,10 @@ export async function computeStatusSnapshot(
 
   await transitionMaintenanceEvents(prisma);
 
-  const [activeIncidents, incidentsLast24hCount, services, maintenanceEvents] = await Promise.all([
+  const window30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [activeIncidents, incidentsLast24hCount, services, maintenanceEvents, lastIncident, incidents30d, latestUpdates] =
+    await Promise.all([
     prisma.incident.findMany({
       where: {
         organizationId,
@@ -120,8 +137,49 @@ export async function computeStatusSnapshot(
       },
       orderBy: { startsAt: "asc" },
       include: maintenanceEventInclude
+    }),
+    prisma.incident.findFirst({
+      where: { organizationId },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true }
+    }),
+    prisma.incident.findMany({
+      where: {
+        organizationId,
+        createdAt: {
+          gte: window30d
+        }
+      },
+      select: {
+        id: true,
+        title: true,
+        serviceId: true,
+        createdAt: true,
+        severity: true,
+        status: true,
+        rootCause: true,
+        resolutionSummary: true
+      }
+    }),
+    prisma.incidentUpdate.findMany({
+      where: {
+        incident: { organizationId }
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        incidentId: true,
+        message: true,
+        createdAt: true
+      }
     })
   ]);
+
+  const latestUpdateMap = latestUpdates.reduce<Record<string, { message: string; createdAt: Date }>>((acc, u) => {
+    if (!acc[u.incidentId]) {
+      acc[u.incidentId] = { message: u.message, createdAt: u.createdAt };
+    }
+    return acc;
+  }, {});
 
   const activePublicIncidents: PublicIncident[] = activeIncidents.map((incident) => ({
     id: incident.id,
@@ -129,6 +187,9 @@ export async function computeStatusSnapshot(
     severity: incident.severity,
     status: incident.status,
     startedAt: incident.createdAt,
+    latestUpdateMessage: latestUpdateMap[incident.id]?.message ?? null,
+    rootCause: incident.rootCause ?? null,
+    resolutionSummary: incident.resolutionSummary ?? null,
     service: {
       id: incident.service.id,
       name: incident.service.name,
@@ -150,12 +211,45 @@ export async function computeStatusSnapshot(
     (event) => event.status === "scheduled" && event.startsAt > now
   );
 
+  const dayBuckets: Record<string, Record<string, "operational" | "degraded">> = {};
+  services.forEach((svc) => {
+    dayBuckets[svc.id] = {};
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(now.getTime() - i * 86400000);
+      const key = d.toISOString().slice(0, 10);
+      dayBuckets[svc.id][key] = "operational";
+    }
+  });
+  incidents30d.forEach((incident) => {
+    const key = incident.createdAt.toISOString().slice(0, 10);
+    if (dayBuckets[incident.serviceId]?.[key] !== undefined) {
+      dayBuckets[incident.serviceId][key] = "degraded";
+    }
+  });
+
   const serviceSnapshots: ServiceStatusSnapshot[] = services.map((service) => {
     const serviceIncidents = incidentsByService[service.id] ?? [];
     const state = determineOverallState(serviceIncidents);
     const maintenance = activeMaintenanceEvents.find(
       (event) => event.appliesToAll || event.serviceId === service.id
     );
+
+    const history = Object.entries(dayBuckets[service.id] ?? {})
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .slice(-30)
+      .map(([date, state]) => {
+        const incidentsForDay = incidents30d
+          .filter((inc) => inc.serviceId === service.id && inc.createdAt.toISOString().slice(0, 10) === date)
+          .map((inc) => ({
+            title: inc.title,
+            severity: inc.severity,
+            status: inc.status,
+            startedAt: inc.createdAt,
+            rootCause: (inc as any).rootCause ?? null,
+            resolutionSummary: (inc as any).resolutionSummary ?? null
+          }));
+        return { date, state, incidents: incidentsForDay };
+      });
 
     return {
       id: service.id,
@@ -164,12 +258,14 @@ export async function computeStatusSnapshot(
       description: service.description,
       state,
       activeIncidentCount: serviceIncidents.length,
+      uptimeHistory: history,
       maintenance: maintenance ? (serializeMaintenanceEvent(maintenance) as PublicMaintenanceEvent) : null
     };
   });
 
   const overallState = determineOverallState(activeIncidents);
   const uptime24h = calculateUptime(activeIncidents);
+  const lastIncidentAt = lastIncident?.createdAt ?? null;
 
   return {
     organizationId,
@@ -177,6 +273,7 @@ export async function computeStatusSnapshot(
     uptime24h,
     payload: {
       overall_state: overallState,
+      last_incident_at: lastIncidentAt,
       active_incidents: activePublicIncidents,
       services: serviceSnapshots,
       last_24h: {
@@ -196,17 +293,16 @@ export async function computeStatusSnapshot(
 }
 
 function determineOverallState(incidents: Incident[]): StatusSnapshot["state"] {
-  const hasCritical = incidents.some((incident) => incident.severity === "critical");
-  if (hasCritical) {
+  if (!incidents.length) {
+    return "operational";
+  }
+
+  if (incidents.some((incident) => incident.severity === "critical")) {
     return "major_outage";
   }
 
-  const hasHigh = incidents.some((incident) => incident.severity === "high");
-  if (hasHigh) {
-    return "partial_outage";
-  }
-
-  return "operational";
+  // Any non-critical incident still degrades overall state.
+  return "partial_outage";
 }
 
 function calculateUptime(incidents: Incident[]): number {

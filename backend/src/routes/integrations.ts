@@ -51,6 +51,14 @@ const updateSchema = z.object({
   statusBackgroundColor: z.string().max(50).optional().or(z.literal(""))
 });
 
+// Allow nulls for numeric fields if clients send null instead of omitting
+const updateSchemaNullable = updateSchema.extend({
+  autoIncidentErrorThreshold: updateSchema.shape.autoIncidentErrorThreshold.or(z.literal(null)),
+  autoIncidentWindowSeconds: updateSchema.shape.autoIncidentWindowSeconds.or(z.literal(null)),
+  autoIncidentCooldownSeconds: updateSchema.shape.autoIncidentCooldownSeconds.or(z.literal(null)),
+  autoIncidentSummaryLines: updateSchema.shape.autoIncidentSummaryLines.or(z.literal(null))
+});
+
 const sanitizeInput = (value: string | undefined | ""): string | null | undefined => {
   if (value === undefined) {
     return undefined;
@@ -97,7 +105,7 @@ const integrationsRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [fastify.authenticate, fastify.authorize(["admin"])] },
     async (request, reply) => {
       const orgId = getRequestOrgId(request);
-      const parsed = updateSchema.safeParse(request.body);
+      const parsed = updateSchemaNullable.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({
           error: true,
