@@ -27,6 +27,7 @@ import organizationsRoutes from "./routes/organizations";
 import supportRoutes from "./routes/support";
 import logsRoutes from "./routes/logs";
 import platformRoutes from "./routes/platform";
+import statusSubscriberRoutes from "./routes/status-subscribers";
 import { enforceOrgRateLimit } from "./lib/org-rate-limit";
 import { recordTraffic, persistTraffic } from "./lib/traffic-metrics";
 import { recordPublicVisit } from "./lib/visitor-metrics";
@@ -69,9 +70,13 @@ export function buildApp() {
     });
   }
   fastify.register(cookie);
+  // CORS: reflect requesting origin (including null/file://) to avoid embed/subscribe failures,
+  // while still allowing credentials for app endpoints.
   fastify.register(cors, {
-    origin: env.FRONTEND_URL,
-    credentials: true
+    origin: true,
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization", "Origin", "Accept"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   });
   fastify.register(multipart, {
     limits: {
@@ -211,6 +216,10 @@ export function buildApp() {
   fastify.register(authRoutes, { prefix: "/auth" });
   fastify.register(incidentsRoutes, { prefix: "/incidents" });
   fastify.register(publicRoutes, { prefix: "/public" });
+  // Public + tenant subscriber routes (public endpoints live under /public/status/*, but
+  // we also expose /status/* for embed convenience).
+  fastify.register(statusSubscriberRoutes, { prefix: "/public" });
+  fastify.register(statusSubscriberRoutes);
   fastify.register(metricsRoutes, { prefix: "/metrics" });
   fastify.register(teamRoutes, { prefix: "/team" });
   fastify.register(servicesRoutes, { prefix: "/services" });

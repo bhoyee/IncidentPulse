@@ -241,6 +241,22 @@ model StatusCache {
   createdAt  DateTime    @default(now())
 }
 
+model StatusSubscriber {
+  id                String   @id @default(uuid())
+  organizationId    String
+  email             String
+  serviceIds        Json?
+  verificationToken String?
+  verifiedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([organizationId, email])
+  @@index([organizationId, email])
+  @@index([organizationId, verifiedAt])
+  @@unique([verificationToken])
+}
+
 model IntegrationSettings {
   id               String   @id @default("global-integrations")
   organizationId   String   @default("org-default")
