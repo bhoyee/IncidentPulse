@@ -191,20 +191,24 @@ async function computePlatformMetrics(windowDays: number) {
       ORDER BY count DESC
       LIMIT 30
     `,
-    prisma.$queryRaw<Array<{ path: string | null; count: number }>>`
-      SELECT path, COUNT(*)::int AS count
-      FROM "PublicVisit"
-      WHERE "createdAt" >= ${since}
-      GROUP BY path
-      ORDER BY count DESC
-      LIMIT 10
-    `,
-    (prisma as any).publicVisit.count({ where: { createdAt: { gte: since } } }) as any,
-    prisma.$queryRaw<Array<{ country: string | null; count: number }>>`
-      SELECT COALESCE(country, 'Unknown') AS country, COUNT(*)::int AS count
-      FROM "PublicVisit"
-      WHERE "createdAt" >= ${since}
-      GROUP BY COALESCE(country, 'Unknown')
+      prisma.$queryRaw<Array<{ path: string | null; count: number }>>`
+        SELECT path, COUNT(*)::int AS count
+        FROM "PublicVisit"
+        WHERE "createdAt" >= ${since}
+        GROUP BY path
+        ORDER BY count DESC
+        LIMIT 10
+      `,
+      prisma.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(DISTINCT ip)::int AS count
+        FROM "PublicVisit"
+        WHERE "createdAt" >= ${since} AND ip IS NOT NULL AND ip <> ''
+      `,
+      prisma.$queryRaw<Array<{ country: string | null; count: number }>>`
+        SELECT COALESCE(country, 'Unknown') AS country, COUNT(*)::int AS count
+        FROM "PublicVisit"
+        WHERE "createdAt" >= ${since}
+        GROUP BY COALESCE(country, 'Unknown')
       ORDER BY count DESC
       LIMIT 10
     `
@@ -243,6 +247,8 @@ async function computePlatformMetrics(windowDays: number) {
   const inactiveOrgs = orgs.length - activeOrgs;
   const totalMembers = membersByOrg.reduce((sum: number, row: any) => sum + (row._count?._all ?? 0), 0);
   const totalAdmins = await prisma.membership.count({ where: { role: "admin" } });
+  const pendingTickets = await prisma.supportTicket.count({ where: { status: "pending" } });
+  const openTickets = await prisma.supportTicket.count({ where: { status: "open" } });
 
   // Billing rollups
   const activeSubscriptionStatuses = new Set(["active", "trialing", "past_due", "unpaid"]);
@@ -269,7 +275,9 @@ async function computePlatformMetrics(windowDays: number) {
       inactiveOrgs,
       inactiveTenants: inactiveOrgs,
       members: totalMembers,
-      admins: totalAdmins
+      admins: totalAdmins,
+      pendingTickets,
+      openTickets
     },
     billingTotals,
     incidentsTrend: incidentsByDay,
@@ -302,7 +310,7 @@ async function computePlatformMetrics(windowDays: number) {
       })
     },
     visitors: {
-      total: Number(publicVisitsTotalCount ?? 0),
+      total: Number((publicVisitsTotalCount as any)?.[0]?.count ?? 0),
       topPaths: publicVisitsByPath.map((row: any) => ({
         path: row.path ?? "Unknown",
         count: Number(row.count ?? 0)
@@ -459,14 +467,13 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
+  // Hard delete (destructive) an organization and all related records.
   fastify.delete<{ Params: { orgId: string } }>(
     "/organizations/:orgId",
     async (request) => {
       const { orgId } = request.params;
-      const updated = await (prisma as any).organization.update({
-        where: { id: orgId },
-        data: { isDeleted: true, status: "suspended", deletedAt: new Date() }
-      });
+
+      const deletedOrg = await (prisma as any).organization.delete({ where: { id: orgId } });
 
       await recordAuditLog(
         {
@@ -476,12 +483,67 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
           actorName: request.user.name,
           targetType: "organization",
           targetId: orgId,
-          metadata: { softDelete: true }
+          metadata: { hardDelete: true }
         },
         prisma
       );
 
-      return { error: false, data: updated };
+      return { error: false, data: deletedOrg };
+    }
+  );
+
+  fastify.get<{ Params: { orgId: string } }>(
+    "/organizations/:orgId/delete-preview",
+    async (request) => {
+      const { orgId } = request.params;
+      const [
+        incidents,
+        incidentUpdates,
+        services,
+        maintenance,
+        members,
+        apiKeys,
+        integrationSettings,
+        subscribers,
+        auditLogs,
+        supportTickets,
+        supportComments,
+        supportAttachments
+      ] = await Promise.all([
+        (prisma as any).incident.count({ where: { organizationId: orgId } }),
+        (prisma as any).incidentUpdate.count({ where: { incident: { organizationId: orgId } } }),
+        (prisma as any).service.count({ where: { organizationId: orgId } }),
+        (prisma as any).maintenanceEvent.count({ where: { organizationId: orgId } }),
+        (prisma as any).membership.count({ where: { organizationId: orgId } }),
+        (prisma as any).apiKey.count({ where: { organizationId: orgId } }),
+        (prisma as any).integrationSettings.count({ where: { organizationId: orgId } }),
+        (prisma as any).statusSubscriber.count({ where: { organizationId: orgId } }),
+        (prisma as any).auditLog.count({ where: { organizationId: orgId } }),
+        (prisma as any).supportTicket.count({ where: { organizationId: orgId } }),
+        (prisma as any).supportComment.count({ where: { ticket: { organizationId: orgId } } }),
+        (prisma as any).supportAttachment.count({ where: { ticket: { organizationId: orgId } } })
+      ]);
+
+      return {
+        error: false,
+        data: {
+          organizationId: orgId,
+          counts: {
+            incidents,
+            incidentUpdates,
+            services,
+            maintenance,
+            members,
+            apiKeys,
+            integrationSettings,
+            subscribers,
+            auditLogs,
+            supportTickets,
+            supportComments,
+            supportAttachments
+          }
+        }
+      };
     }
   );
 
