@@ -78,6 +78,8 @@ export type PlatformMetrics = {
     inactiveOrgs?: number;
     members?: number;
     admins?: number;
+    pendingTickets?: number;
+    openTickets?: number;
   };
   incidentsTrend: Array<{ bucket: string; count: number }>;
   orgs: Array<

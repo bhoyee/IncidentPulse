@@ -25,7 +25,8 @@ import {
   CreditCardIcon,
   LifebuoyIcon,
   KeyIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  BellAlertIcon
 } from "@heroicons/react/24/solid";
 import {
   ResponsiveContainer,
@@ -90,6 +91,7 @@ import {
   useReactivateSupportTicket,
   type SupportTicket
 } from "@hooks/useSupport";
+import { useStatusSubscribers } from "@hooks/useStatusSubscribers";
 import {
   useOrganizations,
   useSwitchOrganization,
@@ -104,7 +106,10 @@ import {
   useCreatePlatformStaff,
   useUpdatePlatformStaff,
   useDeletePlatformStaff,
+  useUpdateOrgStatus,
+  useDeleteOrg,
   type PlatformStaff,
+  type PlatformOrg,
   usePlatformMetrics
 } from "@hooks/usePlatform";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
@@ -143,6 +148,14 @@ type ServiceOption = {
   name: string;
   slug: string;
 };
+
+type PlatformOrgWithCounts = PlatformOrg & {
+  counts?: { incidents30?: number; members?: number };
+  _count?: { members?: number; incidents?: number };
+};
+
+const memberCountOf = (org: PlatformOrgWithCounts) => org._count?.members ?? org.counts?.members ?? 0;
+const incidentCountOf = (org: PlatformOrgWithCounts) => org.counts?.incidents30 ?? org._count?.incidents ?? 0;
 
 
 const FIRST_STEPS_KEY = "incidentpulse.firstSteps.dismissed";
@@ -2125,6 +2138,7 @@ function DashboardPageContent() {
     | "audit"
     | "analytics"
     | "webhooks"
+    | "subscribers"
     | "billing"
     | "support"
     | "apiKeys"
@@ -2164,6 +2178,21 @@ function DashboardPageContent() {
     serviceId: ""
   });
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
+  const [subscriberSearch, setSubscriberSearch] = useState("");
+  const [subscriberVerifiedFilter, setSubscriberVerifiedFilter] = useState<"all" | "verified" | "pending">("all");
+  const [subscriberSort, setSubscriberSort] = useState<{ field: "email" | "createdAt" | "verifiedAt"; dir: "asc" | "desc" }>({
+    field: "createdAt",
+    dir: "desc"
+  });
+  const [subscriberPage, setSubscriberPage] = useState(1);
+  const [subscriberPageSize, setSubscriberPageSize] = useState(10);
+  const showAddSubscriber = false;
+  const [isAddSubscriberOpen, setIsAddSubscriberOpen] = useState(false);
+  const [newSubscriberEmail, setNewSubscriberEmail] = useState("");
+  const [limitSubscriberServices, setLimitSubscriberServices] = useState(false);
+  const [newSubscriberServiceIds, setNewSubscriberServiceIds] = useState<string[]>([]);
+  const [subscriberError, setSubscriberError] = useState<string | null>(null);
+  const [isCreatingSubscriber, setIsCreatingSubscriber] = useState(false);
 
   const { data: session } = useSession();
   useIncidentStream(Boolean(session));
@@ -2244,6 +2273,13 @@ function DashboardPageContent() {
       return next;
     });
   };
+  const handleSubscriberSort = (field: "email" | "createdAt" | "verifiedAt") => {
+    setSubscriberSort((prev) =>
+      prev.field === field
+        ? { field, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { field, dir: "asc" }
+    );
+  };
   const canCreate = Boolean(session && session.role !== "viewer");
   const firstName = session?.name?.split(" ")[0] || "Team";
   const integrationSettingsQuery = useIntegrationSettings(Boolean(isAdmin));
@@ -2272,6 +2308,11 @@ function DashboardPageContent() {
   const [newApiKeyName, setNewApiKeyName] = useState("");
   const [lastCreatedKey, setLastCreatedKey] = useState<string | null>(null);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const {
+    state: subscribersState,
+    refresh: refreshSubscribers,
+    remove: removeSubscriber
+  } = useStatusSubscribers();
 
   const incidentFilters = useMemo(
     () => ({
@@ -2293,6 +2334,65 @@ function DashboardPageContent() {
   useEffect(() => {
     setAuditPage(1);
   }, [auditActionFilter, auditSearch]);
+
+  const subscriberRows = useMemo(() => {
+    if (subscribersState.status !== "ready") return [];
+    return subscribersState.data
+      .filter((sub) => {
+        const matchesSearch = sub.email.toLowerCase().includes(subscriberSearch.toLowerCase());
+        const matchesVerified =
+          subscriberVerifiedFilter === "all"
+            ? true
+            : subscriberVerifiedFilter === "verified"
+              ? Boolean(sub.verifiedAt)
+              : !sub.verifiedAt;
+        return matchesSearch && matchesVerified;
+      })
+      .map((sub) => ({
+        ...sub,
+        verified: Boolean(sub.verifiedAt),
+        serviceLabel:
+          Array.isArray(sub.serviceIds) && sub.serviceIds.length > 0
+            ? (sub.serviceIds as string[]).join(", ")
+            : "All services"
+      }));
+  }, [subscribersState, subscriberSearch, subscriberVerifiedFilter]);
+
+  const sortedSubscribers = useMemo(() => {
+    const rows = [...subscriberRows];
+    rows.sort((a, b) => {
+      const dir = subscriberSort.dir === "asc" ? 1 : -1;
+      switch (subscriberSort.field) {
+        case "email":
+          return a.email.localeCompare(b.email) * dir;
+        case "verifiedAt":
+          return ((a.verifiedAt ? 1 : 0) - (b.verifiedAt ? 1 : 0)) * dir;
+        case "createdAt":
+        default:
+          return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
+      }
+    });
+    return rows;
+  }, [subscriberRows, subscriberSort]);
+
+  useEffect(() => {
+    setSubscriberPage(1);
+  }, [subscriberSearch, subscriberVerifiedFilter, subscriberPageSize]);
+
+  const subscriberTotal = sortedSubscribers.length;
+  const subscriberTotalPages = Math.max(1, Math.ceil(subscriberTotal / subscriberPageSize));
+
+  useEffect(() => {
+    if (subscriberPage > subscriberTotalPages) {
+      setSubscriberPage(subscriberTotalPages);
+    }
+  }, [subscriberPage, subscriberTotalPages]);
+
+  const subscriberPageStart = (subscriberPage - 1) * subscriberPageSize;
+  const pagedSubscribers = sortedSubscribers.slice(
+    subscriberPageStart,
+    subscriberPageStart + subscriberPageSize
+  );
 
   // Show the “secure your account” reminder once per user (and never for demo logins).
   useEffect(() => {
@@ -2512,16 +2612,121 @@ function DashboardPageContent() {
   const isTeamLoading = teamUsersQuery.isLoading && teamUsers.length === 0;
   const isTeamRefetching = teamUsersQuery.isFetching && !teamUsersQuery.isLoading;
   const { data: orgs = [] } = useOrganizations();
-  const platformOrgs = usePlatformOrgs(Boolean(session?.isSuperAdmin)).data ?? [];
+  const platformOrgsQuery = usePlatformOrgs(Boolean(session?.isSuperAdmin));
+  const platformOrgs = useMemo<PlatformOrgWithCounts[]>(
+    () => (platformOrgsQuery.data as PlatformOrgWithCounts[]) ?? [],
+    [platformOrgsQuery.data]
+  );
   const platformStaffQuery = usePlatformStaff(Boolean(session?.isSuperAdmin));
   const platformStaff = platformStaffQuery.data ?? [];
+  const updatePlatformOrgStatus = useUpdateOrgStatus();
+  const deletePlatformOrg = useDeleteOrg();
   const [metricsWindow, setMetricsWindow] = useState<"7" | "30" | "90">("30");
   const platformMetricsQuery = usePlatformMetrics(Boolean(session?.isSuperAdmin), Number(metricsWindow));
   const platformMetrics = platformMetricsQuery.data;
+  const [orgSearch, setOrgSearch] = useState("");
+  const [orgSort, setOrgSort] = useState<{ key: "created" | "name" | "members" | "incidents"; dir: "asc" | "desc" }>(
+    { key: "created", dir: "desc" }
+  );
+  const [orgPage, setOrgPage] = useState(1);
+  const [orgPageSize, setOrgPageSize] = useState(10);
+  const [orgDeleteTarget, setOrgDeleteTarget] = useState<PlatformOrgWithCounts | null>(null);
+  const [orgDeletePreview, setOrgDeletePreview] = useState<Record<string, number> | null>(null);
+  const [orgDeletePreviewLoading, setOrgDeletePreviewLoading] = useState(false);
+  const [orgDeletePreviewError, setOrgDeletePreviewError] = useState<string | null>(null);
   const currentOrg = useMemo(
     () => orgs.find((o) => o.id === session?.orgId),
     [orgs, session?.orgId]
   );
+
+  const filteredPlatformOrgs = useMemo(() => {
+    const term = orgSearch.trim().toLowerCase();
+    let list: PlatformOrgWithCounts[] = [...platformOrgs];
+    if (term) {
+      list = list.filter(
+        (o) =>
+          o.name.toLowerCase().includes(term) ||
+          o.slug?.toLowerCase().includes(term) ||
+          o.plan?.toLowerCase().includes(term)
+      );
+    }
+    list.sort((a, b) => {
+      const dir = orgSort.dir === "asc" ? 1 : -1;
+      switch (orgSort.key) {
+        case "name":
+          return a.name.localeCompare(b.name) * dir;
+        case "members": {
+          const aCount = a._count?.members ?? a.counts?.members ?? 0;
+          const bCount = b._count?.members ?? b.counts?.members ?? 0;
+          return (aCount - bCount) * dir;
+        }
+        case "incidents": {
+          const aCount = a.counts?.incidents30 ?? a._count?.incidents ?? 0;
+          const bCount = b.counts?.incidents30 ?? b._count?.incidents ?? 0;
+          return (aCount - bCount) * dir;
+        }
+        case "created":
+        default: {
+          const aDate = new Date(a.createdAt ?? "").getTime() || 0;
+          const bDate = new Date(b.createdAt ?? "").getTime() || 0;
+          return (aDate - bDate) * dir;
+        }
+      }
+    });
+    return list;
+  }, [platformOrgs, orgSearch, orgSort]);
+
+  const totalOrgPages = Math.max(1, Math.ceil(filteredPlatformOrgs.length / orgPageSize));
+  const pagedPlatformOrgs = useMemo(() => {
+    const start = (orgPage - 1) * orgPageSize;
+    return filteredPlatformOrgs.slice(start, start + orgPageSize);
+  }, [filteredPlatformOrgs, orgPage, orgPageSize]);
+
+  useEffect(() => {
+    setOrgPage(1);
+  }, [orgSearch, orgSort, orgPageSize]);
+
+  useEffect(() => {
+    if (orgPage > totalOrgPages) {
+      setOrgPage(totalOrgPages);
+    }
+  }, [orgPage, totalOrgPages]);
+
+  useEffect(() => {
+    const target = orgDeleteTarget;
+    if (!target) {
+      setOrgDeletePreview(null);
+      setOrgDeletePreviewError(null);
+      return;
+    }
+    setOrgDeletePreviewLoading(true);
+    setOrgDeletePreviewError(null);
+    apiClient
+      .get(`/platform/organizations/${target.id}/delete-preview`)
+      .then((res) => setOrgDeletePreview(res.data?.data?.counts ?? null))
+      .catch((err) => {
+        const msg =
+          isAxiosError(err) && err.response?.data?.message
+            ? err.response.data.message
+            : err instanceof Error
+              ? err.message
+              : "Failed to load preview.";
+        setOrgDeletePreviewError(msg);
+      })
+      .finally(() => setOrgDeletePreviewLoading(false));
+  }, [orgDeleteTarget]);
+
+  const handleTogglePlatformOrgStatus = async (org: PlatformOrgWithCounts) => {
+    const nextStatus = org.status === "suspended" ? "active" : "suspended";
+    await updatePlatformOrgStatus.mutateAsync({ orgId: org.id, status: nextStatus });
+  };
+
+  const handleDeletePlatformOrg = async (org: PlatformOrgWithCounts) => {
+    await deletePlatformOrg.mutateAsync(org.id);
+    setOrgDeleteTarget(null);
+    setOrgDeletePreview(null);
+    setOrgDeletePreviewError(null);
+  };
 
   useEffect(() => {
     if (incidentIdFromQuery) setSelectedIncidentId(incidentIdFromQuery);
@@ -2614,6 +2819,7 @@ function DashboardPageContent() {
           { id: "audit", name: "System Audit", description: "Track logins & changes", icon: "AUD" },
           { id: "analytics", name: "Analytics", description: "Trends & reporting", icon: "DATA" },
           { id: "webhooks", name: "Automation", description: "Webhooks & notifications", icon: "AUTO" },
+          { id: "subscribers", name: "Status subscribers", description: "Status email subscribers", icon: "BELL" },
           { id: "billing", name: "Billing", description: "Plan & usage", icon: "BILL" },
           {
             id: "support",
@@ -2667,6 +2873,8 @@ function DashboardPageContent() {
         return <ChartBarIcon className={`${base} ${cls}`} />;
       case "webhooks":
         return <CpuChipIcon className={`${base} ${cls}`} />;
+      case "subscribers":
+        return <BellAlertIcon className={`${base} ${cls}`} />;
       case "billing":
         return <CreditCardIcon className={`${base} ${cls}`} />;
       case "support":
@@ -4065,6 +4273,16 @@ function DashboardPageContent() {
                             value={platformMetrics.totals.incidentsWindow.toString()}
                             description={`Created last ${metricsWindow}d`}
                           />
+                          <StatCard
+                            label="Pending tickets"
+                            value={platformMetrics.totals.pendingTickets?.toString() ?? "0"}
+                            description="Awaiting response"
+                          />
+                          <StatCard
+                            label="Open tickets"
+                            value={platformMetrics.totals.openTickets?.toString() ?? "0"}
+                            description="Currently open"
+                          />
                         </div>
                       );
                     })()}
@@ -4106,6 +4324,203 @@ function DashboardPageContent() {
                 ) : (
                   <p className="text-sm text-gray-400">No metrics available.</p>
                 )}
+
+                <div className="mt-6 border border-gray-700 rounded-xl bg-gray-900/40 p-4 md:p-6 shadow-lg">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between border-b border-gray-700 pb-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-blue-300">Organizations</p>
+                      <h3 className="text-xl font-bold text-white">Tenant directory</h3>
+                      <p className="text-sm text-gray-300">Search, sort, and manage all organizations.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-gray-300">
+                        Page size
+                        <select
+                          value={orgPageSize}
+                          onChange={(e) => setOrgPageSize(Number(e.target.value) || 10)}
+                          className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                        >
+                          {[5, 10, 20, 50].map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="relative">
+                        <MagnifyingGlassIcon className="h-4 w-4 absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+                        <input
+                          value={orgSearch}
+                          onChange={(e) => setOrgSearch(e.target.value)}
+                          placeholder="Search orgs"
+                          className="pl-7 pr-3 py-2 rounded-lg border border-gray-700 bg-gray-900 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="min-w-full text-sm text-gray-200">
+                      <thead className="text-xs uppercase text-gray-400">
+                        <tr className="border-b border-gray-700/60">
+                          {[
+                            { key: "name", label: "Organization" },
+                            { key: "created", label: "Created" },
+                            { key: "members", label: "Members" },
+                            { key: "incidents", label: "Incidents" },
+                            { key: "status", label: "Status" },
+                            { key: "plan", label: "Plan" },
+                            { key: "actions", label: "Actions" }
+                          ].map((col) => (
+                            <th
+                              key={col.key}
+                              className="px-3 py-2 text-left cursor-pointer select-none"
+                              onClick={() => {
+                                if (col.key === "actions" || col.key === "status" || col.key === "plan") return;
+                                setOrgSort((prev) => {
+                                  const dir =
+                                    prev.key === col.key && prev.dir === "asc" ? "desc" : "asc";
+                                  return {
+                                    key: col.key as "name" | "created" | "members" | "incidents",
+                                    dir
+                                  };
+                                });
+                              }}
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                {col.label}
+                                {["name", "created", "members", "incidents"].includes(col.key) && (
+                                  <span className="text-[10px] opacity-60">
+                                    {orgSort.key === col.key ? (orgSort.dir === "asc" ? "▲" : "▼") : ""}
+                                  </span>
+                                )}
+                              </span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedPlatformOrgs.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-3 py-4 text-center text-gray-400">
+                              No organizations found.
+                            </td>
+                          </tr>
+                        ) : (
+                          pagedPlatformOrgs.map((org) => {
+                            const memberCount = memberCountOf(org);
+                            const incidentCount = incidentCountOf(org);
+                            const createdLabel = org.createdAt
+                              ? format(new Date(org.createdAt), "MMM d, yyyy")
+                              : "—";
+                            const isSuspended = org.status === "suspended" || org.isDeleted;
+                            return (
+                              <tr key={org.id} className="border-b border-gray-800/70">
+                                <td className="px-3 py-3">
+                                  <div className="font-semibold text-white">{org.name}</div>
+                                  <div className="text-xs text-gray-400">{org.slug}</div>
+                                </td>
+                                <td className="px-3 py-3">{createdLabel}</td>
+                                <td className="px-3 py-3">{memberCount}</td>
+                                <td className="px-3 py-3">{incidentCount}</td>
+                                <td className="px-3 py-3">
+                                  <span
+                                    className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                                      isSuspended
+                                        ? "bg-amber-900/40 text-amber-200 border border-amber-700/60"
+                                        : "bg-emerald-900/40 text-emerald-200 border border-emerald-700/60"
+                                    }`}
+                                  >
+                                    {isSuspended ? "Suspended" : "Active"}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-3 capitalize">{org.plan}</td>
+                                <td className="px-3 py-3 space-x-2 whitespace-nowrap">
+                                  <button
+                                    onClick={() => handleTogglePlatformOrgStatus(org)}
+                                    className="rounded-lg border border-gray-700 px-3 py-1 text-xs font-semibold hover:border-blue-500 hover:text-white"
+                                  >
+                                    {isSuspended ? "Activate" : "Suspend"}
+                                  </button>
+                                  <button
+                                    onClick={() => setOrgDeleteTarget(org)}
+                                    className="rounded-lg border border-red-700 px-3 py-1 text-xs font-semibold text-red-300 hover:border-red-500 hover:text-red-200"
+                                  >
+                                    Delete
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-300">
+                    <div>
+                      Page {orgPage} of {totalOrgPages} · {filteredPlatformOrgs.length} orgs
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setOrgPage((p) => Math.max(1, p - 1))}
+                        disabled={orgPage <= 1}
+                        className="rounded-lg border border-gray-700 px-3 py-1 font-semibold hover:border-blue-500 disabled:opacity-50"
+                      >
+                        Prev
+                      </button>
+                      <button
+                        onClick={() => setOrgPage((p) => Math.min(totalOrgPages, p + 1))}
+                        disabled={orgPage >= totalOrgPages}
+                        className="rounded-lg border border-gray-700 px-3 py-1 font-semibold hover:border-blue-500 disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+
+                  {orgDeleteTarget && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+                      <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
+                        <h4 className="text-lg font-bold text-white mb-2">Delete organization</h4>
+                        <p className="text-sm text-gray-300 mb-3">
+                          Permanently delete <strong>{orgDeleteTarget.name}</strong> and all of its data
+                          (incidents, maintenance, tickets, members, services). This cannot be undone.
+                        </p>
+                        <div className="rounded-lg border border-gray-700 bg-gray-950/60 p-3 text-sm text-gray-200 mb-3">
+                          {orgDeletePreviewLoading && <p>Loading impact…</p>}
+                          {orgDeletePreviewError && (
+                            <p className="text-red-300">Preview failed: {orgDeletePreviewError}</p>
+                          )}
+                          {orgDeletePreview && (
+                            <div className="space-y-1">
+                              {Object.entries(orgDeletePreview).map(([key, val]) => (
+                                <div key={key} className="flex justify-between">
+                                  <span className="capitalize text-gray-400">{key.replace(/([A-Z])/g, " $1")}</span>
+                                  <span className="font-semibold text-white">{val}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => setOrgDeleteTarget(null)}
+                            className="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-200 hover:border-gray-400"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleDeletePlatformOrg(orgDeleteTarget)}
+                            className="rounded-lg border border-red-600 bg-red-700/20 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-700/40"
+                          >
+                            Delete permanently
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -4364,6 +4779,331 @@ function DashboardPageContent() {
                     onSave={handleSaveIntegrationSettings}
                     isSaving={updateIntegrationSettings.isPending}
                   />
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'subscribers' && isAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-gray-700 pb-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-blue-300">Status</p>
+                    <h2 className="text-2xl font-bold text-white">Status subscribers</h2>
+                    <p className="text-sm text-gray-400">
+                      People who opted-in to receive incident and maintenance updates for this workspace.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-400">Search</label>
+                      <div className="relative">
+                        <MagnifyingGlassIcon className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+                        <input
+                          type="text"
+                          value={subscriberSearch}
+                          onChange={(e) => setSubscriberSearch(e.target.value)}
+                          className="w-44 rounded-lg border border-gray-700 bg-gray-900 pl-8 pr-2 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Email"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-400">Status</label>
+                      <select
+                        value={subscriberVerifiedFilter}
+                        onChange={(e) =>
+                          setSubscriberVerifiedFilter(e.target.value as "all" | "verified" | "pending")
+                        }
+                        className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="all">All</option>
+                        <option value="verified">Verified</option>
+                        <option value="pending">Pending</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-400">Page size</label>
+                      <select
+                        value={subscriberPageSize}
+                        onChange={(e) => setSubscriberPageSize(Number(e.target.value))}
+                        className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {[5, 10, 20, 50].map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={refreshSubscribers}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-700 px-3 py-2 text-sm font-semibold text-gray-200 hover:bg-gray-700"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                {subscribersState.status === "loading" && (
+                  <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 text-sm text-gray-300">
+                    Loading subscribers...
+                  </div>
+                )}
+
+                {subscribersState.status === "error" && (
+                  <div className="rounded-lg border border-red-700 bg-red-900/40 p-4 text-sm text-red-200">
+                    Failed to load subscribers: {subscribersState.message}
+                  </div>
+                )}
+
+                {subscribersState.status === "ready" && (
+                  <>
+                    {subscribersState.data.length === 0 ? (
+                      <div className="rounded-lg border border-gray-700 bg-gray-900 p-4 text-sm text-gray-300">
+                        No subscribers yet. People can subscribe from the public status embed.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900">
+                        <table className="min-w-full divide-y divide-gray-700 text-sm text-gray-200">
+                          <thead className="bg-gray-800/80">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1"
+                                  onClick={() => handleSubscriberSort("email")}
+                                >
+                                  Email
+                                  {subscriberSort.field === "email" ? (
+                                    <span className="text-[11px] text-gray-400">
+                                      {subscriberSort.dir === "asc" ? "▲" : "▼"}
+                                    </span>
+                                  ) : null}
+                                </button>
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                                Services
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1"
+                                  onClick={() => handleSubscriberSort("verifiedAt")}
+                                >
+                                  Status
+                                  {subscriberSort.field === "verifiedAt" ? (
+                                    <span className="text-[11px] text-gray-400">
+                                      {subscriberSort.dir === "asc" ? "▲" : "▼"}
+                                    </span>
+                                  ) : null}
+                                </button>
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1"
+                                  onClick={() => handleSubscriberSort("createdAt")}
+                                >
+                                  Created
+                                  {subscriberSort.field === "createdAt" ? (
+                                    <span className="text-[11px] text-gray-400">
+                                      {subscriberSort.dir === "asc" ? "▲" : "▼"}
+                                    </span>
+                                  ) : null}
+                                </button>
+                              </th>
+                              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-800">
+                            {pagedSubscribers.map((sub) => (
+                              <tr key={sub.id} className="hover:bg-gray-800/60">
+                                <td className="px-4 py-3">{sub.email}</td>
+                                <td className="px-4 py-3 text-gray-300">{sub.serviceLabel}</td>
+                                <td className="px-4 py-3">
+                                  {sub.verified ? (
+                                    <span className="rounded-full bg-emerald-900/60 px-3 py-1 text-xs font-semibold text-emerald-200">
+                                      Verified
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-amber-900/60 px-3 py-1 text-xs font-semibold text-amber-200">
+                                      Pending
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-gray-300">
+                                  {new Date(sub.createdAt).toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSubscriber(sub.id)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-1 text-xs font-semibold text-gray-200 hover:bg-gray-700"
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {subscribersState.data.length > 0 && (
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="text-xs text-gray-400">
+                          Showing {(subscriberPage - 1) * subscriberPageSize + 1}-
+                          {Math.min(subscriberPage * subscriberPageSize, subscriberTotal)} of {subscriberTotal}
+                        </div>
+                        <Pagination
+                          page={subscriberPage}
+                          pageSize={subscriberPageSize}
+                          total={subscriberTotal}
+                          onPageChange={setSubscriberPage}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+                  <div className="hidden mt-6 rounded-xl border border-gray-700 bg-gray-900 p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-400">Add subscriber</p>
+                      <p className="text-sm text-gray-300">
+                        Manually add a subscriber (verified immediately). They will receive incident and maintenance updates.
+                      </p>
+                    </div>
+                      {showAddSubscriber ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddSubscriberOpen(true);
+                            setSubscriberError(null);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg border border-gray-700 px-3 py-2 text-sm font-semibold text-gray-200 hover:bg-gray-700"
+                        >
+                          <PlusIcon className="h-4 w-4" />
+                          New subscriber
+                        </button>
+                      ) : null}
+                  </div>
+                  {subscriberError ? (
+                    <div className="rounded-lg border border-red-700 bg-red-900/40 px-3 py-2 text-sm text-red-200">
+                      {subscriberError}
+                    </div>
+                  ) : null}
+                    {showAddSubscriber && isAddSubscriberOpen && (
+                      <div className="rounded-lg border border-gray-700 bg-gray-950 p-4 space-y-4">
+                      <div>
+                        <label className="text-xs font-semibold text-gray-300">Email</label>
+                        <input
+                          type="email"
+                          value={newSubscriberEmail}
+                          onChange={(e) => setNewSubscriberEmail(e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="subscriber@example.com"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm text-gray-200">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-gray-600 bg-gray-800"
+                            checked={limitSubscriberServices}
+                            onChange={(e) => {
+                              setLimitSubscriberServices(e.target.checked);
+                              if (!e.target.checked) setNewSubscriberServiceIds([]);
+                            }}
+                          />
+                          Limit to specific services
+                        </label>
+                        {limitSubscriberServices && (
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {serviceOptions.map((svc) => {
+                              const checked = newSubscriberServiceIds.includes(svc.id);
+                              return (
+                                <label
+                                  key={svc.id}
+                                  className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-2 py-2 text-sm text-gray-200"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-600 bg-gray-800"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setNewSubscriberServiceIds((prev) => [...prev, svc.id]);
+                                      } else {
+                                        setNewSubscriberServiceIds((prev) => prev.filter((id) => id !== svc.id));
+                                      }
+                                    }}
+                                  />
+                                  {svc.name}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          disabled={isCreatingSubscriber}
+                          onClick={async () => {
+                            setSubscriberError(null);
+                            if (!newSubscriberEmail.trim()) {
+                              setSubscriberError("Email is required");
+                              return;
+                            }
+                            try {
+                              setIsCreatingSubscriber(true);
+                                const res = await fetch("/status-subscribers", {
+                                  method: "POST",
+                                  credentials: "include",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  email: newSubscriberEmail.trim(),
+                                  serviceIds: limitSubscriberServices ? newSubscriberServiceIds : undefined,
+                                  verifyNow: true
+                                })
+                              });
+                              if (!res.ok) {
+                                const json = await res.json().catch(() => ({}));
+                                throw new Error(json.message || `Failed (${res.status})`);
+                              }
+                              setIsAddSubscriberOpen(false);
+                              setNewSubscriberEmail("");
+                              setNewSubscriberServiceIds([]);
+                              setLimitSubscriberServices(false);
+                              refreshSubscribers();
+                            } catch (err: unknown) {
+                              const msg = err instanceof Error ? err.message : "Failed to create subscriber";
+                              setSubscriberError(msg);
+                            } finally {
+                              setIsCreatingSubscriber(false);
+                            }
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+                        >
+                          {isCreatingSubscriber ? "Creating..." : "Create subscriber"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddSubscriberOpen(false);
+                            setSubscriberError(null);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold text-gray-200 hover:bg-gray-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -4712,3 +5452,8 @@ export default function DashboardPage() {
     </Suspense>
   );
 }
+
+
+
+
+
