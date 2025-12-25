@@ -20,19 +20,29 @@ function makeToken(): string {
 export async function createSubscriber(input: SubscriberCreateInput) {
   const token = makeToken();
   const serviceIds = input.serviceIds && input.serviceIds.length ? input.serviceIds : null;
-    const normalizedEmail = input.email.toLowerCase();
+  const normalizedEmail = input.email.toLowerCase();
+  const org = await prisma.organization.findUnique({
+    where: { id: input.organizationId },
+    select: { name: true, slug: true }
+  });
   const existing = await (prisma as any).statusSubscriber.findFirst({
     where: { organizationId: input.organizationId, email: normalizedEmail }
   });
 
   let subscriber;
-  if (existing) {
+  // Already verified: don’t resend, just return a marker
+  if (existing && existing.verifiedAt) {
+    return { alreadyVerified: true, subscriber: existing };
+  }
+
+  // Pending: resend token, keep serviceIds up to date
+  if (existing && !existing.verifiedAt) {
     subscriber = await (prisma as any).statusSubscriber.update({
       where: { id: existing.id },
       data: {
         serviceIds,
         verificationToken: input.verifyNow ? null : token,
-        verifiedAt: input.verifyNow ? new Date() : existing.verifiedAt ?? null
+        verifiedAt: input.verifyNow ? new Date() : null
       }
     });
   } else {
@@ -48,15 +58,17 @@ export async function createSubscriber(input: SubscriberCreateInput) {
   }
 
   if (!input.verifyNow && !input.skipEmail) {
-    const verifyUrl = `${env.FRONTEND_URL}/public/status/verify?token=${token}`;
+    const baseUrl = (env as any).BACKEND_URL || env.FRONTEND_URL || "";
+    const verifyUrl = `${baseUrl}/public/status/verify?token=${token}`;
+    const orgName = org?.name ?? "your organization";
     await sendMail({
       to: subscriber.email,
-      subject: "Confirm your status subscription",
-      text: `Please confirm your subscription to status updates.\n\nConfirm: ${verifyUrl}\n\nIf you did not request this, you can ignore this email.`
+      subject: `[${orgName}] Confirm your status subscription`,
+      text: `Please confirm your subscription to ${orgName} status updates.\n\nConfirm: ${verifyUrl}\n\nIf you did not request this, you can ignore this email.`
     });
   }
 
-  return subscriber;
+  return { subscriber, alreadyVerified: false, pendingVerification: !input.verifyNow };
 }
 
 export async function verifySubscriber(token: string) {
@@ -65,13 +77,30 @@ export async function verifySubscriber(token: string) {
   });
   if (!subscriber) return null;
 
-  return (prisma as any).statusSubscriber.update({
+  const updated = await (prisma as any).statusSubscriber.update({
     where: { id: subscriber.id },
     data: {
       verifiedAt: new Date(),
       verificationToken: null
     }
   });
+
+  const org = await prisma.organization.findUnique({
+    where: { id: updated.organizationId },
+    select: { id: true, name: true, slug: true }
+  });
+
+  const branding = await prisma.integrationSettings.findUnique({
+    where: { organizationId: updated.organizationId },
+    select: {
+      statusLogoUrl: true,
+      statusPrimaryColor: true,
+      statusTextColor: true,
+      statusBackgroundColor: true
+    }
+  });
+
+  return { subscriber: updated, org, branding };
 }
 
 export async function unsubscribeSubscriber(token: string) {

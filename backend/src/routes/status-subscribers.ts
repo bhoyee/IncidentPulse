@@ -4,35 +4,8 @@ import { createSubscriber, listSubscribersForOrg, unsubscribeSubscriber, verifyS
 import { DEFAULT_ORG_ID, findOrgIdBySlug } from "../lib/org";
 
 const statusSubscriberRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.addHook("onRequest", async (_request, reply) => {
-    reply.header("Access-Control-Allow-Origin", "*");
-    reply.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    reply.header("Access-Control-Allow-Headers", "Content-Type, Origin, Accept");
-    reply.raw.setHeader("Access-Control-Allow-Origin", "*");
-    reply.raw.setHeader("Vary", "Origin");
-  });
-
-  // Preflight for public subscribe
-  fastify.options("/status/subscribe", async (request, reply) => {
-    const origin = (request.headers.origin as string | undefined) || "*";
-    reply
-      .header("Access-Control-Allow-Origin", origin)
-      .header("Access-Control-Allow-Methods", "POST, OPTIONS")
-      .header("Access-Control-Allow-Headers", "Content-Type, Origin, Accept")
-      .header("Vary", "Origin");
-    reply.raw.setHeader("Access-Control-Allow-Origin", "*");
-    reply.send();
-  });
-
   // Public subscribe
   fastify.post("/status/subscribe", async (request, reply) => {
-    const origin = (request.headers.origin as string | undefined) || "*";
-    reply.header("Access-Control-Allow-Origin", origin);
-    reply.header("Access-Control-Allow-Methods", "POST, OPTIONS");
-    reply.header("Access-Control-Allow-Headers", "Content-Type, Origin, Accept");
-    reply.header("Vary", "Origin");
-    reply.raw.setHeader("Access-Control-Allow-Origin", "*");
-
     const body = request.body as {
       email?: string;
       orgId?: string;
@@ -48,12 +21,18 @@ const statusSubscriberRoutes: FastifyPluginAsync = async (fastify) => {
     if (!orgId) orgId = body.orgId ?? DEFAULT_ORG_ID;
 
     try {
-      await createSubscriber({
+      const result = await createSubscriber({
         organizationId: orgId,
         email: body.email,
         serviceIds: Array.isArray(body.serviceIds) ? body.serviceIds : undefined
       });
-      return reply.send({ error: false, message: "Check your email to verify subscription" });
+      if ((result as any).alreadyVerified) {
+        return reply.send({ error: false, message: "You are already subscribed." });
+      }
+      if ((result as any).pendingVerification) {
+        return reply.send({ error: false, message: "Check your email to verify subscription" });
+      }
+      return reply.send({ error: false, message: "Subscribed" });
     } catch (err) {
       request.log.error({ err }, "subscribe failed");
       return reply.code(500).send({ error: true, message: "Subscription failed" });
@@ -62,23 +41,23 @@ const statusSubscriberRoutes: FastifyPluginAsync = async (fastify) => {
 
   // Public verify
   fastify.get("/status/verify", async (request, reply) => {
-    reply.header("Access-Control-Allow-Origin", "*");
-    reply.header("Access-Control-Allow-Methods", "GET, OPTIONS");
-    reply.header("Access-Control-Allow-Headers", "Content-Type");
     const { token } = (request.query as { token?: string }) ?? {};
     if (!token) {
       return reply.code(400).send({ error: true, message: "Missing token" });
     }
-    const updated = await verifySubscriber(token);
-    if (!updated) return reply.code(400).send({ error: true, message: "Invalid or used token" });
-    return reply.send({ error: false, message: "Subscription verified" });
+    const result = await verifySubscriber(token);
+    if (!result) return reply.code(400).send({ error: true, message: "Invalid or used token" });
+    return reply.send({
+      error: false,
+      message: "Subscription verified",
+      orgSlug: result.org?.slug,
+      orgName: result.org?.name,
+      branding: result.branding
+    });
   });
 
   // Public unsubscribe
   fastify.post("/status/unsubscribe", async (request, reply) => {
-    reply.header("Access-Control-Allow-Origin", "*");
-    reply.header("Access-Control-Allow-Methods", "POST, OPTIONS");
-    reply.header("Access-Control-Allow-Headers", "Content-Type");
     const body = request.body as { token?: string };
     if (!body?.token) return reply.code(400).send({ error: true, message: "Missing token" });
     const removed = await unsubscribeSubscriber(body.token);

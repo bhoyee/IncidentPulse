@@ -13,7 +13,8 @@ import {
   notifyAdminsOfIncident,
   notifyAssigneeOfAssignment,
   notifyAssigneeOfResolution,
-  notifyIncidentIntegrations
+  notifyIncidentIntegrations,
+  notifyStatusSubscribers
 } from "../lib/incident-notifier";
 import {
   buildAttachmentUrl,
@@ -335,6 +336,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
       if (!isSimulated) {
         await notifyAdminsOfIncident(fastify.log, incident, admins);
         await notifyIncidentIntegrations(fastify.log, incident, "created");
+        await notifyStatusSubscribers(fastify.log, incident, "created");
       }
       await recordAuditLog({
         action: "incident_created",
@@ -645,6 +647,7 @@ const incidentsRoutes: FastifyPluginAsync = async (fastify) => {
         const resolutionTime = incident.resolvedAt ?? now;
         await notifyAssigneeOfResolution(fastify.log, incident, resolutionTime);
         await notifyIncidentIntegrations(fastify.log, incident, "resolved", { resolutionTime });
+        await notifyStatusSubscribers(fastify.log, incident, "resolved");
         await recordAuditLog({
           action: "incident_resolved",
           actorId: request.user.id,

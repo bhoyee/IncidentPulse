@@ -5,11 +5,26 @@ import { sendMail } from "./mailer";
 import { env } from "../env";
 import { DEFAULT_ORG_ID } from "./org";
 import { getIntegrationSettings } from "./integration-settings";
+import {
+  filterSubscribersForService,
+  getVerifiedSubscribersForOrg
+} from "./status-subscribers";
+
+const subscriberSendCache = new Map<string, number>();
+function canSendSubscriberEmail(key: string, ttlMs = 30 * 60 * 1000) {
+  const now = Date.now();
+  const last = subscriberSendCache.get(key);
+  if (last && now - last < ttlMs) return false;
+  subscriberSendCache.set(key, now);
+  return true;
+}
 
 export const incidentNotificationInclude = {
   organization: {
     select: {
-      id: true
+      id: true,
+      name: true,
+      slug: true
     }
   },
   assignedTo: {
@@ -245,6 +260,53 @@ export async function notifyIncidentIntegrations(
       metadata
     )
   ]);
+}
+
+export async function notifyStatusSubscribers(
+  logger: FastifyBaseLogger,
+  incident: IncidentNotificationContext,
+  event: "created" | "resolved" | "updated"
+): Promise<void> {
+  const orgId = incident.organization?.id ?? DEFAULT_ORG_ID;
+  const cacheKey = `${incident.id}:${event}`;
+  if (!canSendSubscriberEmail(cacheKey)) return;
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { id: true, name: true, slug: true }
+    });
+    if (!org) return;
+
+    const subs = await getVerifiedSubscribersForOrg(org.id);
+    const filtered: { email: string; serviceIds?: unknown }[] = incident.service?.id
+      ? filterSubscribersForService(subs, incident.service.id)
+      : subs;
+    if (!filtered.length) return;
+
+    const statusUrl = `${env.FRONTEND_URL}/status?orgSlug=${org.slug}`;
+    const subject = `[${org.name}] Incident ${event}: ${incident.title}`;
+    const lines = [
+      `Incident: ${incident.title}`,
+      `Service: ${incident.service?.name ?? "Unassigned service"}`,
+      `Severity: ${incident.severity}`,
+      `Status: ${incident.status}`,
+      event === "resolved" && incident.resolvedAt
+        ? `Resolved at: ${incident.resolvedAt.toISOString()}`
+        : undefined,
+      incident.rootCause ? `Root cause: ${incident.rootCause}` : undefined,
+      incident.resolutionSummary ? `Resolution: ${incident.resolutionSummary}` : undefined,
+      "",
+      `View status page: ${statusUrl}`
+    ].filter(Boolean);
+
+    await sendMail({
+      to: filtered.map((s) => s.email),
+      subject,
+      text: lines.join("\n")
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Failed to notify subscribers");
+  }
 }
 
 async function sendSlackNotification(

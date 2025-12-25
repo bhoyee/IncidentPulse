@@ -14,6 +14,7 @@ import {
 import { recordAuditLog } from "../lib/audit";
 import { refreshStatusCache } from "../lib/status";
 import { getRequestOrgId } from "../lib/org";
+import { notifyMaintenanceSubscribers } from "../lib/status-subscribers";
 
 const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
   const refreshStatusSnapshot = async () => {
@@ -140,6 +141,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       await refreshStatusSnapshot();
+      await notifyMaintenanceSubscribers(fastify.log, event);
       return reply.status(201).send({
         error: false,
         data: serializeMaintenanceEvent(event)
@@ -227,6 +229,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       await refreshStatusSnapshot();
+      await notifyMaintenanceSubscribers(fastify.log, event);
       return reply.send({
         error: false,
         data: serializeMaintenanceEvent(event)
@@ -281,6 +284,7 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       await refreshStatusSnapshot();
+      await notifyMaintenanceSubscribers(fastify.log, updated);
       return reply.send({
         error: false,
         data: serializeMaintenanceEvent(updated)
