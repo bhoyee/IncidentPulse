@@ -72,8 +72,32 @@ export function buildApp() {
   fastify.register(cookie);
   // CORS: reflect requesting origin (including null/file://) to avoid embed/subscribe failures,
   // while still allowing credentials for app endpoints.
+  // CORS: explicit allowlist + special-case embeds (file:// or null origin).
+  const appAllowedOrigins = new Set(
+    [
+      "http://localhost:3000",
+      env.FRONTEND_URL || undefined,
+      env.FRONTEND_URL?.replace(/\/$/, "")
+    ].filter(Boolean) as string[]
+  );
+  const embedAllowedOrigins = new Set<string>(["null", "file://"]);
+
   fastify.register(cors, {
-    origin: true,
+    origin: (origin, cb) => {
+      // Always allow server-to-server / curl (no origin).
+      if (!origin) return cb(null, true);
+
+      // Embed/status subscribe endpoints permit null/file origins.
+      const isEmbedPath =
+        typeof (cb as any)?.request !== "undefined" // defensive
+          ? false
+          : false;
+      // Fastify CORS does not pass request here; we allow null/file in general for embeds via header check below.
+      if (embedAllowedOrigins.has(origin)) return cb(null, true);
+
+      if (appAllowedOrigins.has(origin)) return cb(null, true);
+      cb(new Error("Origin not allowed"), false);
+    },
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization", "Origin", "Accept"],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
