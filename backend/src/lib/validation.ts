@@ -165,6 +165,43 @@ export const statusSubscriberDeleteParamsSchema = z.object({
   id: z.string().uuid()
 });
 
+// Support schemas
+export const supportCreateTicketSchema = z
+  .object({
+    subject: z.string().min(3).max(300),
+    body: z.string().min(3).max(5000),
+    priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+    category: z.string().min(2).max(120).optional()
+  })
+  .strict();
+
+export const supportQuerySchema = z
+  .object({
+    status: z.enum(["open", "pending", "closed"]).optional(),
+    priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+    q: z.string().min(1).max(200).optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(10)
+  })
+  .strict();
+
+export const supportStatusUpdateSchema = z
+  .object({
+    status: z.enum(["open", "pending", "closed"])
+  })
+  .strict();
+
+export const supportCommentSchema = z
+  .object({
+    body: z.string().min(1).max(5000),
+    isInternal: z.boolean().optional()
+  })
+  .strict();
+
+export const supportIdParamsSchema = z.object({
+  ticketId: z.string().uuid()
+});
+
 const maintenanceBaseSchema = z
   .object({
     title: z.string().min(3).max(120),

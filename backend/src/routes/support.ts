@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import { prisma } from "../lib/db";
 import {
   persistSupportAttachment,
@@ -13,6 +14,13 @@ import {
 } from "../lib/support-notifier";
 import { emitSupportEvent, onSupportEvent } from "../lib/realtime";
 import { env } from "../env";
+import {
+  supportCommentSchema,
+  supportCreateTicketSchema,
+  supportIdParamsSchema,
+  supportQuerySchema,
+  supportStatusUpdateSchema
+} from "../lib/validation";
 
 type TicketPayload = {
   subject: string;
@@ -22,6 +30,27 @@ type TicketPayload = {
 };
 
 const supportRoutes: FastifyPluginAsync = async (fastify) => {
+  const parseTicketParams = (request: any) => {
+    const parsed = supportIdParamsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      throw fastify.httpErrors.badRequest("Invalid ticket id");
+    }
+    return parsed.data;
+  };
+
+  const parseCommentBody = (request: any) => {
+    const parsed = supportCommentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw fastify.httpErrors.badRequest("Comment body is required");
+    }
+    return parsed.data;
+  };
+
+  const requireOrg = (orgId?: string | null) => {
+    if (!orgId) {
+      throw fastify.httpErrors.badRequest("Missing org context");
+    }
+  };
   // Authentication for support routes; inbound webhook bypasses JWT if secret is valid.
   fastify.addHook("preHandler", async (request, reply) => {
     const path = request.routerPath || request.raw.url || "";
@@ -180,16 +209,11 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       if (!request.user.orgId) {
         throw fastify.httpErrors.badRequest("Missing org context");
       }
-      const { status, priority, q, page = "1", pageSize = "10" } = request.query as {
-        status?: string;
-        priority?: string;
-        q?: string;
-        page?: string;
-        pageSize?: string;
-      };
-
-      const pageNum = Math.max(1, parseInt(page || "1", 10) || 1);
-      const sizeNum = Math.min(50, Math.max(1, parseInt(pageSize || "10", 10) || 10));
+      const parsed = supportQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        throw fastify.httpErrors.badRequest("Invalid filters");
+      }
+      const { status, priority, q, page: pageNum, pageSize: sizeNum } = parsed.data;
 
       const whereClause: any = {
         organizationId: request.user.orgId,
@@ -238,13 +262,12 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       }
     },
     async (request) => {
-    if (!request.user.orgId) {
-      throw fastify.httpErrors.badRequest("Missing org context");
-    }
-    const payload = request.body as TicketPayload;
-    if (!payload?.subject || !payload?.body) {
-      throw fastify.httpErrors.badRequest("Subject and body are required");
-    }
+      requireOrg(request.user.orgId);
+      const parsed = supportCreateTicketSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw fastify.httpErrors.badRequest("Subject and body are required");
+      }
+      const payload = parsed.data;
     const ticket = await prisma.supportTicket.create({
       data: {
         subject: payload.subject.trim(),
@@ -274,11 +297,9 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       }
     },
     async (request) => {
-    const { ticketId } = request.params as { ticketId: string };
-    const { status } = request.body as { status: "open" | "pending" | "closed" };
-    if (!request.user.orgId) {
-      throw fastify.httpErrors.badRequest("Missing org context");
-    }
+      const { ticketId } = parseTicketParams(request);
+      const { status } = supportStatusUpdateSchema.parse(request.body);
+      requireOrg(request.user.orgId);
     if (request.user.role !== "admin") {
       throw fastify.httpErrors.forbidden();
     }
@@ -312,10 +333,8 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       }
     },
     async (request) => {
-      const { ticketId } = request.params as { ticketId: string };
-      if (!request.user.orgId) {
-        throw fastify.httpErrors.badRequest("Missing org context");
-      }
+      const { ticketId } = parseTicketParams(request);
+      requireOrg(request.user.orgId);
       const ticket = await prisma.supportTicket.findFirst({
         where: { id: ticketId, organizationId: request.user.orgId },
         select: { id: true, status: true, createdById: true }
@@ -347,14 +366,9 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       }
     },
     async (request) => {
-      const { ticketId } = request.params as { ticketId: string };
-      const { body, isInternal } = request.body as { body: string; isInternal?: boolean };
-      if (!request.user.orgId) {
-        throw fastify.httpErrors.badRequest("Missing org context");
-      }
-      if (!body?.trim()) {
-        throw fastify.httpErrors.badRequest("Comment body is required");
-      }
+      const { ticketId } = parseTicketParams(request);
+      const { body, isInternal } = parseCommentBody(request);
+      requireOrg(request.user.orgId);
       const ticket = await prisma.supportTicket.findFirst({
         where: { id: ticketId, organizationId: request.user.orgId },
         select: {
@@ -410,10 +424,8 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       }
     },
     async (request) => {
-    const { ticketId } = request.params as { ticketId: string };
-    if (!request.user.orgId) {
-      throw fastify.httpErrors.badRequest("Missing org context");
-    }
+      const { ticketId } = parseTicketParams(request);
+    requireOrg(request.user.orgId);
     const ticket = await prisma.supportTicket.findFirst({
       where: { id: ticketId, organizationId: request.user.orgId },
       select: { id: true }
@@ -565,8 +577,8 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
       },
       async (request) => {
-      const { ticketId } = request.params as { ticketId: string };
-      const { status } = request.body as { status: "open" | "pending" | "closed" };
+      const { ticketId } = parseTicketParams(request);
+      const { status } = supportStatusUpdateSchema.parse(request.body);
       const existing = await prisma.supportTicket.findUnique({
         where: { id: ticketId },
         select: { id: true, status: true }
@@ -595,13 +607,21 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
       },
       async (request) => {
-        const { ticketId } = request.params as { ticketId: string };
-        const { subject, body, priority, category } = request.body as {
-          subject?: string;
-          body?: string;
-          priority?: "low" | "medium" | "high" | "urgent";
-          category?: string | null;
-        };
+        const { ticketId } = parseTicketParams(request);
+        const updateSchema = z
+          .object({
+            subject: z.string().min(3).max(300).optional(),
+            body: z.string().min(3).max(5000).optional(),
+            priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+            category: z.string().min(2).max(120).nullable().optional()
+          })
+          .strict()
+          .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
+        const parsed = updateSchema.safeParse(request.body);
+        if (!parsed.success) {
+          throw superAdminScope.httpErrors.badRequest("Invalid update payload");
+        }
+        const { subject, body, priority, category } = parsed.data;
 
         const data: any = {};
         if (subject?.trim()) data.subject = subject.trim();
@@ -629,10 +649,20 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
       },
       async (request) => {
-        const { ticketId } = request.params as { ticketId: string };
-        const { assigneeId } = request.body as { assigneeId?: string | null };
+        const { ticketId } = parseTicketParams(request);
+        const assignSchema = z
+          .object({
+            assigneeId: z.string().uuid().nullable().optional()
+          })
+          .strict();
+        const parsed = assignSchema.safeParse(request.body);
+        if (!parsed.success) {
+          throw superAdminScope.httpErrors.badRequest("Invalid assignee");
+        }
         const normalizedAssigneeId =
-          typeof assigneeId === "string" && assigneeId.trim().length > 0 ? assigneeId.trim() : null;
+          typeof parsed.data.assigneeId === "string" && parsed.data.assigneeId.trim().length > 0
+            ? parsed.data.assigneeId.trim()
+            : null;
         let assigneeEmail: string | null = null;
         if (normalizedAssigneeId) {
           const staff = await prisma.user.findFirst({
@@ -681,7 +711,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         config: { rateLimit: { max: 10, timeWindow: "1 minute" } }
       },
       async (request) => {
-        const { ticketId } = request.params as { ticketId: string };
+        const { ticketId } = parseTicketParams(request);
         const existing = await prisma.supportTicket.findUnique({
           where: { id: ticketId },
           select: { id: true, organizationId: true, updatedAt: true }
@@ -700,11 +730,8 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
       },
       async (request) => {
-        const { ticketId } = request.params as { ticketId: string };
-        const { body, isInternal } = request.body as { body: string; isInternal?: boolean };
-        if (!body?.trim()) {
-          throw fastify.httpErrors.badRequest("Comment body is required");
-        }
+        const { ticketId } = parseTicketParams(request);
+        const { body, isInternal } = parseCommentBody(request);
         const ticket = await prisma.supportTicket.findUnique({
           where: { id: ticketId },
           select: {
@@ -751,7 +778,17 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
       },
       async (request) => {
-        const { ticketId, commentId } = request.params as { ticketId: string; commentId: string };
+        const paramsSchema = z
+          .object({
+            ticketId: z.string().uuid(),
+            commentId: z.string().uuid()
+          })
+          .strict();
+        const parsed = paramsSchema.safeParse(request.params);
+        if (!parsed.success) {
+          throw superAdminScope.httpErrors.badRequest("Invalid ids");
+        }
+        const { ticketId, commentId } = parsed.data;
         // Ensure the comment belongs to the ticket
         const existing = await prisma.supportComment.findFirst({
           where: { id: commentId, ticketId }
