@@ -105,6 +105,40 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(10).max(128)
 });
 
+export const statusSubscribeSchema = z
+  .object({
+    email: z.string().email(),
+    orgId: z.string().uuid().optional(),
+    orgSlug: z
+      .string()
+      .regex(/^[a-z0-9-]+$/i, "Slug can contain letters, numbers and dashes")
+      .min(2)
+      .max(64)
+      .optional(),
+    serviceIds: z.array(z.string().uuid()).min(1).max(50).optional()
+  })
+  .strict();
+
+export const statusVerifySchema = z.object({
+  token: z.string().min(10).max(256)
+});
+
+export const statusUnsubscribeSchema = z.object({
+  token: z.string().min(10).max(256)
+});
+
+export const statusSubscriberAdminCreateSchema = z
+  .object({
+    email: z.string().email(),
+    serviceIds: z.array(z.string().uuid()).min(1).max(50).optional(),
+    verifyNow: z.boolean().optional()
+  })
+  .strict();
+
+export const statusSubscriberDeleteParamsSchema = z.object({
+  id: z.string().uuid()
+});
+
 const maintenanceBaseSchema = z.object({
   title: z.string().min(3).max(120),
   description: z.string().max(2000).optional(),
