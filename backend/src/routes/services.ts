@@ -10,11 +10,13 @@ import { getRequestOrgId } from "../lib/org";
 import { getPlanLimits } from "../lib/org-limits";
 import { prisma } from "../lib/db";
 
-const createServiceSchema = z.object({
-  name: z.string().min(2).max(120),
-  description: z.string().max(500).optional(),
-  slug: z.string().min(2).max(120).regex(/^[a-z0-9-_]+$/i).optional()
-});
+const createServiceSchema = z
+  .object({
+    name: z.string().min(2).max(120),
+    description: z.string().max(500).optional(),
+    slug: z.string().min(2).max(120).regex(/^[a-z0-9-_]+$/i).optional()
+  })
+  .strict();
 
 const updateServiceSchema = z
   .object({
@@ -24,7 +26,8 @@ const updateServiceSchema = z
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided"
-  });
+  })
+  .strict();
 
 const servicesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(

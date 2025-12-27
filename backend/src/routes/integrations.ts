@@ -4,60 +4,64 @@ import { getIntegrationSettings, saveIntegrationSettings } from "../lib/integrat
 import { getRequestOrgId } from "../lib/org";
 import { env } from "../env";
 
-const updateSchema = z.object({
-  slackWebhookUrl: z
-    .string()
-    .url("Slack webhook must be a valid URL")
-    .trim()
-    .max(500)
-    .optional()
-    .or(z.literal("")),
-  discordWebhookUrl: z
-    .string()
-    .url("Discord webhook must be a valid URL")
-    .trim()
-    .max(500)
-    .optional()
-    .or(z.literal("")),
-  teamsWebhookUrl: z
-    .string()
-    .url("Teams webhook must be a valid URL")
-    .trim()
-    .max(500)
-    .optional()
-    .or(z.literal("")),
-  telegramBotToken: z
-    .string()
-    .trim()
-    .max(255)
-    .optional()
-    .or(z.literal("")),
-  telegramChatId: z
-    .string()
-    .trim()
-    .max(255)
-    .optional()
-    .or(z.literal("")),
-  autoIncidentEnabled: z.boolean().optional(),
-  autoIncidentErrorThreshold: z.coerce.number().int().positive().optional(),
-  autoIncidentWindowSeconds: z.coerce.number().int().positive().optional(),
-  autoIncidentCooldownSeconds: z.coerce.number().int().positive().optional(),
-  autoIncidentAiEnabled: z.boolean().optional(),
-  autoIncidentSummaryLines: z.coerce.number().int().positive().optional(),
-  statusEmbedEnabled: z.boolean().optional(),
-  statusLogoUrl: z.string().url("Logo must be a valid URL").max(500).optional().or(z.literal("")),
-  statusPrimaryColor: z.string().max(50).optional().or(z.literal("")),
-  statusTextColor: z.string().max(50).optional().or(z.literal("")),
-  statusBackgroundColor: z.string().max(50).optional().or(z.literal(""))
-});
+const updateSchema = z
+  .object({
+    slackWebhookUrl: z
+      .string()
+      .url("Slack webhook must be a valid URL")
+      .trim()
+      .max(500)
+      .optional()
+      .or(z.literal("")),
+    discordWebhookUrl: z
+      .string()
+      .url("Discord webhook must be a valid URL")
+      .trim()
+      .max(500)
+      .optional()
+      .or(z.literal("")),
+    teamsWebhookUrl: z
+      .string()
+      .url("Teams webhook must be a valid URL")
+      .trim()
+      .max(500)
+      .optional()
+      .or(z.literal("")),
+    telegramBotToken: z
+      .string()
+      .trim()
+      .max(255)
+      .optional()
+      .or(z.literal("")),
+    telegramChatId: z
+      .string()
+      .trim()
+      .max(255)
+      .optional()
+      .or(z.literal("")),
+    autoIncidentEnabled: z.boolean().optional(),
+    autoIncidentErrorThreshold: z.coerce.number().int().positive().optional(),
+    autoIncidentWindowSeconds: z.coerce.number().int().positive().optional(),
+    autoIncidentCooldownSeconds: z.coerce.number().int().positive().optional(),
+    autoIncidentAiEnabled: z.boolean().optional(),
+    autoIncidentSummaryLines: z.coerce.number().int().positive().optional(),
+    statusEmbedEnabled: z.boolean().optional(),
+    statusLogoUrl: z.string().url("Logo must be a valid URL").max(500).optional().or(z.literal("")),
+    statusPrimaryColor: z.string().max(50).optional().or(z.literal("")),
+    statusTextColor: z.string().max(50).optional().or(z.literal("")),
+    statusBackgroundColor: z.string().max(50).optional().or(z.literal(""))
+  })
+  .strict();
 
 // Allow nulls for numeric fields if clients send null instead of omitting
-const updateSchemaNullable = updateSchema.extend({
-  autoIncidentErrorThreshold: updateSchema.shape.autoIncidentErrorThreshold.or(z.literal(null)),
-  autoIncidentWindowSeconds: updateSchema.shape.autoIncidentWindowSeconds.or(z.literal(null)),
-  autoIncidentCooldownSeconds: updateSchema.shape.autoIncidentCooldownSeconds.or(z.literal(null)),
-  autoIncidentSummaryLines: updateSchema.shape.autoIncidentSummaryLines.or(z.literal(null))
-});
+const updateSchemaNullable = updateSchema
+  .extend({
+    autoIncidentErrorThreshold: updateSchema.shape.autoIncidentErrorThreshold.or(z.literal(null)),
+    autoIncidentWindowSeconds: updateSchema.shape.autoIncidentWindowSeconds.or(z.literal(null)),
+    autoIncidentCooldownSeconds: updateSchema.shape.autoIncidentCooldownSeconds.or(z.literal(null)),
+    autoIncidentSummaryLines: updateSchema.shape.autoIncidentSummaryLines.or(z.literal(null))
+  })
+  .strict();
 
 const sanitizeInput = (value: string | undefined | ""): string | null | undefined => {
   if (value === undefined) {
