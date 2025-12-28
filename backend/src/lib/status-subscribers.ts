@@ -1,6 +1,6 @@
 ﻿import { prisma } from "./db";
 import { randomBytes } from "crypto";
-import { sendMail } from "./mailer";
+import { enqueueMail } from "./queues";
 import { env } from "../env";
 
 const maintenanceSendCache = new Map<string, number>();
@@ -61,7 +61,7 @@ export async function createSubscriber(input: SubscriberCreateInput) {
     const baseUrl = (env as any).BACKEND_URL || env.FRONTEND_URL || "";
     const verifyUrl = `${baseUrl}/public/status/verify?token=${token}`;
     const orgName = org?.name ?? "your organization";
-    await sendMail({
+    await enqueueMail({
       to: subscriber.email,
       subject: `[${orgName}] Confirm your status subscription`,
       text: `Please confirm your subscription to ${orgName} status updates.\n\nConfirm: ${verifyUrl}\n\nIf you did not request this, you can ignore this email.`
@@ -227,7 +227,7 @@ export async function notifyMaintenanceSubscribers(
       </div>
     `;
 
-    await sendMail({
+    await enqueueMail({
       to: filtered.map((s: any) => s.email),
       subject: `[${org.name}] Maintenance ${statusLabel}: ${maintenance.title}`,
       text: lines.join("\n"),

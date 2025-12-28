@@ -17,7 +17,7 @@ import {
 } from "../lib/auth";
 import { recordAuditLog } from "../lib/audit";
 import { isDemoEmail } from "../lib/demo";
-import { sendMail } from "../lib/mailer";
+import { enqueueMail } from "../lib/queues";
 import { ensureDefaultOrganization, ensureUserOrgContext } from "../lib/org";
 import { slugify } from "../lib/slug";
 
@@ -361,7 +361,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       "This code expires in 10 minutes."
     ].join("\n");
 
-    await sendMail({
+    await enqueueMail({
       to: user.email,
       subject: "IncidentPulse password reset code",
       text: bodyText,

@@ -1,5 +1,5 @@
 import { prisma } from "./db";
-import { sendMail } from "./mailer";
+import { enqueueMail } from "./queues";
 import { env } from "../env";
 
 function trimMessage(input?: string | null, max = 800): string | undefined {
@@ -181,7 +181,7 @@ export async function notifySupportTicketCreated(ticketId: string) {
   const link = buildDashboardLink(ticket.id, "support");
   const replyTo = buildReplyTo(ticket.id);
 
-  await sendMail({
+  await enqueueMail({
     to,
     subject: `[Support #${ticket.id}] ${orgName}: ${ticket.subject}`,
     text: buildSupportEmailBody({
@@ -228,7 +228,7 @@ export async function notifySupportComment(
   const link = buildDashboardLink(ticketId, "support");
   const replyTo = buildReplyTo(ticketId);
 
-  await sendMail({
+  await enqueueMail({
     to: recipientEmail,
     subject: `[Support #${ticketId}] New comment: ${ticket.subject}`,
     text: buildSupportEmailBody({
@@ -263,7 +263,7 @@ export async function notifySupportAssignment(
   const priority = options?.priority;
   const status = options?.status;
 
-  await sendMail({
+  await enqueueMail({
     to: assigneeEmail,
     subject: `[Support #${ticketId}] Assigned to you: ${subject}`,
     text: buildSupportEmailBody({
@@ -306,7 +306,7 @@ export async function notifySupportTicketClosed(ticketId: string) {
   const note =
     "We’ve closed this ticket. If you have any further questions, please reopen the ticket or create a new one.";
 
-  await sendMail({
+  await enqueueMail({
     to: ticket.createdBy.email,
     subject: `[Support #${ticketId}] Ticket closed: ${ticket.subject}`,
     text: buildSupportEmailBody({

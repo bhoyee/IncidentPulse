@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/db";
 import { hashPassword, toSafeUser } from "../lib/auth";
 import { createUserSchema, teamUsersQuerySchema, updateUserSchema } from "../lib/validation";
-import { sendMail } from "../lib/mailer";
+import { enqueueMail } from "../lib/queues";
 import { env } from "../env";
 import { recordAuditLog } from "../lib/audit";
 import { getRequestOrgId } from "../lib/org";
@@ -196,7 +196,7 @@ const teamRoutes: FastifyPluginAsync = async (fastify) => {
             <p>If you weren’t expecting this message, reach out to your team lead.</p>
           `;
 
-          const sendPromise = sendMail({
+          const sendPromise = enqueueMail({
             to: user.email,
             subject: "Your new IncidentPulse account",
             text: textBody,

@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from "fastify";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
-import { sendMail } from "./mailer";
+import { enqueueMail } from "./queues";
 import { env } from "../env";
 import { DEFAULT_ORG_ID } from "./org";
 import { getIntegrationSettings } from "./integration-settings";
@@ -117,7 +117,7 @@ export async function notifyAdminsOfIncident(
   }
 
   try {
-    await sendMail({
+    await enqueueMail({
       to: adminEmails,
       subject: `New incident reported: ${incident.title}`,
       text: textLines.join("\n")
@@ -164,7 +164,7 @@ export async function notifyAssigneeOfAssignment(
   textLines.push("", `Review the incident: ${env.FRONTEND_URL}/dashboard?incidentId=${incident.id}`);
 
   try {
-    await sendMail({
+    await enqueueMail({
       to: incident.assignedTo.email,
       subject: `Incident assigned: ${incident.title}`,
       text: textLines.join("\n")
@@ -211,7 +211,7 @@ export async function notifyAssigneeOfResolution(
   );
 
   try {
-    await sendMail({
+    await enqueueMail({
       to: incident.assignedTo.email,
       subject: `Incident resolved: ${incident.title}`,
       text: textLines.join("\n")
@@ -299,7 +299,7 @@ export async function notifyStatusSubscribers(
       `View status page: ${statusUrl}`
     ].filter(Boolean);
 
-    await sendMail({
+    await enqueueMail({
       to: filtered.map((s) => s.email),
       subject,
       text: lines.join("\n")

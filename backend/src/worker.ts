@@ -10,6 +10,7 @@ type MailJobPayload = {
   subject: string;
   text?: string;
   html?: string;
+  replyTo?: string | string[];
 };
 
 type WebhookJobPayload = {
@@ -51,7 +52,8 @@ new Worker(
       to: data.to,
       subject: data.subject,
       text: data.text ?? "",
-      html: data.html
+      html: data.html,
+      replyTo: data.replyTo
     });
     return true;
   },

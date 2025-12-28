@@ -69,6 +69,7 @@ type MailJobPayload = {
   subject: string;
   text?: string;
   html?: string;
+  replyTo?: string | string[];
 };
 
 type WebhookJobPayload = {

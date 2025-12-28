@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { env } from "../env";
 import { prisma } from "./db";
-import { sendMail } from "./mailer";
+import { enqueueMail } from "./queues";
 
 const ESCALATION_WINDOW_MS = env.INCIDENT_ESCALATION_MINUTES * 60 * 1000;
 const POLL_INTERVAL_MS = env.INCIDENT_ESCALATION_POLL_SECONDS * 1000;
@@ -111,7 +111,7 @@ export function registerIncidentEscalationWatcher(fastify: FastifyInstance) {
         `;
 
         try {
-          await sendMail({
+          await enqueueMail({
             to: adminEmails,
             subject,
             text: textBody,

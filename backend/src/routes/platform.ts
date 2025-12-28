@@ -9,8 +9,7 @@ import { getWebhookMetrics } from "../lib/webhook-metrics";
 import { getTrafficSnapshot } from "../lib/traffic-metrics";
 import { updateOrgRateLimitCache } from "../lib/org-rate-limit";
 import { Prisma } from "@prisma/client";
-import { sendMail } from "../lib/mailer";
-import { getQueueHealthSummary } from "../lib/queues";
+import { enqueueMail, getQueueHealthSummary } from "../lib/queues";
 import {
   platformMetricsQuerySchema,
   platformOrgCreateSchema,
@@ -770,7 +769,7 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       const inviteEmail = buildStaffInviteEmail({ name, email, tempPassword });
-      sendMail(inviteEmail).catch((err: any) => {
+      enqueueMail(inviteEmail).catch((err: any) => {
         request.log.warn({ err }, "Failed to send staff invite email");
       });
 
