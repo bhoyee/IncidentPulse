@@ -4288,41 +4288,47 @@ function DashboardPageContent() {
                         })()}
 
                         {platformMetrics.health ? (
-                          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                            <StatCard
-                              label="DB health"
-                              value={(platformMetrics.health.db?.status ?? "unknown").toString()}
-                              description={platformMetrics.health.db?.message ?? "Last ping in window"}
-                            />
-                            <StatCard
-                              label="Redis"
-                              value={(platformMetrics.health.redis?.status ?? "unknown").toString()}
-                              description={platformMetrics.health.redis?.message ?? "Cache status"}
-                            />
-                            <StatCard
-                              label="API latency"
-                              value={
-                                platformMetrics.health.api?.avgMs !== null && platformMetrics.health.api?.avgMs !== undefined
-                                  ? `${platformMetrics.health.api.avgMs} ms`
-                                  : "n/a"
-                              }
-                              description="Average from traffic stats"
-                            />
-                            <StatCard
-                              label="API error rate"
-                              value={
-                                platformMetrics.health.api?.errorRate !== null &&
-                                platformMetrics.health.api?.errorRate !== undefined
-                                  ? `${platformMetrics.health.api.errorRate}%`
-                                  : "n/a"
-                              }
-                              description="Across recent requests"
-                            />
-                            <StatCard
-                              label="Queue/worker"
-                              value={(platformMetrics.health.queue?.status ?? "unknown").toString()}
-                              description={platformMetrics.health.queue?.message ?? "No worker queue configured"}
-                            />
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs uppercase tracking-wide text-blue-300">Health checks</p>
+                              <span className="text-xs text-gray-400">Live snapshots</span>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                              <StatCard
+                                label="DB health"
+                                value={(platformMetrics.health.db?.status ?? "unknown").toString()}
+                                description={platformMetrics.health.db?.message ?? "Last ping in window"}
+                              />
+                              <StatCard
+                                label="Redis"
+                                value={(platformMetrics.health.redis?.status ?? "unknown").toString()}
+                                description={platformMetrics.health.redis?.message ?? "Cache status"}
+                              />
+                              <StatCard
+                                label="API latency"
+                                value={
+                                  platformMetrics.health.api?.avgMs !== null && platformMetrics.health.api?.avgMs !== undefined
+                                    ? `${platformMetrics.health.api.avgMs} ms`
+                                    : "n/a"
+                                }
+                                description="Average from traffic stats"
+                              />
+                              <StatCard
+                                label="API error rate"
+                                value={
+                                  platformMetrics.health.api?.errorRate !== null &&
+                                  platformMetrics.health.api?.errorRate !== undefined
+                                    ? `${platformMetrics.health.api.errorRate}%`
+                                    : "n/a"
+                                }
+                                description="Across recent requests"
+                              />
+                              <StatCard
+                                label="Queue/worker"
+                                value={(platformMetrics.health.queue?.status ?? "unknown").toString()}
+                                description={platformMetrics.health.queue?.message ?? "No worker queue configured"}
+                              />
+                            </div>
                           </div>
                         ) : null}
 
