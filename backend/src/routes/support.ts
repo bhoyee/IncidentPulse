@@ -268,16 +268,16 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         throw fastify.httpErrors.badRequest("Subject and body are required");
       }
       const payload = parsed.data;
-    const ticket = await prisma.supportTicket.create({
-      data: {
-        subject: payload.subject.trim(),
-        body: payload.body.trim(),
-        priority: (payload.priority as any) ?? "medium",
-        category: payload.category?.trim(),
-        organizationId: request.user.orgId,
-        createdById: request.user.id
-      }
-    });
+      const ticket = await prisma.supportTicket.create({
+        data: {
+          subject: payload.subject.trim(),
+          body: payload.body.trim(),
+          priority: (payload.priority as any) ?? "medium",
+          category: payload.category?.trim(),
+          organizationId: request.user.orgId!,
+          createdById: request.user.id
+        }
+      });
     emitSupportEvent({
       type: "support.ticket.created",
       ticket: { id: ticket.id, organizationId: ticket.organizationId, updatedAt: ticket.updatedAt }
