@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import { prisma } from "../lib/db";
 import { recordAuditLog } from "../lib/audit";
 import { hashPassword } from "../lib/auth";
@@ -9,6 +10,15 @@ import { getTrafficSnapshot } from "../lib/traffic-metrics";
 import { updateOrgRateLimitCache } from "../lib/org-rate-limit";
 import { Prisma } from "@prisma/client";
 import { sendMail } from "../lib/mailer";
+import {
+  platformMetricsQuerySchema,
+  platformOrgCreateSchema,
+  platformOrgIdParamsSchema,
+  platformOrgUpdateSchema,
+  platformStaffCreateSchema,
+  platformStaffUpdateSchema,
+  platformUserIdParamsSchema
+} from "../lib/validation";
 
 let stripe: any = null;
 async function getStripe() {
@@ -362,15 +372,20 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get("/metrics", async (request) => {
-    const windowParam = (request.query as any)?.window as string | undefined;
-    const windowDays = Math.max(1, Math.min(90, Number(windowParam) || 30));
-    const data = await computePlatformMetrics(windowDays);
+    const parsed = platformMetricsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw fastify.httpErrors.badRequest("Invalid metrics window");
+    }
+    const data = await computePlatformMetrics(parsed.data.window);
     return { error: false, data };
   });
 
   fastify.get("/metrics/stream", async (request, reply) => {
-    const windowParam = (request.query as any)?.window as string | undefined;
-    const windowDays = Math.max(1, Math.min(90, Number(windowParam) || 30));
+    const parsed = platformMetricsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw fastify.httpErrors.badRequest("Invalid metrics window");
+    }
+    const windowDays = parsed.data.window;
 
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -396,11 +411,17 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
     });
   });
 
-  fastify.patch<{ Params: { orgId: string }; Body: { status: "active" | "suspended" } }>(
+  fastify.patch(
     "/organizations/:orgId/status",
     async (request) => {
-      const { orgId } = request.params;
-      const { status } = request.body;
+      const paramsParsed = platformOrgIdParamsSchema.safeParse(request.params);
+      const bodySchema = z.object({ status: z.enum(["active", "suspended"]) }).strict();
+      const bodyParsed = bodySchema.safeParse(request.body);
+      if (!paramsParsed.success || !bodyParsed.success) {
+        throw fastify.httpErrors.badRequest("Invalid org status payload");
+      }
+      const { orgId } = paramsParsed.data;
+      const { status } = bodyParsed.data;
       const updated = await (prisma as any).organization.update({
         where: { id: orgId },
         data: { status, isDeleted: false, deletedAt: null }
@@ -423,11 +444,17 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
-  fastify.patch<{ Params: { orgId: string }; Body: { plan: Plan } }>(
+  fastify.patch(
     "/organizations/:orgId/plan",
     async (request) => {
-      const { orgId } = request.params;
-      const { plan } = request.body;
+      const paramsParsed = platformOrgIdParamsSchema.safeParse(request.params);
+      const bodySchema = z.object({ plan: z.enum(["free", "pro", "enterprise"]) }).strict();
+      const bodyParsed = bodySchema.safeParse(request.body);
+      if (!paramsParsed.success || !bodyParsed.success) {
+        throw fastify.httpErrors.badRequest("Invalid plan payload");
+      }
+      const { orgId } = paramsParsed.data;
+      const { plan } = bodyParsed.data;
       const updated = await (prisma as any).organization.update({
         where: { id: orgId },
         data: { plan }
@@ -450,14 +477,17 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
-  fastify.patch<{ Params: { orgId: string }; Body: { rateLimitPerMinute: number } }>(
+  fastify.patch(
     "/organizations/:orgId/rate-limit",
     async (request, reply) => {
-      const { orgId } = request.params;
-      const { rateLimitPerMinute } = request.body;
-      if (!rateLimitPerMinute || rateLimitPerMinute < 50) {
+      const paramsParsed = platformOrgIdParamsSchema.safeParse(request.params);
+      const bodySchema = z.object({ rateLimitPerMinute: z.coerce.number().int().min(50).max(100000) }).strict();
+      const bodyParsed = bodySchema.safeParse(request.body);
+      if (!paramsParsed.success || !bodyParsed.success) {
         return reply.status(400).send({ error: true, message: "Provide a reasonable rate limit (>=50)." });
       }
+      const { orgId } = paramsParsed.data;
+      const { rateLimitPerMinute } = bodyParsed.data;
       const updated = await (prisma as any).organization.update({
         where: { id: orgId },
         data: { rateLimitPerMinute }
@@ -468,10 +498,12 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   // Hard delete (destructive) an organization and all related records.
-  fastify.delete<{ Params: { orgId: string } }>(
+  fastify.delete(
     "/organizations/:orgId",
     async (request) => {
-      const { orgId } = request.params;
+      const paramsParsed = platformOrgIdParamsSchema.safeParse(request.params);
+      if (!paramsParsed.success) throw fastify.httpErrors.badRequest("Invalid org id");
+      const { orgId } = paramsParsed.data;
 
       const deletedOrg = await (prisma as any).organization.delete({ where: { id: orgId } });
 
@@ -492,10 +524,12 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
-  fastify.get<{ Params: { orgId: string } }>(
+  fastify.get(
     "/organizations/:orgId/delete-preview",
     async (request) => {
-      const { orgId } = request.params;
+      const paramsParsed = platformOrgIdParamsSchema.safeParse(request.params);
+      if (!paramsParsed.success) throw fastify.httpErrors.badRequest("Invalid org id");
+      const { orgId } = paramsParsed.data;
       const [
         incidents,
         incidentUpdates,
@@ -547,14 +581,17 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
-  fastify.get<{ Params: { orgId: string } }>("/organizations/:orgId/invoices", async (request, reply) => {
+  fastify.get("/organizations/:orgId/invoices", async (request, reply) => {
+    const paramsParsed = platformOrgIdParamsSchema.safeParse(request.params);
+    if (!paramsParsed.success) throw fastify.httpErrors.badRequest("Invalid org id");
+    const { orgId } = paramsParsed.data;
     const client = await getStripe();
     if (!client || !env.STRIPE_PORTAL_RETURN_URL) {
       return reply
         .status(400)
         .send({ error: true, message: "Configure STRIPE_SECRET_KEY and STRIPE_PORTAL_RETURN_URL to enable invoices." });
     }
-    const customerId = await getOrCreateStripeCustomer(request.params.orgId);
+    const customerId = await getOrCreateStripeCustomer(orgId);
     if (!customerId) {
       return reply.status(400).send({ error: true, message: "No Stripe customer available for this org." });
     }
@@ -572,14 +609,17 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
     return { error: false, data };
   });
 
-  fastify.post<{ Params: { orgId: string } }>("/organizations/:orgId/portal", async (request, reply) => {
+  fastify.post("/organizations/:orgId/portal", async (request, reply) => {
+    const paramsParsed = platformOrgIdParamsSchema.safeParse(request.params);
+    if (!paramsParsed.success) throw fastify.httpErrors.badRequest("Invalid org id");
+    const { orgId } = paramsParsed.data;
     const client = await getStripe();
     if (!client || !env.STRIPE_PORTAL_RETURN_URL) {
       return reply
         .status(400)
         .send({ error: true, message: "Configure STRIPE_SECRET_KEY and STRIPE_PORTAL_RETURN_URL to enable portal." });
     }
-    const customerId = await getOrCreateStripeCustomer(request.params.orgId);
+    const customerId = await getOrCreateStripeCustomer(orgId);
     if (!customerId) {
       return reply.status(400).send({ error: true, message: "No Stripe customer available for this org." });
     }

@@ -202,6 +202,62 @@ export const supportIdParamsSchema = z.object({
   ticketId: z.string().uuid()
 });
 
+// Platform/admin schemas
+export const platformOrgIdParamsSchema = z.object({
+  orgId: z.string().uuid()
+});
+
+export const platformUserIdParamsSchema = z.object({
+  userId: z.string().uuid()
+});
+
+export const platformOrgUpdateSchema = z
+  .object({
+    name: z.string().min(2).max(120).optional(),
+    plan: z.enum(["free", "pro", "enterprise"]).optional(),
+    status: z.enum(["active", "suspended"]).optional(),
+    billingStatus: z.enum(["active", "past_due", "suspended", "none"]).optional(),
+    rateLimitPerMinute: z.coerce.number().int().min(1).max(100000).optional()
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
+
+export const platformOrgCreateSchema = z
+  .object({
+    name: z.string().min(2).max(120),
+    slug: z
+      .string()
+      .regex(/^[a-z0-9-]+$/i, "Slug can contain letters, numbers and dashes")
+      .min(2)
+      .max(64),
+    plan: z.enum(["free", "pro", "enterprise"]).optional()
+  })
+  .strict();
+
+export const platformStaffCreateSchema = z
+  .object({
+    name: z.string().min(2).max(120),
+    email: z.string().email(),
+    role: z.enum(["support", "sales", "ops", "hr", "admin"]).optional()
+  })
+  .strict();
+
+export const platformStaffUpdateSchema = z
+  .object({
+    name: z.string().min(2).max(120).optional(),
+    email: z.string().email().optional(),
+    role: z.enum(["support", "sales", "ops", "hr", "admin"]).optional(),
+    isActive: z.boolean().optional()
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
+
+export const platformMetricsQuerySchema = z
+  .object({
+    window: z.coerce.number().int().min(1).max(90).default(30)
+  })
+  .strict();
+
 const maintenanceBaseSchema = z
   .object({
     title: z.string().min(3).max(120),
