@@ -10,6 +10,7 @@ import { getTrafficSnapshot } from "../lib/traffic-metrics";
 import { updateOrgRateLimitCache } from "../lib/org-rate-limit";
 import { Prisma } from "@prisma/client";
 import { sendMail } from "../lib/mailer";
+import { getQueueHealthSummary } from "../lib/queues";
 import {
   platformMetricsQuerySchema,
   platformOrgCreateSchema,
@@ -259,6 +260,7 @@ async function computePlatformMetrics(windowDays: number) {
   const totalAdmins = await prisma.membership.count({ where: { role: "admin" } });
   const pendingTickets = await prisma.supportTicket.count({ where: { status: "pending" } });
   const openTickets = await prisma.supportTicket.count({ where: { status: "open" } });
+  const queueHealth = await getQueueHealthSummary();
 
   const apiTotals = (persistedTop as any[]).reduce(
     (acc, row) => {
@@ -364,10 +366,7 @@ async function computePlatformMetrics(windowDays: number) {
         avgMs: apiAvgMs,
         errorRate: apiErrorRate
       },
-      queue: {
-        status: "unknown",
-        message: "No worker queue configured"
-      }
+      queue: queueHealth
     },
     visitors: {
       total: Number((publicVisitsTotalCount as any)?.[0]?.count ?? 0),

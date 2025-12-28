@@ -110,7 +110,7 @@ export type PlatformMetrics = {
     db?: { status: string; message?: string | null };
     redis?: { status: string; message?: string | null };
     api?: { status: string; avgMs: number | null; errorRate: number | null };
-    queue?: { status: string; message?: string | null };
+    queue?: { status: string; message?: string | null; counts?: Record<string, number> };
   };
 };
 

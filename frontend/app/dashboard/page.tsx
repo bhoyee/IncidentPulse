@@ -4323,14 +4323,18 @@ function DashboardPageContent() {
                                 }
                                 description="Across recent requests"
                               />
-                              <StatCard
-                                label="Queue/worker"
-                                value={(platformMetrics.health.queue?.status ?? "unknown").toString()}
-                                description={platformMetrics.health.queue?.message ?? "No worker queue configured"}
-                              />
-                            </div>
+                            <StatCard
+                              label="Queue/worker"
+                              value={(platformMetrics.health.queue?.status ?? "unknown").toString()}
+                              description={
+                                platformMetrics.health.queue?.counts
+                                  ? `waiting:${platformMetrics.health.queue.counts.waiting ?? 0} · failed:${platformMetrics.health.queue.counts.failed ?? 0}`
+                                  : platformMetrics.health.queue?.message ?? "Queue status"
+                              }
+                            />
                           </div>
-                        ) : null}
+                        </div>
+                      ) : null}
 
                         <div className="grid gap-4 lg:grid-cols-2">
                           <ChartCard title="Incidents per day">
