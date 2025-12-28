@@ -63,3 +63,34 @@ export async function getQueueHealthSummary(): Promise<QueueHealth> {
     return { status: "down", message: err?.message || "Queue health check failed" };
   }
 }
+
+type MailJobPayload = {
+  to: string | string[];
+  subject: string;
+  text?: string;
+  html?: string;
+};
+
+type WebhookJobPayload = {
+  url: string;
+  payload: unknown;
+  headers?: Record<string, string>;
+};
+
+export async function enqueueMail(job: MailJobPayload) {
+  if (!mailQueue) return null;
+  try {
+    return await mailQueue.add("send", job, { attempts: 3, backoff: { type: "exponential", delay: 1500 } });
+  } catch {
+    return null;
+  }
+}
+
+export async function enqueueWebhook(job: WebhookJobPayload) {
+  if (!webhookQueue) return null;
+  try {
+    return await webhookQueue.add("deliver", job, { attempts: 5, backoff: { type: "exponential", delay: 2000 } });
+  } catch {
+    return null;
+  }
+}

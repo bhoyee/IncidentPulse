@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest --runInBand",
-    "export:org": "tsx scripts/export-org.ts"
+    "export:org": "tsx scripts/export-org.ts",
+    "worker": "tsx src/worker.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^9.3.1",
