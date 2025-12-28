@@ -4210,11 +4210,11 @@ function DashboardPageContent() {
                   </label>
                 </div>
 
-                {platformMetricsQuery.isLoading ? (
-                  <p className="text-sm text-gray-400">Loading metrics...</p>
-                ) : platformMetrics ? (
-                  <div className="space-y-6">
-                    {(() => {
+                    {platformMetricsQuery.isLoading ? (
+                      <p className="text-sm text-gray-400">Loading metrics...</p>
+                    ) : platformMetrics ? (
+                      <div className="space-y-6">
+                        {(() => {
                       const tenantsCount =
                         (platformMetrics.totals as { tenants?: number }).tenants ?? platformMetrics.totals.orgs;
                       const billingTotals =
@@ -4284,14 +4284,53 @@ function DashboardPageContent() {
                             description="Currently open"
                           />
                         </div>
-                      );
-                    })()}
+                          );
+                        })()}
 
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <ChartCard title="Incidents per day">
-                        {platformMetrics.incidentsTrend.length === 0 ? (
-                          <EmptyState message="No incidents in window." />
-                        ) : (
+                        {platformMetrics.health ? (
+                          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                            <StatCard
+                              label="DB health"
+                              value={(platformMetrics.health.db?.status ?? "unknown").toString()}
+                              description={platformMetrics.health.db?.message ?? "Last ping in window"}
+                            />
+                            <StatCard
+                              label="Redis"
+                              value={(platformMetrics.health.redis?.status ?? "unknown").toString()}
+                              description={platformMetrics.health.redis?.message ?? "Cache status"}
+                            />
+                            <StatCard
+                              label="API latency"
+                              value={
+                                platformMetrics.health.api?.avgMs !== null && platformMetrics.health.api?.avgMs !== undefined
+                                  ? `${platformMetrics.health.api.avgMs} ms`
+                                  : "n/a"
+                              }
+                              description="Average from traffic stats"
+                            />
+                            <StatCard
+                              label="API error rate"
+                              value={
+                                platformMetrics.health.api?.errorRate !== null &&
+                                platformMetrics.health.api?.errorRate !== undefined
+                                  ? `${platformMetrics.health.api.errorRate}%`
+                                  : "n/a"
+                              }
+                              description="Across recent requests"
+                            />
+                            <StatCard
+                              label="Queue/worker"
+                              value={(platformMetrics.health.queue?.status ?? "unknown").toString()}
+                              description={platformMetrics.health.queue?.message ?? "No worker queue configured"}
+                            />
+                          </div>
+                        ) : null}
+
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <ChartCard title="Incidents per day">
+                            {platformMetrics.incidentsTrend.length === 0 ? (
+                              <EmptyState message="No incidents in window." />
+                            ) : (
                           <ResponsiveContainer width="100%" height={220}>
                             <LineChart data={platformMetrics.incidentsTrend}>
                               <CartesianGrid stroke="#1f2937" strokeDasharray="3 3" />

@@ -46,6 +46,7 @@ const envSchema = z.object({
   STRIPE_CHECKOUT_ENTERPRISE_URL: z.string().url().optional(),
   SUPPORT_INBOUND_SECRET: z.string().optional(),
   SUPPORT_REPLY_TO_ADDRESS: z.string().optional(),
+  REDIS_URL: z.string().url().optional(),
   LOG_BUFFER_TTL_MS: z.coerce.number().int().positive().optional(), // default 10 minutes
   LOG_TRIGGER_WINDOW_MS: z.coerce.number().int().positive().optional(), // default 60s
   LOG_TRIGGER_ERROR_THRESHOLD: z.coerce.number().int().positive().optional(), // default 20

@@ -106,6 +106,12 @@ export type PlatformMetrics = {
     topEndpoints: Array<{ route: string; count: number; avgMs: number; errorRate: number }>;
     topEndpointsByOrg: Array<{ orgId: string | null; route: string; count: number; avgMs: number; errorRate: number }>;
   };
+  health?: {
+    db?: { status: string; message?: string | null };
+    redis?: { status: string; message?: string | null };
+    api?: { status: string; avgMs: number | null; errorRate: number | null };
+    queue?: { status: string; message?: string | null };
+  };
 };
 
 

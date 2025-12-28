@@ -260,6 +260,43 @@ async function computePlatformMetrics(windowDays: number) {
   const pendingTickets = await prisma.supportTicket.count({ where: { status: "pending" } });
   const openTickets = await prisma.supportTicket.count({ where: { status: "open" } });
 
+  const apiTotals = (persistedTop as any[]).reduce(
+    (acc, row) => {
+      const count = Number(row._sum?.count ?? 0);
+      const errors = Number(row._sum?.errorCount ?? 0);
+      const totalMs = Number(row._sum?.totalMs ?? 0);
+      acc.count += count;
+      acc.errors += errors;
+      acc.totalMs += totalMs;
+      return acc;
+    },
+    { count: 0, errors: 0, totalMs: 0 }
+  );
+  const apiAvgMs = apiTotals.count ? Math.round(apiTotals.totalMs / apiTotals.count) : null;
+  const apiErrorRate = apiTotals.count ? Number(((apiTotals.errors / apiTotals.count) * 100).toFixed(2)) : null;
+
+  let dbStatus: { status: "ok" | "down"; message?: string } = { status: "ok" };
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (err: any) {
+    dbStatus = { status: "down", message: err?.message || "DB check failed" };
+  }
+
+  let redisStatus: { status: "unknown" | "ok" | "down"; message?: string } = { status: "unknown" };
+  if (env.REDIS_URL) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createClient } = require("redis");
+      const client = createClient({ url: env.REDIS_URL, socket: { connectTimeout: 2000 } });
+      await client.connect();
+      await client.ping();
+      await client.disconnect();
+      redisStatus = { status: "ok" };
+    } catch (err: any) {
+      redisStatus = { status: "down", message: err?.message || "Redis check failed" };
+    }
+  }
+
   // Billing rollups
   const activeSubscriptionStatuses = new Set(["active", "trialing", "past_due", "unpaid"]);
   const inactiveSubscriptionStatuses = new Set(["canceled", "incomplete", "incomplete_expired", "paused"]);
@@ -318,6 +355,19 @@ async function computePlatformMetrics(windowDays: number) {
           errorRate: count ? Number(((errors / count) * 100).toFixed(1)) : 0
         };
       })
+    },
+    health: {
+      db: dbStatus,
+      redis: redisStatus,
+      api: {
+        status: apiAvgMs === null ? "unknown" : "ok",
+        avgMs: apiAvgMs,
+        errorRate: apiErrorRate
+      },
+      queue: {
+        status: "unknown",
+        message: "No worker queue configured"
+      }
     },
     visitors: {
       total: Number((publicVisitsTotalCount as any)?.[0]?.count ?? 0),
