@@ -565,25 +565,45 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         }
       },
       async (request) => {
-        const { status, orgId } = request.query as { status?: string; orgId?: string };
-        const tickets = await prisma.supportTicket.findMany({
-          where: {
-            status: (status as any) || undefined,
-            organizationId: orgId || undefined
-          },
-          orderBy: { createdAt: "desc" },
-          include: {
-            organization: { select: { id: true, name: true, slug: true, plan: true } },
-            createdBy: { select: { id: true, name: true, email: true } },
-            assignee: { select: { id: true, name: true, email: true } },
-            comments: {
-              orderBy: { createdAt: "asc" },
-              include: { author: { select: { id: true, name: true, email: true } } }
-            },
-            attachments: true
-          }
-        });
-        return { error: false, data: tickets };
+        const querySchema = z
+          .object({
+            status: z.enum(["open", "pending", "closed"]).optional(),
+            orgId: z.string().uuid().optional(),
+            page: z.coerce.number().int().min(1).optional().default(1),
+            pageSize: z.coerce.number().int().min(1).max(100).optional().default(20)
+          })
+          .strict();
+        const parsed = querySchema.safeParse(request.query);
+        if (!parsed.success) {
+          throw superAdminScope.httpErrors.badRequest("Invalid filters");
+        }
+        const { status, orgId, page, pageSize } = parsed.data;
+
+        const where = {
+          status: status || undefined,
+          organizationId: orgId || undefined
+        };
+
+        const [total, tickets] = await Promise.all([
+          prisma.supportTicket.count({ where }),
+          prisma.supportTicket.findMany({
+            where,
+            orderBy: { createdAt: "desc" },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
+            include: {
+              organization: { select: { id: true, name: true, slug: true, plan: true } },
+              createdBy: { select: { id: true, name: true, email: true } },
+              assignee: { select: { id: true, name: true, email: true } },
+              comments: {
+                orderBy: { createdAt: "asc" },
+                include: { author: { select: { id: true, name: true, email: true } } }
+              },
+              attachments: true
+            }
+          })
+        ]);
+        return { error: false, data: tickets, meta: { page, pageSize, total } };
       }
     );
 
