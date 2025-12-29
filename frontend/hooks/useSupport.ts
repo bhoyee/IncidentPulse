@@ -63,18 +63,27 @@ export function useOrgSupportTickets(filters?: {
 
 export function usePlatformSupportTickets(
   enabled: boolean,
-  filters?: { status?: string; orgId?: string }
+  filters?: { status?: string; orgId?: string; page?: number; pageSize?: number }
 ) {
   return useQuery({
-    queryKey: ["support", "platform", filters?.status ?? "", filters?.orgId ?? ""],
+    queryKey: [
+      "support",
+      "platform",
+      filters?.status ?? "",
+      filters?.orgId ?? "",
+      filters?.page ?? 1,
+      filters?.pageSize ?? 20
+    ],
     queryFn: async () => {
       const res = await apiClient.get<TicketResponse>("/support/platform", {
         params: {
           status: filters?.status || undefined,
-          orgId: filters?.orgId || undefined
+          orgId: filters?.orgId || undefined,
+          page: filters?.page || undefined,
+          pageSize: filters?.pageSize || undefined
         }
       });
-      return res.data.data;
+      return res.data;
     },
     enabled
   });

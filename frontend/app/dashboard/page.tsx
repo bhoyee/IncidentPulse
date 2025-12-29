@@ -1458,14 +1458,20 @@ function PlatformSupportPanel({
 }) {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [orgFilter, setOrgFilter] = useState<string>("");
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [replyBody, setReplyBody] = useState<string>("");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
-  const { data: tickets = [], isLoading } = usePlatformSupportTickets(true, {
+  const { data: platformTickets, isLoading } = usePlatformSupportTickets(true, {
     status: statusFilter || undefined,
-    orgId: orgFilter || undefined
+    orgId: orgFilter || undefined,
+    page,
+    pageSize
   });
+  const tickets = platformTickets?.data ?? [];
+  const totalTickets = platformTickets?.meta?.total ?? tickets.length;
   const updateStatus = useUpdateSupportStatus("platform");
   const assignTicket = useAssignSupportTicket();
   const addComment = useAddSupportComment("platform");
@@ -1475,6 +1481,11 @@ function PlatformSupportPanel({
   const deleteComment = useDeleteSupportComment("platform");
 
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) ?? null;
+
+  useEffect(() => {
+    setPage(1);
+    setSelectedTicketId(null);
+  }, [statusFilter, orgFilter, pageSize]);
 
   const handleAssign = async (ticketId: string, assigneeId: string | null) => {
     await assignTicket.mutateAsync({ ticketId, assigneeId });
@@ -1554,6 +1565,20 @@ function PlatformSupportPanel({
             ))}
           </select>
         </label>
+        <div className="text-xs font-semibold uppercase text-gray-400">
+          Page size
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+          >
+            {[10, 20, 50, 100].map((size) => (
+              <option key={size} value={size}>
+                {size} / page
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-gray-800 bg-gray-900 shadow-lg">
@@ -1655,6 +1680,12 @@ function PlatformSupportPanel({
           </tbody>
         </table>
       </div>
+
+      {totalTickets > pageSize ? (
+        <div className="flex justify-end">
+          <Pagination page={page} pageSize={pageSize} total={totalTickets} onPageChange={(p) => setPage(p)} />
+        </div>
+      ) : null}
 
       {selectedTicket ? (
         <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 shadow-lg">
@@ -2230,9 +2261,8 @@ function DashboardPageContent() {
       (t) => new Date(t.updatedAt).getTime() > supportLastSeen
     ).length || 0;
   const platformUnread =
-    (platformBadge.data ?? []).filter(
-      (t) => new Date(t.updatedAt).getTime() > platformSupportLastSeen
-    ).length || 0;
+    (platformBadge.data?.data ?? []).filter((t) => new Date(t.updatedAt).getTime() > platformSupportLastSeen)
+      .length || 0;
   const markSupportRead = () => {
     const now = Date.now();
     setSupportLastSeen((prev) => {
