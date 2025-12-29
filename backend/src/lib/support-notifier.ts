@@ -167,13 +167,11 @@ export async function notifySupportTicketCreated(ticketId: string) {
   });
   if (!ticket) return;
 
-  const recipients = await getOrgAdminEmails(ticket.organizationId);
   const superAdmins = await getSuperAdminEmails();
-  recipients.push(...superAdmins);
   const creatorEmail = ticket.createdBy?.email?.toLowerCase() ?? null;
   const to = Array.from(
     new Set(
-      recipients
+      superAdmins
         .filter(Boolean)
         .map((e) => e.toLowerCase())
         .filter((e) => e && e !== creatorEmail)
