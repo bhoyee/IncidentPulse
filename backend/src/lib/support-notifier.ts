@@ -181,7 +181,13 @@ export async function notifySupportTicketCreated(ticketId: string) {
   const link = buildDashboardLink(ticket.id, "support");
   const replyTo = buildReplyTo(ticket.id);
 
-  await enqueueMail({
+  if (to.length === 0) {
+    // eslint-disable-next-line no-console
+    console.warn("[notifySupportTicketCreated] no recipients", { ticketId, orgName });
+    return;
+  }
+
+  const enqueueResult = await enqueueMail({
     to,
     subject: `[Support #${ticket.id}] ${orgName}: ${ticket.subject}`,
     text: buildSupportEmailBody({
@@ -204,6 +210,14 @@ export async function notifySupportTicketCreated(ticketId: string) {
     }),
     replyTo
   });
+
+  if (!enqueueResult) {
+    // eslint-disable-next-line no-console
+    console.warn("[notifySupportTicketCreated] enqueueMail returned null", {
+      ticketId,
+      recipients: to
+    });
+  }
 }
 
 export async function notifySupportComment(
