@@ -168,12 +168,17 @@ export async function notifySupportTicketCreated(ticketId: string) {
   if (!ticket) return;
 
   const recipients = await getOrgAdminEmails(ticket.organizationId);
-  if (ticket.createdBy?.email) {
-    recipients.push(ticket.createdBy.email);
-  }
   const superAdmins = await getSuperAdminEmails();
   recipients.push(...superAdmins);
-  const to = Array.from(new Set(recipients));
+  const creatorEmail = ticket.createdBy?.email?.toLowerCase() ?? null;
+  const to = Array.from(
+    new Set(
+      recipients
+        .filter(Boolean)
+        .map((e) => e.toLowerCase())
+        .filter((e) => e && e !== creatorEmail)
+    )
+  );
   if (to.length === 0) return;
 
   const orgName = ticket.organization?.name ?? "Workspace";
