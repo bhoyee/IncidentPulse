@@ -169,10 +169,18 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         ticket: updatedTicket
       });
 
-      const recipients = [ticket.createdBy?.email, ticket.assignee?.email]
+      const superAdmins = await prisma.user.findMany({
+        where: { isSuperAdmin: true, isActive: true },
+        select: { email: true }
+      });
+      const recipients = [
+        ticket.createdBy?.email,
+        ticket.assignee?.email,
+        ...superAdmins.map((s) => s.email)
+      ]
         .filter(Boolean)
         .filter((email) => email !== user.email);
-      for (const email of recipients) {
+      for (const email of new Set(recipients)) {
         notifySupportComment(ticket.id, email as string, body).catch((err) =>
           request.log.warn({ err }, "Failed to send support inbound notification")
         );
@@ -403,10 +411,18 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       });
       emitSupportEvent({ type: "support.comment.added", ticket: updatedTicket });
       if (!internalFlag) {
-        const recipients = [ticket.createdBy?.email, ticket.assignee?.email]
+        const superAdmins = await prisma.user.findMany({
+          where: { isSuperAdmin: true, isActive: true },
+          select: { email: true }
+        });
+        const recipients = [
+          ticket.createdBy?.email,
+          ticket.assignee?.email,
+          ...superAdmins.map((s) => s.email)
+        ]
           .filter(Boolean)
           .filter((email) => email !== request.user.email);
-        for (const email of recipients) {
+        for (const email of new Set(recipients)) {
           notifySupportComment(ticketId, email as string, body).catch((err) =>
             request.log.warn({ err }, "Failed to send support comment notification")
           );
@@ -759,14 +775,22 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         });
         emitSupportEvent({ type: "support.comment.added", ticket: updatedTicket });
         if (!isInternal) {
-          const recipients = [ticket.createdBy?.email, ticket.assignee?.email]
+          const superAdmins = await prisma.user.findMany({
+            where: { isSuperAdmin: true, isActive: true },
+            select: { email: true }
+          });
+          const recipients = [
+            ticket.createdBy?.email,
+            ticket.assignee?.email,
+            ...superAdmins.map((s) => s.email)
+          ]
             .filter(Boolean)
             .filter((email) => email !== request.user.email);
-        for (const email of recipients) {
-          notifySupportComment(ticketId, email as string, body).catch((err) =>
-            request.log.warn({ err }, "Failed to send support comment notification")
-          );
-        }
+          for (const email of new Set(recipients)) {
+            notifySupportComment(ticketId, email as string, body).catch((err) =>
+              request.log.warn({ err }, "Failed to send support comment notification")
+            );
+          }
         }
         return { error: false, data: comment };
       }
