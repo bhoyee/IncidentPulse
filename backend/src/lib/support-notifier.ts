@@ -186,7 +186,7 @@ export async function notifySupportTicketCreated(ticketId: string) {
 
   if (to.length === 0) {
     // eslint-disable-next-line no-console
-    console.warn("[notifySupportTicketCreated] no recipients", { ticketId, orgName });
+    console.warn("[support ticket] no recipients for ticket create", { ticketId, orgName });
     return;
   }
 
@@ -216,10 +216,13 @@ export async function notifySupportTicketCreated(ticketId: string) {
 
   if (!enqueueResult) {
     // eslint-disable-next-line no-console
-    console.warn("[notifySupportTicketCreated] enqueueMail returned null", {
+    console.warn("[support ticket] enqueueMail returned null (create)", {
       ticketId,
       recipients: to
     });
+  } else {
+    // eslint-disable-next-line no-console
+    console.log("[support ticket] queued create email", { ticketId, recipients: to });
   }
 }
 
@@ -245,7 +248,7 @@ export async function notifySupportComment(
   const link = buildDashboardLink(ticketId, "support");
   const replyTo = buildReplyTo(ticketId);
 
-  await enqueueMail({
+  const enqueueResult = await enqueueMail({
     to: recipientEmail,
     subject: `[Support #${ticketId}] New comment: ${ticket.subject}`,
     text: buildSupportEmailBody({
@@ -266,6 +269,17 @@ export async function notifySupportComment(
     }),
     replyTo
   });
+
+  if (!enqueueResult) {
+    // eslint-disable-next-line no-console
+    console.warn("[support ticket] enqueueMail returned null (comment)", {
+      ticketId,
+      recipient: recipientEmail
+    });
+  } else {
+    // eslint-disable-next-line no-console
+    console.log("[support ticket] queued comment email", { ticketId, recipient: recipientEmail });
+  }
 }
 
 export async function notifySupportAssignment(
