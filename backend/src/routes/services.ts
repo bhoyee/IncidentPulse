@@ -24,7 +24,6 @@ const updateServiceSchema = z
     description: z.string().max(500).nullable().optional(),
     slug: z.string().min(2).max(120).regex(/^[a-z0-9-_]+$/i).optional()
   })
-  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided"
   });

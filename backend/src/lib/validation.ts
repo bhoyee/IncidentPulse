@@ -49,7 +49,6 @@ export const updateIncidentSchema = z
     rootCause: z.string().min(10).max(5000).optional(),
     resolutionSummary: z.string().min(10).max(2000).optional()
   })
-  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided"
   });
@@ -101,7 +100,6 @@ export const updateUserSchema = z
     name: z.string().min(2).max(120).optional(),
     email: z.string().email().optional()
   })
-  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided"
   });
@@ -111,7 +109,6 @@ export const changePasswordSchema = z
     currentPassword: z.string().min(8).max(128),
     newPassword: z.string().min(10).max(128)
   })
-  .strict()
   .refine((data) => data.currentPassword !== data.newPassword, {
     message: "New password must be different from the current password",
     path: ["newPassword"]

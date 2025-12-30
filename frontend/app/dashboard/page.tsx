@@ -112,6 +112,7 @@ import {
   type PlatformOrg,
   usePlatformMetrics
 } from "@hooks/usePlatform";
+import { usePlatformBilling, usePlatformBillingAction } from "@hooks/usePlatformBilling";
 import { ChangePasswordCard } from "@components/ChangePasswordCard";
 import { FirstStepsModal } from "@components/FirstStepsModal";
 import { useIncidentStream } from "@hooks/useIncidentStream";
@@ -2654,6 +2655,22 @@ function DashboardPageContent() {
   const [metricsWindow, setMetricsWindow] = useState<"7" | "30" | "90">("30");
   const platformMetricsQuery = usePlatformMetrics(Boolean(session?.isSuperAdmin), Number(metricsWindow));
   const platformMetrics = platformMetricsQuery.data;
+  const [billingWindow, setBillingWindow] = useState<"7" | "30" | "90">("30");
+  const platformBillingQuery = usePlatformBilling(Boolean(session?.isSuperAdmin), Number(billingWindow));
+  const platformBillingAction = usePlatformBillingAction();
+  const [billingSearch, setBillingSearch] = useState("");
+  const [billingSort, setBillingSort] = useState<{ key: "name" | "plan" | "billing" | "subscription" | "updated"; dir: "asc" | "desc" }>({
+    key: "updated",
+    dir: "desc"
+  });
+  const [billingPage, setBillingPage] = useState(1);
+  const [billingPageSize, setBillingPageSize] = useState(10);
+  const [billingActionModal, setBillingActionModal] = useState<{
+    org: { id: string; name: string };
+    action: "cancel" | "pause" | "resume" | "move_plan" | "credit";
+  } | null>(null);
+  const [billingPriceId, setBillingPriceId] = useState("");
+  const [billingAmount, setBillingAmount] = useState("");
   const [orgSearch, setOrgSearch] = useState("");
   const [orgSort, setOrgSort] = useState<{ key: "created" | "name" | "members" | "incidents"; dir: "asc" | "desc" }>(
     { key: "created", dir: "desc" }
@@ -2705,6 +2722,42 @@ function DashboardPageContent() {
     });
     return list;
   }, [platformOrgs, orgSearch, orgSort]);
+
+  const billingOrgsPaged = useMemo(() => {
+    const data = platformBillingQuery.data;
+    if (!data) return { rows: [], total: 0 };
+    const term = billingSearch.trim().toLowerCase();
+    let rows = [...data.orgs];
+    if (term) {
+      rows = rows.filter(
+        (o) =>
+          o.name.toLowerCase().includes(term) ||
+          o.plan?.toLowerCase().includes(term) ||
+          o.billingStatus?.toLowerCase().includes(term) ||
+          (o.subscriptionStatus ?? "").toLowerCase().includes(term)
+      );
+    }
+    rows.sort((a, b) => {
+      const dir = billingSort.dir === "asc" ? 1 : -1;
+      switch (billingSort.key) {
+        case "name":
+          return dir * a.name.localeCompare(b.name);
+        case "plan":
+          return dir * a.plan.localeCompare(b.plan);
+        case "billing":
+          return dir * a.billingStatus.localeCompare(b.billingStatus);
+        case "subscription":
+          return dir * (a.subscriptionStatus ?? "").localeCompare(b.subscriptionStatus ?? "");
+        case "updated":
+        default:
+          return dir * ((a.updatedAt ? new Date(a.updatedAt).getTime() : 0) - (b.updatedAt ? new Date(b.updatedAt).getTime() : 0));
+      }
+    });
+    const total = rows.length;
+    const start = (billingPage - 1) * billingPageSize;
+    const end = start + billingPageSize;
+    return { rows: rows.slice(start, end), total };
+  }, [platformBillingQuery.data, billingSearch, billingSort, billingPage, billingPageSize]);
 
   const totalOrgPages = Math.max(1, Math.ceil(filteredPlatformOrgs.length / orgPageSize));
   const pagedPlatformOrgs = useMemo(() => {
@@ -4630,6 +4683,293 @@ function DashboardPageContent() {
                   lastSeen={platformSupportLastSeen}
                   onTicketRead={markPlatformSupportTicketRead}
                 />
+              </div>
+            )}
+
+            {activeTab === 'platformBilling' && session?.isSuperAdmin && (
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 lg:p-8 space-y-6 shadow-lg">
+                <div className="flex flex-col gap-3 border-b border-gray-700 pb-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-blue-300">Platform Billing</p>
+                    <h2 className="text-2xl font-bold text-white">Tenant billing & revenue</h2>
+                    <p className="text-sm text-gray-300">
+                      View all orgs, Stripe status, and manage subscriptions. Data refreshes automatically.
+                    </p>
+                  </div>
+                  <label className="text-xs font-semibold text-gray-300">
+                    Window
+                    <select
+                      value={billingWindow}
+                      onChange={(e) => setBillingWindow(e.target.value as typeof billingWindow)}
+                      className="ml-2 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                    >
+                      <option value="7">Last 7 days</option>
+                      <option value="30">Last 30 days</option>
+                      <option value="90">Last 90 days</option>
+                    </select>
+                  </label>
+                </div>
+
+                {platformBillingQuery.isLoading ? (
+                  <p className="text-sm text-gray-400">Loading billing data...</p>
+                ) : platformBillingQuery.data ? (
+                  <div className="space-y-6">
+                    {(() => {
+                      const data = platformBillingQuery.data as NonNullable<(typeof platformBillingQuery)["data"]>;
+                      const revenueAmount =
+                        data.revenue.amount === null
+                          ? "—"
+                          : new Intl.NumberFormat("en-US", {
+                              style: "currency",
+                              currency: data.revenue.currency || "USD"
+                            }).format(data.revenue.amount / 100);
+                      return (
+                        <>
+                          {!data.stripeConfigured && (
+                            <div className="rounded-lg border border-yellow-600/50 bg-yellow-900/20 px-4 py-3 text-sm text-yellow-200">
+                              Stripe not configured. Actions will be stubbed.
+                            </div>
+                          )}
+                          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                            <StatCard label="Revenue" value={revenueAmount} description={`Collected last ${data.windowDays}d`} />
+                            <StatCard label="Active" value={data.counts.active.toString()} description="active/trialing subs" />
+                            <StatCard label="Past due / unpaid" value={data.counts.pastDue.toString()} description="needs attention" />
+                            <StatCard
+                              label="Canceled / paused"
+                              value={(data.counts.canceled + data.counts.paused).toString()}
+                              description="canceled or paused"
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div className="relative">
+                              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                              <input
+                                type="text"
+                                value={billingSearch}
+                                onChange={(e) => {
+                                  setBillingSearch(e.target.value);
+                                  setBillingPage(1);
+                                }}
+                                placeholder="Search orgs, billing status..."
+                                className="w-72 rounded-lg border border-gray-700 bg-gray-900 pl-9 pr-3 py-2 text-sm text-gray-200 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <label className="text-xs font-semibold text-gray-300">
+                              Sort
+                              <select
+                                value={`${billingSort.key}:${billingSort.dir}`}
+                                onChange={(e) => {
+                                  const [key, dir] = e.target.value.split(":") as ["name" | "plan" | "billing" | "subscription" | "updated", "asc" | "desc"];
+                                  setBillingSort({ key, dir });
+                                }}
+                                className="ml-2 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                              >
+                                <option value="updated:desc">Updated desc</option>
+                                <option value="updated:asc">Updated asc</option>
+                                <option value="name:asc">Name asc</option>
+                                <option value="name:desc">Name desc</option>
+                                <option value="plan:asc">Plan asc</option>
+                                <option value="plan:desc">Plan desc</option>
+                                <option value="billing:asc">Billing asc</option>
+                                <option value="billing:desc">Billing desc</option>
+                                <option value="subscription:asc">Subscription asc</option>
+                                <option value="subscription:desc">Subscription desc</option>
+                              </select>
+                            </label>
+                            <label className="text-xs font-semibold text-gray-300">
+                              Page size
+                              <select
+                                value={billingPageSize}
+                                onChange={(e) => {
+                                  setBillingPageSize(Number(e.target.value));
+                                  setBillingPage(1);
+                                }}
+                                className="ml-2 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-gray-100 focus:border-blue-400 focus:ring-blue-500"
+                              >
+                                {[10, 20, 50].map((size) => (
+                                  <option key={size} value={size}>
+                                    {size}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                          <div className="overflow-x-auto rounded-xl border border-gray-700 bg-gray-900">
+                            <table className="min-w-full divide-y divide-gray-800">
+                              <thead className="bg-gray-800">
+                                <tr>
+                                  {["Org", "Plan", "Billing", "Subscription", "Customer", "Sub ID", "Updated", "Actions"].map((h) => (
+                                    <th
+                                      key={h}
+                                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400"
+                                    >
+                                      {h}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-800">
+                                {billingOrgsPaged.total === 0 ? (
+                                  <tr>
+                                    <td colSpan={8} className="px-4 py-4 text-center text-gray-400">
+                                      No orgs found.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  billingOrgsPaged.rows.map((org) => (
+                                    <tr key={org.id} className="hover:bg-gray-800/70">
+                                      <td className="px-4 py-3 text-sm text-white">{org.name}</td>
+                                      <td className="px-4 py-3 text-sm capitalize text-gray-200">{org.plan}</td>
+                                      <td className="px-4 py-3 text-sm text-gray-200">{org.billingStatus}</td>
+                                      <td className="px-4 py-3 text-sm text-gray-200">{org.subscriptionStatus ?? "unknown"}</td>
+                                      <td className="px-4 py-3 text-xs text-gray-400">{org.stripeCustomerId ?? "—"}</td>
+                                      <td className="px-4 py-3 text-xs text-gray-400">{org.stripeSubscriptionId ?? "—"}</td>
+                                      <td className="px-4 py-3 text-xs text-gray-400">
+                                        {org.updatedAt ? new Date(org.updatedAt).toLocaleString() : "—"}
+                                      </td>
+                                      <td className="px-4 py-3 text-xs text-gray-200 space-x-2">
+                                        <button
+                                          className="rounded border border-gray-700 px-2 py-1 hover:bg-red-900/30"
+                                          onClick={() => setBillingActionModal({ org, action: "cancel" })}
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          className="rounded border border-gray-700 px-2 py-1 hover:bg-yellow-900/30"
+                                          onClick={() => setBillingActionModal({ org, action: "pause" })}
+                                        >
+                                          Pause
+                                        </button>
+                                        <button
+                                          className="rounded border border-gray-700 px-2 py-1 hover:bg-green-900/30"
+                                          onClick={() => setBillingActionModal({ org, action: "resume" })}
+                                        >
+                                          Resume
+                                        </button>
+                                        <button
+                                          className="rounded border border-gray-700 px-2 py-1 hover:bg-blue-900/30"
+                                          onClick={() => setBillingActionModal({ org, action: "move_plan" })}
+                                        >
+                                          Move plan
+                                        </button>
+                                        <button
+                                          className="rounded border border-gray-700 px-2 py-1 hover:bg-purple-900/30"
+                                          onClick={() => setBillingActionModal({ org, action: "credit" })}
+                                        >
+                                          Credit
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="mt-4">
+                            <Pagination
+                              page={billingPage}
+                              pageSize={billingPageSize}
+                              total={billingOrgsPaged.total}
+                              onPageChange={(p) => setBillingPage(p)}
+                            />
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">No billing data.</p>
+                )}
+              </div>
+            )}
+
+            {billingActionModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+                <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 p-6 shadow-2xl">
+                  <h3 className="text-lg font-semibold text-white mb-2">Confirm action</h3>
+                  <p className="text-sm text-gray-300 mb-4">
+                    {billingActionModal.action === "cancel" && `Cancel subscription for ${billingActionModal.org.name}?`}
+                    {billingActionModal.action === "pause" && `Pause subscription for ${billingActionModal.org.name}?`}
+                    {billingActionModal.action === "resume" && `Resume subscription for ${billingActionModal.org.name}?`}
+                    {billingActionModal.action === "move_plan" && `Move plan for ${billingActionModal.org.name}. Enter new price ID.`}
+                    {billingActionModal.action === "credit" && `Add credit (in cents) for ${billingActionModal.org.name}.`}
+                  </p>
+                  {(billingActionModal.action === "move_plan" || billingActionModal.action === "credit") && (
+                    <div className="space-y-3 mb-4">
+                      {billingActionModal.action === "move_plan" && (
+                        <div>
+                          <label className="text-xs text-gray-400">Price ID</label>
+                          <input
+                            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                            value={billingPriceId}
+                            onChange={(e) => setBillingPriceId(e.target.value)}
+                            placeholder="price_..."
+                          />
+                        </div>
+                      )}
+                      {billingActionModal.action === "credit" && (
+                        <div>
+                          <label className="text-xs text-gray-400">Amount (cents)</label>
+                          <input
+                            type="number"
+                            className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                            value={billingAmount}
+                            onChange={(e) => setBillingAmount(e.target.value)}
+                            placeholder="e.g. 5000"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {platformBillingAction.isError && (
+                    <p className="text-sm text-red-300 mb-3">
+                      {platformBillingAction.error instanceof Error
+                        ? platformBillingAction.error.message
+                        : "Action failed"}
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => {
+                        setBillingActionModal(null);
+                        setBillingPriceId("");
+                        setBillingAmount("");
+                        platformBillingAction.reset();
+                      }}
+                      className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold text-gray-200 hover:border-gray-500"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        const { org, action } = billingActionModal;
+                        const payload: {
+                          orgId: string;
+                          action: "cancel" | "pause" | "resume" | "move_plan" | "credit";
+                          priceId?: string;
+                          amount?: number;
+                        } = { orgId: org.id, action };
+                        if (action === "move_plan") payload.priceId = billingPriceId.trim();
+                        if (action === "credit") payload.amount = Number(billingAmount);
+                        platformBillingAction.mutate(payload, {
+                          onSuccess: () => {
+                            setBillingActionModal(null);
+                            setBillingPriceId("");
+                            setBillingAmount("");
+                          }
+                        });
+                      }}
+                      disabled={
+                        platformBillingAction.status === "pending" ||
+                        (billingActionModal.action === "move_plan" && !billingPriceId.trim()) ||
+                        (billingActionModal.action === "credit" && (!Number(billingAmount) || Number(billingAmount) <= 0))
+                      }
+                      className="rounded-lg border border-blue-600 bg-blue-600/80 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:opacity-50"
+                    >
+                      {platformBillingAction.status === "pending" ? "Working..." : "Confirm"}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

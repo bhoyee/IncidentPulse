@@ -130,6 +130,7 @@ model Organization {
   isDeleted Boolean       @default(false)
   deletedAt DateTime?
   stripeCustomerId String? @unique
+  stripeSubscriptionId String?
   members   Membership[]
   services  Service[]
   incidents Incident[]

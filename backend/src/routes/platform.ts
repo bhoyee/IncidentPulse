@@ -381,6 +381,77 @@ async function computePlatformMetrics(windowDays: number) {
   };
 }
 
+async function listOrgBillingSummary(windowDays: number) {
+  const orgs = await (prisma as any).organization.findMany({
+    select: {
+      id: true,
+      name: true,
+      plan: true,
+      billingStatus: true,
+      stripeCustomerId: true,
+      stripeSubscriptionId: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
+
+  // If Stripe is configured, we can attempt to fetch per-org subscription status; otherwise use billingStatus as a proxy.
+  const stripeClient = await getStripe();
+  const stripeConfigured = Boolean(stripeClient);
+
+  const orgSummaries = await Promise.all(
+    orgs.map(async (org: any) => {
+      let subscriptionStatus: string = org.billingStatus;
+      if (stripeClient && org.stripeCustomerId) {
+        const subs = await stripeClient.subscriptions.list({
+          customer: org.stripeCustomerId,
+          status: "all",
+          limit: 1
+        });
+        subscriptionStatus = subs.data?.[0]?.status ?? "none";
+      }
+      return {
+        id: org.id,
+        name: org.name,
+        plan: org.plan,
+        billingStatus: org.billingStatus,
+        subscriptionStatus,
+        stripeCustomerId: org.stripeCustomerId,
+        stripeSubscriptionId: org.stripeSubscriptionId,
+        updatedAt: org.updatedAt
+      };
+    })
+  );
+
+  const counts = orgSummaries.reduce(
+    (acc, org) => {
+      const status = org.subscriptionStatus ?? "unknown";
+      if (["active", "trialing"].includes(status)) acc.active += 1;
+      else if (["past_due", "unpaid"].includes(status)) acc.pastDue += 1;
+      else if (["canceled", "incomplete", "incomplete_expired"].includes(status)) acc.canceled += 1;
+      else if (["paused"].includes(status)) acc.paused += 1;
+      else acc.unknown += 1;
+      return acc;
+    },
+    { active: 0, pastDue: 0, canceled: 0, paused: 0, unknown: 0 }
+  );
+
+  // Revenue: if Stripe configured, try to sum invoices in window; otherwise null.
+  let revenue: { amount: number | null; currency: string } = { amount: null, currency: "USD" };
+  if (stripeClient) {
+    const since = Math.floor(Date.now() / 1000) - windowDays * 86400;
+    try {
+      const invoices = await stripeClient.invoices.list({ created: { gte: since }, status: "paid", limit: 100 });
+      const amount = invoices.data.reduce((sum: number, inv: any) => sum + (inv.amount_paid || 0), 0);
+      revenue = { amount, currency: invoices.data[0]?.currency?.toUpperCase?.() ?? "USD" };
+    } catch {
+      revenue = { amount: null, currency: "USD" };
+    }
+  }
+
+  return { orgSummaries, counts, revenue, stripeConfigured };
+}
+
 const platformRoutes: FastifyPluginAsync = async (fastify) => {
   // All routes require super-admin
   fastify.addHook("preHandler", fastify.authenticate);
@@ -427,6 +498,114 @@ const platformRoutes: FastifyPluginAsync = async (fastify) => {
     const data = await computePlatformMetrics(parsed.data.window);
     return { error: false, data };
   });
+
+  fastify.get(
+    "/billing",
+    {
+      config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
+    },
+    async (request) => {
+      const querySchema = z
+        .object({
+          window: z.coerce.number().int().min(1).max(365).optional().default(30)
+        })
+        .strict();
+      const parsed = querySchema.safeParse(request.query);
+      if (!parsed.success) {
+        throw fastify.httpErrors.badRequest("Invalid window");
+      }
+      const windowDays = parsed.data.window;
+      const { orgSummaries, counts, revenue, stripeConfigured } = await listOrgBillingSummary(windowDays);
+      return {
+        error: false,
+        data: {
+          windowDays,
+          revenue,
+          counts,
+          stripeConfigured,
+          orgs: orgSummaries
+        }
+      };
+    }
+  );
+
+  fastify.post(
+    "/billing/:orgId/action",
+    {
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } }
+    },
+    async (request) => {
+      const paramsSchema = z.object({ orgId: z.string().uuid() }).strict();
+      const bodySchema = z
+        .object({
+          action: z.enum(["cancel", "pause", "resume", "move_plan", "credit"]),
+          priceId: z.string().optional(),
+          amount: z.number().int().optional()
+        })
+        .strict();
+      const params = paramsSchema.parse(request.params);
+      const body = bodySchema.parse(request.body);
+
+      const org = await (prisma as any).organization.findUnique({
+        where: { id: params.orgId },
+        select: { id: true, name: true, stripeCustomerId: true, stripeSubscriptionId: true }
+      });
+      if (!org) {
+        throw fastify.httpErrors.notFound("Org not found");
+      }
+
+      const client = await getStripe();
+      if (!client) {
+        return {
+          error: false,
+          message: "Stripe not configured; action stubbed"
+        };
+      }
+
+      switch (body.action) {
+        case "cancel":
+          if (org.stripeSubscriptionId) {
+            await client.subscriptions.cancel(org.stripeSubscriptionId);
+          }
+          break;
+        case "pause":
+          if (org.stripeSubscriptionId) {
+            await client.subscriptions.update(org.stripeSubscriptionId, { pause_collection: { behavior: "void" } });
+          }
+          break;
+        case "resume":
+          if (org.stripeSubscriptionId) {
+            await client.subscriptions.update(org.stripeSubscriptionId, { pause_collection: "" });
+          }
+          break;
+        case "move_plan":
+          if (org.stripeSubscriptionId && body.priceId) {
+            const sub = await client.subscriptions.retrieve(org.stripeSubscriptionId);
+            const itemId = sub.items.data[0]?.id;
+            if (itemId) {
+              await client.subscriptions.update(org.stripeSubscriptionId, {
+                items: [{ id: itemId, price: body.priceId }]
+              });
+            }
+          }
+          break;
+        case "credit":
+          if (org.stripeCustomerId && body.amount && body.amount > 0) {
+            await client.creditNotes.create({
+              amount: body.amount,
+              customer: org.stripeCustomerId,
+              reason: "user_requested",
+              memo: `Platform credit for org ${org.id}`
+            });
+          }
+          break;
+        default:
+          break;
+      }
+
+      return { error: false, message: "Action completed" };
+    }
+  );
 
   fastify.get("/metrics/stream", async (request, reply) => {
     const parsed = platformMetricsQuerySchema.safeParse(request.query);
