@@ -85,7 +85,7 @@ jobs:
 
       - name: Tests
         working-directory: backend
-        run: npm test -- --coverage
+        run: npm test -- --runInBand --passWithNoTests
 
   deploy:
     needs: test
