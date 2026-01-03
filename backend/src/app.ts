@@ -73,7 +73,7 @@ export function buildApp() {
   // CORS: reflect requesting origin (including null/file://) to avoid embed/subscribe failures,
   // while still allowing credentials for app endpoints.
   // CORS: explicit allowlist + special-case embeds (file:// or null origin).
-  const appAllowedOrigins = new Set(
+  const appAllowedOrigins = new Set<string>(
     [
       "http://localhost:3000",
       env.FRONTEND_URL || undefined,
@@ -87,12 +87,6 @@ export function buildApp() {
       // Always allow server-to-server / curl (no origin).
       if (!origin) return cb(null, true);
 
-      // Embed/status subscribe endpoints permit null/file origins.
-      const isEmbedPath =
-        typeof (cb as any)?.request !== "undefined" // defensive
-          ? false
-          : false;
-      // Fastify CORS does not pass request here; we allow null/file in general for embeds via header check below.
       if (embedAllowedOrigins.has(origin)) return cb(null, true);
 
       if (appAllowedOrigins.has(origin)) return cb(null, true);
@@ -123,7 +117,7 @@ export function buildApp() {
   });
 
   fastify.addHook("onRequest", async (request) => {
-    (request as any).startTime = Date.now();
+    (request as unknown as { startTime?: number }).startTime = Date.now();
   });
 
   if (hasDemoEmails()) {
@@ -173,9 +167,9 @@ export function buildApp() {
     try {
       if (request.user?.orgId && !request.user?.isSuperAdmin) {
         const { prisma } = await import("./lib/db");
-        const org = (await prisma.organization.findUnique({
+        const org = await prisma.organization.findUnique({
           where: { id: request.user.orgId }
-        })) as any;
+        });
         if (org && (org.isDeleted || org.status === "suspended")) {
           return reply.status(403).send({
             error: true,

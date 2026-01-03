@@ -63,7 +63,9 @@ ${lines}`;
       logger.warn({ status: response.status, text }, "AI summary request failed");
       return null;
     }
-    const json = (await response.json()) as any;
+    const json = (await response.json()) as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
     const content = json?.choices?.[0]?.message?.content;
     return typeof content === "string" ? content.trim() : null;
   } catch (err) {

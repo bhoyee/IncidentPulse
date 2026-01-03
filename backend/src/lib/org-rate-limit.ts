@@ -14,18 +14,19 @@ const FETCH_TTL_MS = 60_000;
 const WINDOW_MS = 60_000;
 
 export async function enforceOrgRateLimit(request: FastifyRequest, reply: FastifyReply) {
-  const orgId = (request.user as any)?.orgId as string | undefined;
+  const user = request.user as { orgId?: string; isSuperAdmin?: boolean } | undefined;
+  const orgId = user?.orgId;
   if (!orgId) return;
-  if ((request.user as any)?.isSuperAdmin) return;
+  if (user?.isSuperAdmin) return;
 
   const now = Date.now();
   let bucket = buckets.get(orgId);
 
   if (!bucket || now - bucket.fetchedAt > FETCH_TTL_MS) {
-    const org = (await prisma.organization.findUnique({
+    const org = await prisma.organization.findUnique({
       where: { id: orgId },
-      select: { rateLimitPerMinute: true } as any
-    })) as any;
+      select: { rateLimitPerMinute: true }
+    });
     const limit = org?.rateLimitPerMinute ?? DEFAULT_LIMIT;
     bucket = {
       limit,

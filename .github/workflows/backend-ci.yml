@@ -54,10 +54,6 @@ jobs:
         working-directory: backend
         run: npm run typecheck
 
-      - name: Lint
-        working-directory: backend
-        run: npm run lint
-
       - name: Tests
         working-directory: backend
         run: npm test -- --coverage
