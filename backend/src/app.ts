@@ -278,7 +278,10 @@ export function buildApp() {
     }
   });
 
-  registerIncidentEscalationWatcher(fastify);
+  // Skip the background watcher in test runs to avoid hitting the DB during unit tests.
+  if (env.NODE_ENV !== "test") {
+    registerIncidentEscalationWatcher(fastify);
+  }
 
   fastify.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error }, "Request failed");

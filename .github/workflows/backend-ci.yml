@@ -31,7 +31,7 @@ jobs:
       SMTP_ENCRYPTION: ssl
       AI_LOG_SUMMARY_ENABLED: "false"
       DEEPSEEK_API_KEY: dummy
-      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
       STRIPE_SECRET_KEY: sk_test_dummy
       STRIPE_WEBHOOK_SECRET: whsec_dummy
       STRIPE_PRICE_PRO: price_dummy
