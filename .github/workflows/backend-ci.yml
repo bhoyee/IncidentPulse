@@ -79,6 +79,10 @@ jobs:
         working-directory: backend
         run: npx prisma generate
 
+      - name: Apply database migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
       - name: Type check
         working-directory: backend
         run: npm run typecheck
