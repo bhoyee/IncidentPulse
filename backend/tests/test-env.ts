@@ -5,7 +5,8 @@ process.env.JWT_SECRET =
 process.env.PORT = process.env.PORT || "4000";
 process.env.DATABASE_URL =
   process.env.DATABASE_URL ||
-  "postgresql://incidentpulse:incidentpulse@localhost:15433/incidentpulse?schema=public";
+  "postgresql://postgres:postgres@localhost:5432/incidentpulse?schema=public";
+process.env.REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 process.env.FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 process.env.COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || "localhost";
 process.env.RESEND_API_KEY = process.env.RESEND_API_KEY || "test-resend-key";

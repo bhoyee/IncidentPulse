@@ -16,7 +16,7 @@ const createServiceSchema = z
     description: z.string().max(500).optional(),
     slug: z.string().min(2).max(120).regex(/^[a-z0-9-_]+$/i).optional()
   })
-  .strict();
+  ;
 
 const updateServiceSchema = z
   .object({

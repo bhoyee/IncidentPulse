@@ -2,6 +2,7 @@ import { Queue, type RedisOptions } from "bullmq";
 import { env } from "../env";
 
 function buildConnection(): RedisOptions | undefined {
+  if (env.NODE_ENV === "test") return undefined;
   if (!env.REDIS_URL) return undefined;
   try {
     const u = new URL(env.REDIS_URL);
@@ -59,8 +60,9 @@ export async function getQueueHealthSummary(): Promise<QueueHealth> {
       status: "ok",
       counts: mergeCounts(mailCounts, webhookCounts, opsCounts)
     };
-  } catch (err: any) {
-    return { status: "down", message: err?.message || "Queue health check failed" };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Queue health check failed";
+    return { status: "down", message };
   }
 }
 

@@ -5,7 +5,7 @@ export const loginSchema = z
     email: z.string().email(),
     password: z.string().min(8).max(128)
   })
-  .strict();
+  ;
 
 export const signupSchema = z
   .object({
@@ -20,7 +20,7 @@ export const signupSchema = z
       .max(64)
       .optional()
   })
-  .strict();
+  ;
 
 export const createIncidentSchema = z
   .object({
@@ -34,7 +34,7 @@ export const createIncidentSchema = z
     // Optional flag used by the UI "Simulate incident" button to avoid sending notifications.
     simulate: z.boolean().optional()
   })
-  .strict();
+  ;
 
 export const updateIncidentSchema = z
   .object({
@@ -64,14 +64,14 @@ export const incidentQuerySchema = z
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(100).default(20)
   })
-  .strict();
+  ;
 
 export const incidentUpdateLogSchema = z
   .object({
     message: z.string().min(3).max(2000),
     attachmentIds: z.array(z.string().uuid()).max(5).optional()
   })
-  .strict();
+  ;
 
 export const teamUsersQuerySchema = z
   .object({
@@ -79,7 +79,7 @@ export const teamUsersQuerySchema = z
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(100).default(25)
   })
-  .strict();
+  ;
 
 export const createUserSchema = z
   .object({
@@ -90,7 +90,7 @@ export const createUserSchema = z
     isActive: z.boolean().optional(),
     password: z.string().min(10).max(128).optional()
   })
-  .strict();
+  ;
 
 export const updateUserSchema = z
   .object({
@@ -118,7 +118,7 @@ export const forgotPasswordSchema = z
   .object({
     email: z.string().email()
   })
-  .strict();
+  ;
 
 export const resetPasswordSchema = z
   .object({
@@ -126,7 +126,7 @@ export const resetPasswordSchema = z
     code: z.string().regex(/^\d{6}$/, "Reset code must be a 6-digit value"),
     newPassword: z.string().min(10).max(128)
   })
-  .strict();
+  ;
 
 export const statusSubscribeSchema = z
   .object({
@@ -140,7 +140,7 @@ export const statusSubscribeSchema = z
       .optional(),
     serviceIds: z.array(z.string().uuid()).min(1).max(50).optional()
   })
-  .strict();
+  ;
 
 export const statusVerifySchema = z.object({
   token: z.string().min(10).max(256)
@@ -156,7 +156,7 @@ export const statusSubscriberAdminCreateSchema = z
     serviceIds: z.array(z.string().uuid()).min(1).max(50).optional(),
     verifyNow: z.boolean().optional()
   })
-  .strict();
+  ;
 
 export const statusSubscriberDeleteParamsSchema = z.object({
   id: z.string().uuid()
@@ -170,7 +170,7 @@ export const supportCreateTicketSchema = z
     priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
     category: z.string().min(2).max(120).optional()
   })
-  .strict();
+  ;
 
 export const supportQuerySchema = z
   .object({
@@ -180,20 +180,20 @@ export const supportQuerySchema = z
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(50).default(10)
   })
-  .strict();
+  ;
 
 export const supportStatusUpdateSchema = z
   .object({
     status: z.enum(["open", "pending", "closed"])
   })
-  .strict();
+  ;
 
 export const supportCommentSchema = z
   .object({
     body: z.string().min(1).max(5000),
     isInternal: z.boolean().optional()
   })
-  .strict();
+  ;
 
 export const supportIdParamsSchema = z.object({
   ticketId: z.string().uuid()
@@ -216,7 +216,7 @@ export const platformOrgUpdateSchema = z
     billingStatus: z.enum(["active", "past_due", "suspended", "none"]).optional(),
     rateLimitPerMinute: z.coerce.number().int().min(1).max(100000).optional()
   })
-  .strict()
+  
   .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
 
 export const platformOrgCreateSchema = z
@@ -229,7 +229,7 @@ export const platformOrgCreateSchema = z
       .max(64),
     plan: z.enum(["free", "pro", "enterprise"]).optional()
   })
-  .strict();
+  ;
 
 export const platformStaffCreateSchema = z
   .object({
@@ -237,7 +237,7 @@ export const platformStaffCreateSchema = z
     email: z.string().email(),
     role: z.enum(["support", "sales", "ops", "hr", "admin"]).optional()
   })
-  .strict();
+  ;
 
 export const platformStaffUpdateSchema = z
   .object({
@@ -246,14 +246,14 @@ export const platformStaffUpdateSchema = z
     role: z.enum(["support", "sales", "ops", "hr", "admin"]).optional(),
     isActive: z.boolean().optional()
   })
-  .strict()
+  
   .refine((data) => Object.keys(data).length > 0, { message: "No fields to update" });
 
 export const platformMetricsQuerySchema = z
   .object({
     window: z.coerce.number().int().min(1).max(90).default(30)
   })
-  .strict();
+  ;
 
 const maintenanceBaseSchema = z
   .object({
@@ -264,7 +264,7 @@ const maintenanceBaseSchema = z
     appliesToAll: z.boolean().optional(),
     serviceId: z.string().min(1).nullable().optional()
   })
-  .strict();
+  ;
 
 export const createMaintenanceSchema = maintenanceBaseSchema.superRefine((data, ctx) => {
   if (new Date(data.startsAt) >= new Date(data.endsAt)) {
@@ -310,7 +310,7 @@ export const maintenanceQuerySchema = z
     window: z.enum(["upcoming", "past", "all"]).optional(),
     serviceId: z.string().min(1).optional()
   })
-  .strict();
+  ;
 
 const auditActionValues = [
   "user_login",
@@ -336,10 +336,10 @@ export const auditLogQuerySchema = z
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(100).default(25)
   })
-  .strict();
+  ;
 
 export const membershipUpdateSchema = z
   .object({
     role: z.enum(["owner", "admin", "editor", "viewer"])
   })
-  .strict();
+  ;

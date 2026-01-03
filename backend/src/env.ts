@@ -16,7 +16,8 @@ if (process.env.NODE_ENV === "test") {
   process.env.WEBHOOK_SYSTEM_USER_ID =
     process.env.WEBHOOK_SYSTEM_USER_ID || "00000000-0000-0000-0000-000000000000";
   process.env.DATABASE_URL =
-    process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/postgres";
+    process.env.DATABASE_URL ||
+    "postgresql://postgres:postgres@localhost:5432/incidentpulse?schema=public";
 }
 
 const envSchema = z.object({
@@ -24,6 +25,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   FRONTEND_URL: z.string().url(),
   COOKIE_DOMAIN: z.string().min(1),
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   UPLOAD_DIR: z.string().min(1).default("uploads"),
   RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
   SMTP_FROM_ADDRESS: z.string().email("SMTP_FROM_ADDRESS must be a valid email"),

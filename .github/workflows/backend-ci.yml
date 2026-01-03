@@ -41,6 +41,7 @@ jobs:
       STRIPE_CHECKOUT_ENTERPRISE_URL: https://example.com/enterprise
       SUPPORT_INBOUND_SECRET: test-secret
       SUPPORT_REPLY_TO_ADDRESS: support@test.local
+      REDIS_URL: redis://localhost:6379
       WEBHOOK_HMAC_SECRET: test-hmac
       WEBHOOK_SHARED_TOKEN: test-shared
       SLACK_WEBHOOK_URL: https://example.com/slack
@@ -59,6 +60,15 @@ jobs:
           POSTGRES_DB: incidentpulse
         options: >-
           --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -82,6 +92,10 @@ jobs:
       - name: Apply database migrations
         working-directory: backend
         run: npx prisma migrate deploy
+
+      - name: Seed database
+        working-directory: backend
+        run: npx prisma db seed --schema prisma/schema.prisma
 
       - name: Type check
         working-directory: backend
