@@ -279,7 +279,7 @@ export function buildApp() {
   });
 
   // Skip the background watcher in test runs to avoid hitting the DB during unit tests.
-  if (env.NODE_ENV !== "test") {
+  if (process.env.NODE_ENV !== "test") {
     registerIncidentEscalationWatcher(fastify);
   }
 
