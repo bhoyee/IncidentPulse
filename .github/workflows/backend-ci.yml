@@ -19,6 +19,35 @@ jobs:
       JWT_SECRET: test-secret
       FRONTEND_URL: http://localhost:3000
       COOKIE_DOMAIN: localhost
+      BACKEND_URL: http://localhost:4000
+      MULTI_TENANT_ENABLED: "true"
+      RESEND_API_KEY: test-key
+      SMTP_FROM_ADDRESS: test@example.com
+      SMTP_FROM_NAME: Test
+      SMTP_HOST: smtp.example.com
+      SMTP_PORT: "587"
+      SMTP_USERNAME: user
+      SMTP_PASSWORD: pass
+      SMTP_ENCRYPTION: ssl
+      AI_LOG_SUMMARY_ENABLED: "false"
+      DEEPSEEK_API_KEY: dummy
+      REDIS_URL: redis://localhost:6379
+      STRIPE_SECRET_KEY: sk_test_dummy
+      STRIPE_WEBHOOK_SECRET: whsec_dummy
+      STRIPE_PRICE_PRO: price_dummy
+      STRIPE_PRICE_ENTERPRISE: price_dummy
+      STRIPE_PORTAL_RETURN_URL: http://localhost:3000/dashboard#billing
+      STRIPE_CHECKOUT_PRO_URL: https://example.com/pro
+      STRIPE_CHECKOUT_ENTERPRISE_URL: https://example.com/enterprise
+      SUPPORT_INBOUND_SECRET: test-secret
+      SUPPORT_REPLY_TO_ADDRESS: support@test.local
+      WEBHOOK_HMAC_SECRET: test-hmac
+      WEBHOOK_SHARED_TOKEN: test-shared
+      SLACK_WEBHOOK_URL: https://example.com/slack
+      TELEGRAM_BOT_TOKEN: test
+      TELEGRAM_CHAT_ID: "0"
+      SLACK_NOTIFICATIONS_ENABLED: "false"
+      DEMO_USER_EMAILS: ""
     services:
       postgres:
         image: postgres:16-alpine
