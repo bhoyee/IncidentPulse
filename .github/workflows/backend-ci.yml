@@ -6,8 +6,7 @@ on:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - "backend/**"
       - ".github/workflows/backend-ci.yml"
@@ -17,25 +16,37 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/incidentpulse
-      JWT_SECRET: test-secret-change-me
+      JWT_SECRET: test-secret
       FRONTEND_URL: http://localhost:3000
       COOKIE_DOMAIN: localhost
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: incidentpulse
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: "backend/package-lock.json"
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
         working-directory: backend
-        run: npm install
+        run: npm ci
 
-      - name: Prisma generate
+      - name: Generate Prisma client
         working-directory: backend
         run: npx prisma generate
 
@@ -47,83 +58,45 @@ jobs:
         working-directory: backend
         run: npm run lint
 
-      - name: Run tests
+      - name: Tests
         working-directory: backend
         run: npm test -- --coverage
 
   deploy:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: "backend/package-lock.json"
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
         working-directory: backend
         run: npm ci
 
-      - name: Run Prisma migrate deploy
+      - name: Run Prisma migrate (Neon)
         working-directory: backend
         env:
-          DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
-        run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "⚠️ RENDER_DATABASE_URL secret not set. Skipping migrate deploy."
-            exit 0
-          fi
-          echo "🚀 Running database migrations..."
-          npx prisma migrate deploy
-          echo "✅ Migrations completed"
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: npx prisma migrate deploy
 
-      - name: Trigger Render deploy
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-        run: |
-          # Check if required secrets are set
-          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
-            echo "❌ RENDER_API_KEY or RENDER_SERVICE_ID secret not set. Skipping Render deploy."
-            echo "Please check your GitHub repository secrets."
-            exit 0
-          fi
+      - name: Deploy to Railway (web)
+        uses: railwayapp/railway-action@v1
+        with:
+          railwayToken: ${{ secrets.RAILWAY_TOKEN }}
+          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
+          service: ${{ secrets.RAILWAY_WEB_SERVICE_NAME }}
+          rootDir: backend
 
-          echo "🚀 Triggering Render deploy..."
-          echo "Service ID: $RENDER_SERVICE_ID"
-          
-          # Create a JSON file to ensure proper formatting
-          echo '{"clearCache": "clear"}' > deploy_payload.json
-          
-          # Make API request to trigger deploy
-          response=$(curl -s -w "\n%{http_code}" -X POST \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            -H "Content-Type: application/json" \
-            https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys \
-            -d @deploy_payload.json)
-          
-          # Extract HTTP status code (last line)
-          http_code=$(echo "$response" | tail -n1)
-          # Extract response body (all but last line)
-          response_body=$(echo "$response" | head -n1)
-          
-          echo "📡 Response HTTP Code: $http_code"
-          echo "📦 Response Body: $response_body"
-          
-          if [ "$http_code" -eq 201 ]; then
-            echo "✅ Deploy triggered successfully!"
-            echo "Check your Render dashboard for deploy progress."
-          else
-            echo "❌ Failed to trigger deploy. HTTP code: $http_code"
-            echo "Please check:"
-            echo "1. Your RENDER_API_KEY is correct"
-            echo "2. Your RENDER_SERVICE_ID is correct"
-            echo "3. The service exists in your Render account"
-            exit 1
-          fi
+      - name: Deploy to Railway (worker)
+        uses: railwayapp/railway-action@v1
+        with:
+          railwayToken: ${{ secrets.RAILWAY_TOKEN }}
+          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
+          service: ${{ secrets.RAILWAY_WORKER_SERVICE_NAME }}
+          rootDir: backend
