@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/incidentpulse
-      JWT_SECRET: test-secret
+      JWT_SECRET: test-jwt-secret-should-be-at-least-32-characters-long-123456
       FRONTEND_URL: http://localhost:3000
       COOKIE_DOMAIN: localhost
       BACKEND_URL: http://localhost:4000
