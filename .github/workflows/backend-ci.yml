@@ -128,18 +128,15 @@ jobs:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: npx prisma migrate deploy
 
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
       - name: Deploy to Railway (web)
-        uses: railwayapp/railway@v1
-        with:
-          railwayToken: ${{ secrets.RAILWAY_TOKEN }}
-          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
-          service: ${{ secrets.RAILWAY_WEB_SERVICE_NAME }}
-          rootDir: backend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service "${{ secrets.RAILWAY_WEB_SERVICE_NAME }}" --project "${{ secrets.RAILWAY_PROJECT_ID }}" --root backend
 
       - name: Deploy to Railway (worker)
-        uses: railwayapp/railway@v1
-        with:
-          railwayToken: ${{ secrets.RAILWAY_TOKEN }}
-          projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
-          service: ${{ secrets.RAILWAY_WORKER_SERVICE_NAME }}
-          rootDir: backend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service "${{ secrets.RAILWAY_WORKER_SERVICE_NAME }}" --project "${{ secrets.RAILWAY_PROJECT_ID }}" --root backend
