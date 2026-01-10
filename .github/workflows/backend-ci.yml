@@ -125,7 +125,7 @@ jobs:
       - name: Run Prisma migrate (Neon)
         working-directory: backend
         env:
-          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL_DIRECT }}
         run: npx prisma migrate deploy
 
       - name: Install Railway CLI
