@@ -129,7 +129,7 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Deploy to Railway (web)
-        uses: railwayapp/railway-action@v1
+        uses: railwayapp/railway@v1
         with:
           railwayToken: ${{ secrets.RAILWAY_TOKEN }}
           projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
@@ -137,7 +137,7 @@ jobs:
           rootDir: backend
 
       - name: Deploy to Railway (worker)
-        uses: railwayapp/railway-action@v1
+        uses: railwayapp/railway@v1
         with:
           railwayToken: ${{ secrets.RAILWAY_TOKEN }}
           projectId: ${{ secrets.RAILWAY_PROJECT_ID }}
