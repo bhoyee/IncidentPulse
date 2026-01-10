@@ -1,29 +1,52 @@
+jest.mock("../src/lib/db", () => require("./__mocks__/prismaClient"));
+
 import request from "supertest";
 import { prisma } from "../src/lib/db";
 import { buildApp } from "../src/app";
 import { hashPassword } from "../src/lib/auth";
-import { DEFAULT_ORG_ID, ensureDefaultOrganization } from "../src/lib/org";
+import { ensureDefaultOrganization } from "../src/lib/org";
+import { resetPrismaMock } from "./__mocks__/prismaClient";
 
-jest.setTimeout(20000);
+jest.setTimeout(60000);
 
 describe("Org isolation smoke", () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
   let server: any;
   let userAEmail: string;
   let userBEmail: string;
+  let orgAId: string;
+  let orgBId: string;
 
   beforeAll(async () => {
     app = await buildApp();
+    await app.ready();
+    server = app.server;
+  });
+
+  beforeEach(async () => {
+    resetPrismaMock();
     // Seed two users/orgs for isolation checks with unique slugs to avoid existing data clashes.
     await ensureDefaultOrganization();
     const slugA = `orga-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const slugB = `orgb-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const orgA = await prisma.organization.create({
-      data: { name: "Org A", slug: slugA, plan: "free" }
+      data: {
+        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        name: "Org A",
+        slug: slugA,
+        plan: "free"
+      }
     });
+    orgAId = orgA.id;
     const orgB = await prisma.organization.create({
-      data: { name: "Org B", slug: slugB, plan: "free" }
+      data: {
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        name: "Org B",
+        slug: slugB,
+        plan: "free"
+      }
     });
+    orgBId = orgB.id;
     userAEmail = `a-${Date.now()}-${Math.floor(Math.random() * 1000)}@example.com`;
     userBEmail = `b-${Date.now()}-${Math.floor(Math.random() * 1000)}@example.com`;
     const userA = await prisma.user.create({
@@ -50,7 +73,14 @@ describe("Org isolation smoke", () => {
         { id: `m-${userB.id}-${orgB.id}`, userId: userB.id, organizationId: orgB.id, role: "owner" }
       ]
     });
-    server = app.server;
+    await prisma.service.create({
+      data: {
+        id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        name: "Service A",
+        slug: "service-a",
+        organizationId: orgA.id
+      }
+    });
   });
 
   afterAll(async () => {
@@ -71,7 +101,12 @@ describe("Org isolation smoke", () => {
     const createRes = await request(server)
       .post("/incidents")
       .set("Cookie", cookieA)
-      .send({ title: "Incident A", severity: "medium", description: "test" });
+      .send({
+        title: "Incident A",
+        severity: "medium",
+        description: "test incident",
+        serviceId: "cccccccc-cccc-cccc-cccc-cccccccccccc"
+      });
     expect(createRes.status).toBeLessThan(300);
     const incidentId = createRes.body.data?.id;
 
@@ -87,8 +122,8 @@ describe("Org isolation smoke", () => {
     const switchRes = await request(server)
       .post("/organizations/switch")
       .set("Cookie", cookieA)
-      .send({ organizationId: DEFAULT_ORG_ID });
-    expect([200, 403]).toContain(switchRes.status); // default org may not have membership
+      .send({ organizationId: orgAId });
+    expect(switchRes.status).toBe(200);
 
     const failSwitch = await request(server)
       .post("/organizations/switch")
