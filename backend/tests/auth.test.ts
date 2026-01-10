@@ -2,21 +2,28 @@ jest.mock("../src/lib/db", () => require("./__mocks__/prismaClient"));
 
 import bcrypt from "bcryptjs";
 import { buildApp } from "../src/app";
-import { prisma } from "./__mocks__/prismaClient";
+import { prisma, resetPrismaMock } from "./__mocks__/prismaClient";
 
 describe("Auth routes", () => {
+  beforeEach(() => {
+    resetPrismaMock();
+  });
+
   it("logs in a user with valid credentials", async () => {
     const fastify = buildApp();
 
     const passwordHash = await bcrypt.hash("strong-password", 12);
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue({
-      id: "user-1",
-      email: "admin@example.com",
-      name: "Admin",
-      role: "admin",
-      passwordHash,
-      createdAt: new Date(),
-      updatedAt: new Date()
+    
+    // Seed user in mock store
+    await prisma.user.create({
+      data: {
+        id: "user-1",
+        email: "admin@example.com",
+        name: "Admin",
+        role: "admin",
+        isActive: true,
+        passwordHash
+      }
     });
 
     const response = await fastify.inject({
@@ -41,7 +48,7 @@ describe("Auth routes", () => {
   it("rejects invalid credentials", async () => {
     const fastify = buildApp();
 
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+    // No user created, so findUnique returns null by default from mock
 
     const response = await fastify.inject({
       method: "POST",
