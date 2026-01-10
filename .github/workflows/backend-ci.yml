@@ -134,9 +134,9 @@ jobs:
       - name: Deploy to Railway (web)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service "${{ secrets.RAILWAY_WEB_SERVICE_NAME }}" --project "${{ secrets.RAILWAY_PROJECT_ID }}" --root backend
+        run: railway up --service "${{ secrets.RAILWAY_WEB_SERVICE_NAME }}" --project "${{ secrets.RAILWAY_PROJECT_ID }}" backend
 
       - name: Deploy to Railway (worker)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service "${{ secrets.RAILWAY_WORKER_SERVICE_NAME }}" --project "${{ secrets.RAILWAY_PROJECT_ID }}" --root backend
+        run: railway up --service "${{ secrets.RAILWAY_WORKER_SERVICE_NAME }}" --project "${{ secrets.RAILWAY_PROJECT_ID }}" backend
